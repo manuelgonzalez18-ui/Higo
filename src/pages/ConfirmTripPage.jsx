@@ -16,6 +16,7 @@ const ConfirmTripPage = () => {
     } = location.state || {};
     const [loading, setLoading] = useState(false);
     const [passengerPhone, setPassengerPhone] = useState(''); // New state for phone
+    const [paymentMethod, setPaymentMethod] = useState('card'); // 'card' or 'cash'
 
     const handleConfirm = async () => {
         setLoading(true);
@@ -61,8 +62,7 @@ const ConfirmTripPage = () => {
         }
     };
 
-    return (
-    const [paymentMethod, setPaymentMethod] = useState('card'); // 'card' or 'cash'
+
 
     return (
         <div className="bg-[#10141F] min-h-screen text-white font-sans overflow-hidden flex flex-col">
