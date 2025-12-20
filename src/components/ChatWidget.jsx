@@ -18,6 +18,12 @@ const ChatWidget = () => {
         scrollToBottom();
     }, [messages]);
 
+    useEffect(() => {
+        const handleOpenChat = () => setIsOpen(true);
+        window.addEventListener('open-chat', handleOpenChat);
+        return () => window.removeEventListener('open-chat', handleOpenChat);
+    }, []);
+
     const handleSend = async () => {
         if (!inputValue.trim()) return;
 
@@ -63,8 +69,8 @@ const ChatWidget = () => {
                         {messages.map((msg) => (
                             <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`max-w-[80%] p-3 rounded-2xl ${msg.role === 'user'
-                                        ? 'bg-violet-600 text-white rounded-tr-none'
-                                        : 'bg-white dark:bg-[#233535] text-gray-800 dark:text-gray-200 rounded-tl-none shadow-sm'
+                                    ? 'bg-violet-600 text-white rounded-tr-none'
+                                    : 'bg-white dark:bg-[#233535] text-gray-800 dark:text-gray-200 rounded-tl-none shadow-sm'
                                     }`}>
                                     <p className="text-sm">{msg.text}</p>
                                     {msg.role === 'model' && (

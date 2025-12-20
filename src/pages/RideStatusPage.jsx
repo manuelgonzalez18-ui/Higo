@@ -53,6 +53,34 @@ const RideStatusPage = () => {
         }
     };
 
+    const handleShare = async () => {
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: 'Mi Viaje en Higo',
+                    text: `Estoy viajando en Higo. Sigue mi ruta aquí:`,
+                    url: window.location.href,
+                });
+            } catch (err) {
+                console.log('Error sharing:', err);
+            }
+        } else {
+            alert('Enlace copiado al portapapeles');
+        }
+    };
+
+    const handleSecurity = () => {
+        alert("¡MODO EMERGENCIA ACTIVADO! \nSe ha notificado a tus contactos de confianza y al soporte Higo.");
+    };
+
+    const handleDestination = () => {
+        alert(`Destino: ${ride?.dropoff || 'Desconocido'}\nETA: 10:45 PM`);
+    };
+
+    const handleOpenChat = () => {
+        window.dispatchEvent(new Event('open-chat'));
+    };
+
     if (!ride) return <div className="h-screen flex items-center justify-center bg-[#0F1014] text-white">Loading...</div>;
 
     return (
@@ -140,7 +168,7 @@ const RideStatusPage = () => {
                                 Llamar al Conductor
                             </button>
                         )}
-                        <button className="w-14 bg-[#252A3A] hover:bg-[#2C3345] rounded-2xl flex items-center justify-center border border-white/5 active:scale-95 transition-all">
+                        <button onClick={handleOpenChat} className="w-14 bg-[#252A3A] hover:bg-[#2C3345] rounded-2xl flex items-center justify-center border border-white/5 active:scale-95 transition-all">
                             <span className="material-symbols-outlined text-white">chat_bubble</span>
                         </button>
                     </div>
@@ -161,15 +189,15 @@ const RideStatusPage = () => {
 
                 {/* Bottom Actions Bar */}
                 <div className="flex justify-between items-center mt-6 pt-4 border-t border-white/5">
-                    <button className="flex flex-col items-center gap-1 text-gray-400 hover:text-white transition-colors">
+                    <button onClick={handleShare} className="flex flex-col items-center gap-1 text-gray-400 hover:text-white transition-colors">
                         <div className="w-10 h-10 rounded-full bg-[#252A3A] flex items-center justify-center"><span className="material-symbols-outlined text-lg">share</span></div>
                         <span className="text-[10px]">Compartir</span>
                     </button>
-                    <button className="flex flex-col items-center gap-1 text-gray-400 hover:text-white transition-colors">
+                    <button onClick={handleDestination} className="flex flex-col items-center gap-1 text-gray-400 hover:text-white transition-colors">
                         <div className="w-10 h-10 rounded-full bg-[#252A3A] flex items-center justify-center"><span className="material-symbols-outlined text-lg">location_on</span></div>
                         <span className="text-[10px]">Destino</span>
                     </button>
-                    <button className="flex flex-col items-center gap-1 text-gray-400 hover:text-white transition-colors">
+                    <button onClick={handleSecurity} className="flex flex-col items-center gap-1 text-gray-400 hover:text-white transition-colors">
                         <div className="w-10 h-10 rounded-full bg-[#252A3A] flex items-center justify-center"><span className="material-symbols-outlined text-lg">security</span></div>
                         <span className="text-[10px]">Seguridad</span>
                     </button>

@@ -2,7 +2,8 @@ import { GoogleGenAI } from "@google/genai";
 
 // Initialize Gemini Client
 // Initialize Gemini Client
-const API_KEY = "AIzaSyCuT2G9LFBhlRCFloO5oFM-EFIW3nYw_do";
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+if (!API_KEY) console.warn("Missing VITE_GEMINI_API_KEY in .env");
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 
 // 1. Maps Grounding Service
