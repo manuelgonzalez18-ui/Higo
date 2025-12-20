@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../services/supabase';
+import { useNavigate } from 'react-router-dom';
+import { supabase, getUserProfile } from '../services/supabase';
 
 // Helper to format date
 const formatDate = (dateString) => {
@@ -9,6 +10,8 @@ const formatDate = (dateString) => {
 };
 
 const AdminDriversPage = () => {
+    const navigate = useNavigate();
+    const [authorized, setAuthorized] = useState(false);
     const [drivers, setDrivers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -57,8 +60,17 @@ const AdminDriversPage = () => {
     };
 
     useEffect(() => {
-        fetchDrivers();
-    }, []);
+        const checkAuth = async () => {
+            const profile = await getUserProfile();
+            if (!profile || profile.role !== 'admin') {
+                navigate('/');
+                return;
+            }
+            setAuthorized(true);
+            fetchDrivers();
+        };
+        checkAuth();
+    }, [navigate]);
 
     // Filter Logic
     const filteredDrivers = drivers.filter(driver => {
@@ -161,6 +173,14 @@ const AdminDriversPage = () => {
         }
         return url;
     };
+
+    if (!authorized) {
+        return (
+            <div className="min-h-screen bg-[#0F1014] flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-[#0F1014] p-4 md:p-8 font-sans text-white">
@@ -338,7 +358,7 @@ const AdminDriversPage = () => {
                                         }`}
                                 >
                                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${opt.id === 'eliminar' ? 'bg-red-500/20 text-red-500' :
-                                            actionType === opt.id ? 'bg-violet-600 text-white' : 'bg-[#1A1F2E] text-gray-400 border border-white/5'
+                                        actionType === opt.id ? 'bg-violet-600 text-white' : 'bg-[#1A1F2E] text-gray-400 border border-white/5'
                                         }`}>
                                         <span className="material-symbols-outlined text-[20px]">{opt.icon}</span>
                                     </div>
