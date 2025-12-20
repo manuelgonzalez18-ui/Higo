@@ -16,7 +16,7 @@ const ConfirmTripPage = () => {
     } = location.state || {};
     const [loading, setLoading] = useState(false);
     const [passengerPhone, setPassengerPhone] = useState(''); // New state for phone
-    const [paymentMethod, setPaymentMethod] = useState('card'); // 'card' or 'cash'
+    const [paymentMethod, setPaymentMethod] = useState('cash'); // Default to cash
 
     const handleConfirm = async () => {
         setLoading(true);
@@ -137,19 +137,8 @@ const ConfirmTripPage = () => {
                     </div>
                 </div>
 
-                {/* Payment Method */}
-                <div className="flex items-center justify-between p-2">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-6 bg-gray-700 rounded flex items-center justify-center text-[10px] font-bold text-gray-300">
-                            VISA
-                        </div>
-                        <div>
-                            <p className="font-bold text-sm">Visa terminada en 4242</p>
-                            <p className="text-xs text-gray-500">Personal</p>
-                        </div>
-                    </div>
-                    <button className="text-[#A855F7] text-sm font-bold hover:text-white transition-colors">Cambiar</button>
-                </div>
+                {/* Payment Method - Removed Visa, default cash logic implied or simplified */}
+                {/* Simplified to just show total price clearly or nothing specific for now if cash is default */}
 
                 {/* Phone Input */}
                 <div>
@@ -157,7 +146,7 @@ const ConfirmTripPage = () => {
                     <div className="bg-[#1A1F2E] rounded-2xl flex items-center px-4 border border-white/5 focus-within:border-[#A855F7] transition-colors">
                         <input
                             type="tel"
-                            placeholder="+58 (___) ___-____"
+                            placeholder="Ej: 0412-0330315"
                             className="bg-transparent w-full py-4 text-white placeholder-gray-600 outline-none"
                             value={passengerPhone}
                             onChange={(e) => setPassengerPhone(e.target.value)}
