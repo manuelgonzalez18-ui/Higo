@@ -23,7 +23,7 @@ const ConfirmTripPage = () => {
         const { data: { session } } = await supabase.auth.getSession();
 
         if (!session) {
-            alert("Please login to confirm your trip.");
+            alert("Por favor inicia sesión para confirmar tu viaje.");
             navigate('/auth');
             return;
         }
@@ -52,7 +52,7 @@ const ConfirmTripPage = () => {
             if (data && data[0]) {
                 navigate(`/ride/${data[0].id}`);
             } else {
-                alert("Trip Confirmed! A driver is on their way.");
+                alert("¡Viaje Confirmado! Un conductor va en camino.");
                 navigate('/');
             }
         } catch (error) {

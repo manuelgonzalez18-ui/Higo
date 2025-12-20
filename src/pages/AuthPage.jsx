@@ -25,6 +25,7 @@ const AuthPage = () => {
                 });
                 if (error) throw error;
 
+
                 // Check Role & Enforce Single Session
                 const { data: profile } = await supabase
                     .from('profiles')
@@ -52,7 +53,7 @@ const AuthPage = () => {
                     password,
                 });
                 if (error) throw error;
-                setMessage('Registration successful! Please check your email for verification.');
+                setMessage('¡Registro exitoso! Por favor verifica tu correo electrónico.');
             }
         } catch (error) {
             setMessage(error.message);
@@ -68,7 +69,7 @@ const AuthPage = () => {
                     <span className="material-symbols-outlined text-5xl">local_taxi</span>
                 </div>
                 <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
-                    {isLogin ? 'Sign in to your account' : 'Create a new account'}
+                    {isLogin ? 'Inicia sesión en tu cuenta' : 'Crea una nueva cuenta'}
                 </h2>
             </div>
 
@@ -77,7 +78,7 @@ const AuthPage = () => {
                     <form className="space-y-6" onSubmit={handleAuth}>
                         <div>
                             <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                Email address
+                                Correo electrónico
                             </label>
                             <div className="mt-1">
                                 <input
@@ -95,7 +96,7 @@ const AuthPage = () => {
 
                         <div>
                             <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                Password
+                                Contraseña
                             </label>
                             <div className="mt-1">
                                 <input
@@ -123,7 +124,7 @@ const AuthPage = () => {
                                 disabled={loading}
                                 className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500 disabled:opacity-50"
                             >
-                                {loading ? 'Processing...' : (isLogin ? 'Sign in' : 'Sign up')}
+                                {loading ? 'Procesando...' : (isLogin ? 'Iniciar Sesión' : 'Registrarse')}
                             </button>
                         </div>
                     </form>
@@ -135,7 +136,7 @@ const AuthPage = () => {
                             </div>
                             <div className="relative flex justify-center text-sm">
                                 <span className="px-2 bg-white dark:bg-[#1a2c2c] text-gray-500">
-                                    Or
+                                    O
                                 </span>
                             </div>
                         </div>
@@ -145,7 +146,7 @@ const AuthPage = () => {
                                 onClick={() => setIsLogin(!isLogin)}
                                 className="w-full flex justify-center py-2 px-4 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-[#233535] hover:bg-gray-50 dark:hover:bg-[#152323]"
                             >
-                                {isLogin ? 'Create new account' : 'Sign in to existing account'}
+                                {isLogin ? 'Crear nueva cuenta' : 'Iniciar sesión en cuenta existente'}
                             </button>
                         </div>
                     </div>

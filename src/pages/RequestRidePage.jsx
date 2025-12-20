@@ -7,7 +7,7 @@ import { supabase } from '../services/supabase';
 const RequestRidePage = () => {
     const navigate = useNavigate();
     const [selectedRide, setSelectedRide] = useState('standard');
-    const [pickup, setPickup] = useState("Current Location");
+    const [pickup, setPickup] = useState("Ubicación Actual");
     const [pickupCoords, setPickupCoords] = useState(null); // {lat, lng}
     const [dropoff, setDropoff] = useState("");
     const [dropoffCoords, setDropoffCoords] = useState(null); // {lat, lng}
@@ -76,7 +76,7 @@ const RequestRidePage = () => {
 
     const handleRequest = () => {
         if (!dropoff) {
-            alert("Please select a destination");
+            alert("Por favor selecciona un destino");
             return;
         }
         navigate('/confirm', {
@@ -131,7 +131,7 @@ const RequestRidePage = () => {
                     {/* Floating Title (Optional branding) */}
                     <div className="mb-6 text-center">
                         <h1 className="text-3xl font-black tracking-tight mb-1 bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">¿A dónde vamos?</h1>
-                        <p className="text-gray-400 text-sm font-medium">Viiaja seguro en Higuerote</p>
+                        <p className="text-gray-400 text-sm font-medium">Viaja seguro en Higuerote</p>
                     </div>
 
                     {/* GLASS CARD FORM */}
@@ -145,8 +145,8 @@ const RequestRidePage = () => {
                             {/* Inputs Group */}
                             <div className="space-y-3 bg-[#0F1014]/50 p-2 rounded-2xl border border-white/5">
                                 <LocationInput
-                                    placeholder="Pickup location"
-                                    defaultValue="Current Location"
+                                    placeholder="Punto de partida"
+                                    defaultValue="Ubicación Actual"
                                     icon="my_location"
                                     iconColor="text-violet-400"
                                     showConnector={true}
@@ -162,7 +162,7 @@ const RequestRidePage = () => {
                                 />
 
                                 <LocationInput
-                                    placeholder="Where to?"
+                                    placeholder="¿A dónde vas?"
                                     defaultValue={dropoff}
                                     icon="location_on"
                                     iconColor="text-fuchsia-500"

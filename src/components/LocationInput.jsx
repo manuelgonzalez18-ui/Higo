@@ -93,7 +93,7 @@ const LocationInput = ({
                 <button
                     onClick={onMapClick}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-violet-600 transition-colors p-1"
-                    title="Set on map"
+                    title="Fijar en mapa"
                 >
                     <span className="material-symbols-outlined text-[20px]">map</span>
                 </button>
@@ -115,7 +115,7 @@ const LocationInput = ({
                         </button>
                     ))}
                     <div className="bg-violet-50 px-4 py-1 text-[10px] text-gray-500 flex items-center justify-between">
-                        <span>Suggestions by Google Maps</span>
+                        <span>Sugerencias de Google Maps</span>
                         <span className="material-symbols-outlined text-[12px]">google</span>
                     </div>
                 </div>
