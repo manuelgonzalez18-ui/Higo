@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+@layer utilities {
+    .animate-radar {
+        animation: radar 2s infinite ease-out;
+    }
+}
+
+@keyframes radar {
+    0% {
+        transform: scale(0.5);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(2.5);
+        opacity: 0;
+    }
+}
