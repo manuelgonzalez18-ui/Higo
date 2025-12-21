@@ -87,6 +87,11 @@ const ConfirmTripPage = () => {
                     className="w-full h-full object-cover opacity-60 mix-blend-overlay"
                 />
 
+                {/* DEBUG OVERLAY */}
+                <div className="absolute top-0 left-0 right-0 z-50 bg-red-600 text-white p-2 text-xs font-mono text-center opacity-90">
+                    DEBUG: Ride=[{String(selectedRide)}] | Info=[{String(currentVehicle?.title)}]
+                </div>
+
                 {/* Header Overlay */}
                 <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent">
                     <button onClick={() => navigate(-1)} className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white/20 transition-all">
