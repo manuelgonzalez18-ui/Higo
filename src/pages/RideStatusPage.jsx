@@ -81,6 +81,12 @@ const RideStatusPage = () => {
         window.dispatchEvent(new Event('open-chat'));
     };
 
+    const handleSOS = () => {
+        if (confirm("¿Estás seguro de que quieres llamar a emergencias (911)?")) {
+            window.location.href = 'tel:911';
+        }
+    };
+
     if (!ride) return <div className="h-screen flex items-center justify-center bg-[#0F1014] text-white">Loading...</div>;
 
     return (
@@ -114,7 +120,7 @@ const RideStatusPage = () => {
                     </div>
                 )}
 
-                <button className="w-12 h-12 bg-[#EF4444] rounded-full flex items-center justify-center shadow-lg shadow-red-500/30 animate-pulse active:scale-95 transition-transform">
+                <button onClick={handleSOS} className="w-12 h-12 bg-[#EF4444] rounded-full flex items-center justify-center shadow-lg shadow-red-500/30 animate-pulse active:scale-95 transition-transform">
                     <span className="material-symbols-outlined text-white">shield</span>
                 </button>
             </div>
