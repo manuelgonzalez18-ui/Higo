@@ -179,9 +179,11 @@ const RequestRidePage = () => {
 
             {/* BACKGROUND MAP */}
             <div className="absolute inset-0 z-0">
+                <InteractiveMap
                     // Pass coordinates if we have them using props or context
-                className="w-full h-full"
-                markersProp={stops} // Pass stops for route visualization
+                    className="w-full h-full"
+                    markersProp={stops} // Pass stops for route visualization
+                />
                 {/* Overlay Gradients */}
                 <div className="absolute inset-x-0 bottom-0 h-3/4 bg-gradient-to-t from-[#0F1014] via-[#0F1014]/90 to-transparent pointer-events-none"></div>
                 <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/60 to-transparent pointer-events-none"></div>
