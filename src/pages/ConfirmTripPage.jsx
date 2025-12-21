@@ -13,7 +13,11 @@ const ConfirmTripPage = () => {
         dropoff = "Playa Los Totumos",
         pickupCoords = null,
         dropoffCoords = null
+        dropoffCoords = null
     } = location.state || {};
+
+    console.log('ConfirmTripPage State:', { selectedRide, price, pickup, dropoff });
+
     const [loading, setLoading] = useState(false);
     const [passengerPhone, setPassengerPhone] = useState(''); // New state for phone
     const [paymentMethod, setPaymentMethod] = useState('cash'); // Default to cash
