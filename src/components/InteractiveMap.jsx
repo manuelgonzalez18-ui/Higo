@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { searchPlaces } from '../services/geminiService';
 
-const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = false }) => {
+const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = false, markersProp }) => {
     const containerRef = useRef(null);
     const [view, setView] = useState({ x: -200, y: -100, scale: 1 });
 
@@ -24,9 +24,38 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
     // Initial Markers
     const [markers, setMarkers] = useState([
         { id: 'pickup', x: 400, y: 300, label: 'Pickup: Current Location', subLabel: '2 min away', type: 'pickup' },
-        { id: 'stop1', x: 800, y: 350, label: 'Stop 1: Playa Los Totumos', type: 'stop' },
         { id: 'dest', x: 1100, y: 500, label: 'Dest: Puerto Encantado', subLabel: 'Est. arrival 4:45 PM', type: 'destination' }
     ]);
+
+    // Sync with external markersProp (Simulated Waypoints)
+    useEffect(() => {
+        if (markersProp && markersProp.length > 0) {
+            // For simulation: Inject a stop marker if we have stops
+            const hasStop = markersProp.some(m => m.coords);  // markersProp is actually 'stops' state from parent
+
+            // Check if we already have a stop
+            const existingStop = markers.find(m => m.type === 'stop');
+
+            if (hasStop && !existingStop) {
+                // Add simulated stop
+                setMarkers(prev => {
+                    // Logic to insert between pickup (0) and dest (last) is simplified here
+                    // Just push a stop
+                    return [
+                        prev[0], // pickup
+                        { id: 'stop-sim', x: 750, y: 400, label: 'Parada: ' + (markersProp[0].address || 'Stop'), type: 'stop' },
+                        ...prev.slice(1) // rest (dest)
+                    ];
+                });
+            } else if (!hasStop && existingStop) {
+                // Remove stop if cleared
+                setMarkers(prev => prev.filter(m => m.type !== 'stop'));
+            }
+        } else {
+            // If passed empty array or null, ensure no stops
+            setMarkers(prev => prev.filter(m => m.type !== 'stop'));
+        }
+    }, [markersProp]);
 
     // Road Network Constants
     const ROADS_Y = [300, 500];
