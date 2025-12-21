@@ -18,6 +18,14 @@ const ConfirmTripPage = () => {
     const [passengerPhone, setPassengerPhone] = useState(''); // New state for phone
     const [paymentMethod, setPaymentMethod] = useState('cash'); // Default to cash
 
+    const VEHICLE_INFO = {
+        moto: { title: 'Higo Moto', icon: 'two_wheeler', seats: '1 asiento' },
+        standard: { title: 'Higo Estándar', icon: 'local_taxi', seats: '4 asientos' },
+        van: { title: 'Higo Camioneta', icon: 'airport_shuttle', seats: '6+ asientos' }
+    };
+
+    const currentVehicle = VEHICLE_INFO[selectedRide] || VEHICLE_INFO['standard'];
+
     const handleConfirm = async () => {
         setLoading(true);
         const { data: { session } } = await supabase.auth.getSession();
@@ -121,13 +129,13 @@ const ConfirmTripPage = () => {
                 <div className="bg-[#1A1F2E] p-4 rounded-3xl border border-white/5 flex items-center justify-between shadow-lg">
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
-                            <span className="material-symbols-outlined text-white text-2xl">local_taxi</span>
+                            <span className="material-symbols-outlined text-white text-2xl">{currentVehicle.icon}</span>
                         </div>
                         <div>
                             <p className="text-[#A855F7] text-xs font-bold uppercase mb-0.5">Mejor Precio</p>
-                            <h3 className="font-bold text-lg">Higo Estándar</h3>
+                            <h3 className="font-bold text-lg">{currentVehicle.title}</h3>
                             <p className="text-xs text-gray-400 flex items-center gap-1">
-                                <span className="material-symbols-outlined text-[10px]">person</span> 4 asientos • 5 min lejos
+                                <span className="material-symbols-outlined text-[10px]">person</span> {currentVehicle.seats} • 5 min lejos
                             </p>
                         </div>
                     </div>
