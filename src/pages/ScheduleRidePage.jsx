@@ -87,8 +87,8 @@ const ScheduleRidePage = () => {
                                                 key={day}
                                                 onClick={() => setSelectedDay(day)}
                                                 className={`h-10 w-10 mx-auto flex items-center justify-center rounded-xl text-sm transition-all ${selectedDay === day
-                                                        ? 'bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white font-bold shadow-lg shadow-violet-600/30 ring-2 ring-violet-400/50'
-                                                        : 'text-gray-300 hover:bg-white/10'
+                                                    ? 'bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white font-bold shadow-lg shadow-violet-600/30 ring-2 ring-violet-400/50'
+                                                    : 'text-gray-300 hover:bg-white/10'
                                                     }`}
                                             >
                                                 {day}
@@ -126,7 +126,7 @@ const ScheduleRidePage = () => {
                                             </button>
                                             <button className="flex flex-col items-center justify-center p-4 rounded-2xl border border-white/5 bg-[#0F1014] hover:bg-white/5 transition-all group">
                                                 <span className="material-symbols-outlined text-gray-400 mb-1 text-2xl group-hover:text-white transition-colors">airport_shuttle</span>
-                                                <span className="text-xs font-bold text-gray-400 group-hover:text-white transition-colors">Van</span>
+                                                <span className="text-xs font-bold text-gray-400 group-hover:text-white transition-colors">Camioneta</span>
                                             </button>
                                         </div>
                                     </div>

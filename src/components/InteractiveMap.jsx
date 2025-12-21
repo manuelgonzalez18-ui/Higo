@@ -639,7 +639,7 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                                 }`}
                         >
                             <span className="material-symbols-outlined text-[20px]">airport_shuttle</span>
-                            <span className="text-sm">Van</span>
+                            <span className="text-sm">Camioneta</span>
                         </button>
                     </div>
                 </div>

@@ -78,7 +78,7 @@ const RideStatusPage = () => {
     };
 
     const handleOpenChat = () => {
-        window.dispatchEvent(new Event('open-chat'));
+        window.dispatchEvent(new CustomEvent('open-chat', { detail: { rideId: id } }));
     };
 
     const handleSOS = () => {
@@ -120,9 +120,26 @@ const RideStatusPage = () => {
                     </div>
                 )}
 
-                <button onClick={handleSOS} className="w-12 h-12 bg-[#EF4444] rounded-full flex items-center justify-center shadow-lg shadow-red-500/30 animate-pulse active:scale-95 transition-transform">
-                    <span className="material-symbols-outlined text-white">shield</span>
-                </button>
+                {/* Spacer to balance the back button if needed, or just empty to keep flex layout working roughly same, 
+                   but since it's space-between and now we only have 2 items (back btn + status), they will spread out. 
+                   Actually, we want status centered usually. 
+                   The previous layout was: [Back] [Status] [Shield] (space-between? No, code says: flex justify-between items-start.
+                   Wait, the status pill is in the middle? No, the code structure is:
+                   <div className="... flex justify-between ...">
+                      <Button Back />
+                      <Status Pill />
+                      <Button Shield />
+                   </div>
+                   If I remove shield, it will be [Back] ... [Status]. That might look off. 
+                   Let's add an empty div of same size to keep balance if we want Status centered, or just let it float right.
+                   The user said "quitar el escudo". 
+                   Let's replace it with a transparent placeholder or just remove it. 
+                   If I remove it, flex-between will put Status on the far right. 
+                   Let's check if the Status Pill needs to be centered. 
+                   Usually yes.
+                   Let's use an invisible div to balance it.
+                */}
+                <div className="w-12"></div>
             </div>
 
             {/* Map placeholders (Pin, Route) - Simulated */}
@@ -203,11 +220,11 @@ const RideStatusPage = () => {
                         <div className="w-10 h-10 rounded-full bg-[#252A3A] flex items-center justify-center"><span className="material-symbols-outlined text-lg">location_on</span></div>
                         <span className="text-[10px]">Destino</span>
                     </button>
-                    <button onClick={handleSecurity} className="flex flex-col items-center gap-1 text-gray-400 hover:text-white transition-colors">
-                        <div className="w-10 h-10 rounded-full bg-[#252A3A] flex items-center justify-center"><span className="material-symbols-outlined text-lg">security</span></div>
-                        <span className="text-[10px]">Seguridad</span>
+                    <button onClick={handleSOS} className="flex flex-col items-center gap-1 text-red-400 hover:text-red-300 transition-colors">
+                        <div className="w-10 h-10 rounded-full bg-[#252A3A] flex items-center justify-center"><span className="material-symbols-outlined text-lg">sos</span></div>
+                        <span className="text-[10px]">S.O.S</span>
                     </button>
-                    <button className="flex flex-col items-center gap-1 text-red-400 hover:text-red-300 transition-colors">
+                    <button className="flex flex-col items-center gap-1 text-gray-400 hover:text-white transition-colors">
                         <div className="w-10 h-10 rounded-full bg-[#252A3A] flex items-center justify-center"><span className="material-symbols-outlined text-lg">close</span></div>
                         <span className="text-[10px]">Cancelar</span>
                     </button>
