@@ -3,6 +3,10 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 
 import { supabase } from '../services/supabase';
 
+import MotoIcon from '../assets/moto_yellow_cartoon.png';
+import StandardIcon from '../assets/car_yellow_cartoon.png';
+import VanIcon from '../assets/van_yellow_cartoon.png';
+
 const ConfirmTripPage = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -26,19 +30,19 @@ const ConfirmTripPage = () => {
             title: 'Higo Moto',
             icon: 'two_wheeler',
             seats: '1 asiento',
-            image: "https://cdn-icons-png.flaticon.com/512/3304/3304838.png"
+            image: MotoIcon
         },
         standard: {
             title: 'Higo Estándar',
             icon: 'local_taxi',
             seats: '4 asientos',
-            image: "https://cdn-icons-png.flaticon.com/512/3097/3097180.png"
+            image: StandardIcon
         },
         van: {
             title: 'Higo Camioneta',
             icon: 'airport_shuttle',
             seats: '6+ asientos',
-            image: "https://cdn-icons-png.flaticon.com/512/2645/2645700.png"
+            image: VanIcon
         }
     };
 
