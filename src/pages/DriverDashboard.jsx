@@ -4,6 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import InteractiveMap from '../components/InteractiveMap';
 import { generateSpeech, playAudioBuffer } from '../services/geminiService';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { registerPlugin } from '@capacitor/core';
+import { App } from '@capacitor/app';
+
+const BackgroundGeolocation = registerPlugin('BackgroundGeolocation');
 
 const DriverDashboard = () => {
     const navigate = useNavigate();
@@ -13,6 +17,7 @@ const DriverDashboard = () => {
     const [loading, setLoading] = useState(true);
     const [profile, setProfile] = useState(null);
     const [showPaymentQR, setShowPaymentQR] = useState(false);
+    const lastLocationRef = React.useRef(null);
 
     // Navigation State
     const [navStep, setNavStep] = useState(0); // 0: Idle, 1: To Pickup, 2: To Dropoff
@@ -87,25 +92,59 @@ const DriverDashboard = () => {
         }
     };
 
-    // Live Tracking & Filtering
+    // Live Tracking & Background Mode
     useEffect(() => {
-        let watchId;
+        let watcherId;
+
+        const startTracking = async () => {
+            // Request Permissions
+            try {
+                const status = await BackgroundGeolocation.checkPermissions();
+                if (status.location === 'prompt' || status.location === 'prompt-with-rationale') {
+                    await BackgroundGeolocation.requestPermissions();
+                }
+            } catch (e) {
+                console.warn("BG Geo permission check failed", e);
+            }
+
+            watcherId = await BackgroundGeolocation.addWatcher(
+                {
+                    backgroundMessage: "Higo Driver está activo en segundo plano",
+                    backgroundTitle: "Buscando Viajes...",
+                    requestPermissions: true,
+                    stale: false,
+                    distanceFilter: 10
+                },
+                async (location, error) => {
+                    if (error) {
+                        if (error.code === "NOT_AUTHORIZED") {
+                            console.error("Location not authorized");
+                        }
+                        return;
+                    }
+
+                    const { latitude, longitude } = location;
+                    console.log("📍 BG Location Update:", latitude, longitude);
+                    lastLocationRef.current = { latitude, longitude };
+
+                    // Update Profile Logic
+                    await supabase.from('profiles').update({
+                        curr_lat: latitude,
+                        curr_lng: longitude,
+                        last_location_update: new Date()
+                    }).eq('id', profile.id);
+                }
+            );
+        };
+
         if (isOnline) {
-            // Start watching position
-            watchId = navigator.geolocation.watchPosition(async (pos) => {
-                const { latitude, longitude } = pos.coords;
-
-                // Update Profile Logic (Debounced/Throttled ideally, simplified here)
-                await supabase.from('profiles').update({
-                    curr_lat: latitude,
-                    curr_lng: longitude,
-                    last_location_update: new Date()
-                }).eq('id', profile.id);
-
-            }, (err) => console.error(err), { enableHighAccuracy: true });
+            startTracking();
+        } else {
+            if (watcherId) BackgroundGeolocation.removeWatcher({ id: watcherId });
         }
+
         return () => {
-            if (watchId) navigator.geolocation.clearWatch(watchId);
+            if (watcherId) BackgroundGeolocation.removeWatcher({ id: watcherId });
         };
     }, [isOnline, profile]);
 
@@ -164,53 +203,57 @@ const DriverDashboard = () => {
             const processRequests = (newRides, replace = false) => {
                 const driverVehicleType = profile.vehicle_type ? profile.vehicle_type.toLowerCase() : 'standard';
 
-                navigator.geolocation.getCurrentPosition((pos) => {
-                    const { latitude, longitude } = pos.coords;
+                // Use Cached Location for Instant Response
+                const checkRide = (ride) => {
+                    // Type Match
+                    const rideType = ride.type ? ride.type.toLowerCase() : 'standard';
+                    let isMatch = false;
+                    if (driverVehicleType === 'moto' && rideType === 'moto') isMatch = true;
+                    else if ((driverVehicleType === 'van' || driverVehicleType === 'camioneta') && rideType === 'van') isMatch = true;
+                    else if ((driverVehicleType === 'standard' || driverVehicleType === 'car') && (rideType === 'standard' || rideType === 'car')) isMatch = true;
+                    if (!isMatch) return false;
 
-                    const filtered = newRides.filter(ride => {
-                        // Type Match
-                        const rideType = ride.type ? ride.type.toLowerCase() : 'standard';
-                        let isMatch = false;
-                        if (driverVehicleType === 'moto' && rideType === 'moto') isMatch = true;
-                        else if ((driverVehicleType === 'van' || driverVehicleType === 'camioneta') && rideType === 'van') isMatch = true;
-                        else if ((driverVehicleType === 'standard' || driverVehicleType === 'car') && (rideType === 'standard' || rideType === 'car')) isMatch = true;
-                        if (!isMatch) return false;
+                    // Distance Match (Instant)
+                    if (!ride.pickup_lat) return true; // Legacy/No coords
 
-                        // Distance Match
-                        if (!ride.pickup_lat) return true; // Legacy/No coords
-                        const dist = getDistanceFromLatLonInKm(latitude, longitude, ride.pickup_lat, ride.pickup_lng);
+                    if (lastLocationRef.current) {
+                        const dist = getDistanceFromLatLonInKm(
+                            lastLocationRef.current.latitude,
+                            lastLocationRef.current.longitude,
+                            ride.pickup_lat,
+                            ride.pickup_lng
+                        );
                         return dist < 10;
-                    });
-
-                    setRequests(prev => {
-                        if (replace) return filtered;
-
-                        // Merge and Dedup
-                        const combined = [...filtered, ...prev];
-                        const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
-                        return unique.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-                    });
-
-                    if (!replace && filtered.length > 0) {
-                        speak("New ride request nearby");
-                        notifyNewRequest(filtered[0]);
+                    } else {
+                        // Fail-safe: If location unknown, SHOW request so we don't block it
+                        return true;
                     }
-                }, (err) => {
-                    console.error("Geo Error:", err);
-                    // Fallback if geo fails: show all matching type? Or assume 0 dist?
-                    // For safety, let's show them if type matches, assuming driver will check distance manually/visually
-                    const filteredByType = newRides.filter(ride => {
-                        const rideType = ride.type ? ride.type.toLowerCase() : 'standard';
-                        if (driverVehicleType === 'moto') return rideType === 'moto';
-                        if ((driverVehicleType === 'van' || driverVehicleType === 'camioneta') && rideType === 'van') return true;
-                        return (rideType === 'standard' || rideType === 'car') && (driverVehicleType === 'standard' || driverVehicleType === 'car');
-                    });
-                    setRequests(prev => {
-                        if (replace) return filteredByType;
-                        const combined = [...filteredByType, ...prev];
-                        return Array.from(new Map(combined.map(item => [item.id, item])).values());
-                    });
+                };
+
+                const filtered = newRides.filter(checkRide);
+
+                setRequests(prev => {
+                    if (replace) return filtered;
+
+                    // Merge and Dedup
+                    const combined = [...filtered, ...prev];
+                    const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
+                    return unique.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
                 });
+
+                // NOTIFY IMMEDIATELY for new items
+                if (!replace && filtered.length > 0) {
+                    // Double check notification permission
+                    LocalNotifications.checkPermissions().then(status => {
+                        if (status.display !== 'granted') {
+                            LocalNotifications.requestPermissions();
+                        }
+                    });
+
+                    console.log("🔔 Notifying driver of new request!", filtered[0]);
+                    speak("Nueva solicitud de viaje");
+                    notifyNewRequest(filtered[0]);
+                }
             };
 
             const notifyNewRequest = async (ride) => {
