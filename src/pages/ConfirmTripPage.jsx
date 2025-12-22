@@ -22,9 +22,24 @@ const ConfirmTripPage = () => {
     const [paymentMethod, setPaymentMethod] = useState('cash'); // Default to cash
 
     const VEHICLE_INFO = {
-        moto: { title: 'Higo Moto', icon: 'two_wheeler', seats: '1 asiento' },
-        standard: { title: 'Higo Estándar', icon: 'local_taxi', seats: '4 asientos' },
-        van: { title: 'Higo Camioneta', icon: 'airport_shuttle', seats: '6+ asientos' }
+        moto: {
+            title: 'Higo Moto',
+            icon: 'two_wheeler',
+            seats: '1 asiento',
+            image: "https://cdn-icons-png.flaticon.com/512/3304/3304838.png"
+        },
+        standard: {
+            title: 'Higo Estándar',
+            icon: 'local_taxi',
+            seats: '4 asientos',
+            image: "https://cdn-icons-png.flaticon.com/512/3097/3097180.png"
+        },
+        van: {
+            title: 'Higo Camioneta',
+            icon: 'airport_shuttle',
+            seats: '6+ asientos',
+            image: "https://cdn-icons-png.flaticon.com/512/2645/2645700.png"
+        }
     };
 
     const currentVehicle = VEHICLE_INFO[selectedRide] || VEHICLE_INFO['standard'];
@@ -86,11 +101,6 @@ const ConfirmTripPage = () => {
                     className="w-full h-full object-cover opacity-60 mix-blend-overlay"
                 />
 
-                {/* DEBUG OVERLAY */}
-                <div className="absolute top-0 left-0 right-0 z-50 bg-red-600 text-white p-2 text-xs font-mono text-center opacity-90">
-                    DEBUG: Ride=[{String(selectedRide)}] | Info=[{String(currentVehicle?.title)}]
-                </div>
-
                 {/* Header Overlay */}
                 <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent">
                     <button onClick={() => navigate(-1)} className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white/20 transition-all">
@@ -148,7 +158,7 @@ const ConfirmTripPage = () => {
                         </div>
                     </div>
                     <div className="text-right">
-                        <div className="w-10 h-8 mb-1 ml-auto bg-contain bg-no-repeat bg-center" style={{ backgroundImage: 'url(https://cdn-icons-png.flaticon.com/512/3097/3097180.png)' }}></div>
+                        <div className="w-10 h-8 mb-1 ml-auto bg-contain bg-no-repeat bg-center" style={{ backgroundImage: `url(${currentVehicle.image})` }}></div>
                         <p className="text-[#A855F7] font-bold text-xl">${price.toFixed(2)}</p>
                     </div>
                 </div>
