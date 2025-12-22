@@ -76,7 +76,7 @@ const RideStatusPage = () => {
                         await LocalNotifications.schedule({
                             notifications: [{
                                 title: "Higo",
-                                body: "🚗 ¡El conductor ha llegado!",
+                                body: "🚗 ¡Tu Higo Driver ha llegado!",
                                 id: new Date().getTime(),
                                 schedule: { at: new Date(Date.now()) },
                                 sound: 'beep.wav',
@@ -90,7 +90,7 @@ const RideStatusPage = () => {
                     }
 
                     // Fallback visual alert (Guaranteed to show if app is open)
-                    alert("🔔 ¡Tu conductor ha llegado!");
+                    alert("🔔 ¡Tu Higo Driver ha llegado!");
                 }
 
                 if (payload.new.driver_id) {
