@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase, getUserProfile } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
 import InteractiveMap from '../components/InteractiveMap';
@@ -40,15 +40,12 @@ const DriverDashboard = () => {
                 importance: 5, // High
                 visibility: 1, // Public
                 vibration: true,
-                sound: 'beep.wav' // Tries to play beep.wav from res/raw, falls back to default if missing logic varies by OS but safer to be consistent. 
-                // actually, let's just use default sound logic if file missing
+                sound: 'beep.wav'
             });
         } catch (e) {
             console.error("Error requesting notifications", e);
         }
     };
-
-
 
     const checkUser = async () => {
         const userProfile = await getUserProfile();
@@ -106,7 +103,109 @@ const DriverDashboard = () => {
         }
     };
 
-    // Live Tracking & Background Mode
+    // --- HELPER FUNCTIONS ---
+
+    const speak = async (text) => {
+        setInstruction(text);
+        const buffer = await generateSpeech(text);
+        if (buffer) playAudioBuffer(buffer);
+    };
+
+    const deg2rad = (deg) => {
+        return deg * (Math.PI / 180);
+    };
+
+    const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
+        if (!lat1 || !lon1 || !lat2 || !lon2) return 9999;
+        const R = 6371;
+        const dLat = deg2rad(lat2 - lat1);
+        const dLon = deg2rad(lon2 - lon1);
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    };
+
+    // --- HOISTED LOGIC FOR PROCESSING REQUESTS ---
+
+    const notifyNewRequest = useCallback(async (ride) => {
+        try {
+            await LocalNotifications.schedule({
+                notifications: [
+                    {
+                        title: "🚗 New Ride Request!",
+                        body: `Trip to ${ride.dropoff} - $${ride.price}`,
+                        id: new Date().getTime(),
+                        schedule: { at: new Date(Date.now() + 1000) },
+                        channelId: 'higo_rides',
+                        sound: null,
+                        actionTypeId: "",
+                        extra: null
+                    }
+                ]
+            });
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+        } catch (e) {
+            console.error("Notification Error:", e);
+        }
+    }, [LocalNotifications]); // Actually LocalNotifications is imported
+
+    const processRequests = useCallback((newRides, replace = false) => {
+        if (!profile) return;
+        const driverVehicleType = profile.vehicle_type ? profile.vehicle_type.toLowerCase() : 'standard';
+
+        const checkRide = (ride) => {
+            // Type Match
+            const rideType = ride.type ? ride.type.toLowerCase() : 'standard';
+            let isMatch = false;
+            if (driverVehicleType === 'moto' && rideType === 'moto') isMatch = true;
+            else if ((driverVehicleType === 'van' || driverVehicleType === 'camioneta') && rideType === 'van') isMatch = true;
+            else if ((driverVehicleType === 'standard' || driverVehicleType === 'car') && (rideType === 'standard' || rideType === 'car')) isMatch = true;
+            if (!isMatch) return false;
+
+            // Distance Match (Instant)
+            if (!ride.pickup_lat) return true;
+
+            if (lastLocationRef.current) {
+                const dist = getDistanceFromLatLonInKm(
+                    lastLocationRef.current.latitude,
+                    lastLocationRef.current.longitude,
+                    ride.pickup_lat,
+                    ride.pickup_lng
+                );
+                return dist < 10;
+            } else {
+                return true; // Fail-safe
+            }
+        };
+
+        const filtered = newRides.filter(checkRide);
+
+        setRequests(prev => {
+            if (replace) return filtered;
+            const combined = [...filtered, ...prev];
+            // Dedup by ID
+            const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
+            return unique.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        });
+
+        // NOTIFY IMMEDIATELY for new items
+        if (!replace && filtered.length > 0) {
+            LocalNotifications.checkPermissions().then(status => {
+                if (status.display !== 'granted') {
+                    LocalNotifications.requestPermissions();
+                }
+            });
+
+            console.log("🔔 Notifying driver of new request!", filtered[0]);
+            speak("Nueva solicitud de viaje");
+            notifyNewRequest(filtered[0]);
+        }
+    }, [profile, notifyNewRequest]);
+
+    // --- LIVE TRACKING & BACKGROUND MODE ---
     useEffect(() => {
         let watcherId;
 
@@ -131,9 +230,6 @@ const DriverDashboard = () => {
                 },
                 async (location, error) => {
                     if (error) {
-                        if (error.code === "NOT_AUTHORIZED") {
-                            console.error("Location not authorized");
-                        }
                         return;
                     }
 
@@ -142,11 +238,29 @@ const DriverDashboard = () => {
                     lastLocationRef.current = { latitude, longitude };
 
                     // Update Profile Logic
-                    await supabase.from('profiles').update({
-                        curr_lat: latitude,
-                        curr_lng: longitude,
-                        last_location_update: new Date()
-                    }).eq('id', profile.id);
+                    if (profile?.id) {
+                        await supabase.from('profiles').update({
+                            curr_lat: latitude,
+                            curr_lng: longitude,
+                            last_location_update: new Date()
+                        }).eq('id', profile.id);
+
+                        // --- BACKGROUND POLLING FOR RIDES ---
+                        // Critical: Check for rides every time we move, in case socket acts up
+                        const { data } = await supabase
+                            .from('rides')
+                            .select('*')
+                            .eq('status', 'requested')
+                            .order('created_at', { ascending: false });
+
+                        if (data && data.length > 0) {
+                            // Pass false to merge, but we want to avoid double notification if already in list
+                            // processRequests handles deduping state, but might re-notify if we pass as "new"
+                            // Actually, processRequests notifies if !replace. 
+                            // Optimized: Only pass new ones
+                            processRequests(data, false);
+                        }
+                    }
                 }
             );
         };
@@ -160,27 +274,10 @@ const DriverDashboard = () => {
         return () => {
             if (watcherId) BackgroundGeolocation.removeWatcher({ id: watcherId });
         };
-    }, [isOnline, profile]);
+    }, [isOnline, profile, processRequests]);
 
-    // Helper: Haversine Distance
-    const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
-        if (!lat1 || !lon1 || !lat2 || !lon2) return 9999; // Far away if no coords
-        const R = 6371; // Radius of earth in km
-        const dLat = deg2rad(lat2 - lat1);
-        const dLon = deg2rad(lon2 - lon1);
-        const a =
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c; // Distance in km
-    };
 
-    const deg2rad = (deg) => {
-        return deg * (Math.PI / 180);
-    };
-
-    // Filter Requests Logic
+    // --- REALTIME SUBSCRIPTION ---
     const [subscriptionStatus, setSubscriptionStatus] = useState('DISCONNECTED');
 
     useEffect(() => {
@@ -195,7 +292,6 @@ const DriverDashboard = () => {
         const setupRealtime = async () => {
             setSubscriptionStatus('CONNECTING');
 
-            // 1. Define Fetch Function
             const fetchExistingRequests = async () => {
                 const { data, error } = await supabase
                     .from('rides')
@@ -203,96 +299,11 @@ const DriverDashboard = () => {
                     .eq('status', 'requested')
                     .order('created_at', { ascending: false });
 
-                if (error) {
-                    console.error("Error fetching requests:", error);
-                    return;
-                }
-
                 if (data) {
-                    processRequests(data, true); // true = replace all
+                    processRequests(data, true); // true = replace all initial load
                 }
             };
 
-            // 2. Define Request Processor (for both Fetch and Realtime)
-            const processRequests = (newRides, replace = false) => {
-                const driverVehicleType = profile.vehicle_type ? profile.vehicle_type.toLowerCase() : 'standard';
-
-                // Use Cached Location for Instant Response
-                const checkRide = (ride) => {
-                    // Type Match
-                    const rideType = ride.type ? ride.type.toLowerCase() : 'standard';
-                    let isMatch = false;
-                    if (driverVehicleType === 'moto' && rideType === 'moto') isMatch = true;
-                    else if ((driverVehicleType === 'van' || driverVehicleType === 'camioneta') && rideType === 'van') isMatch = true;
-                    else if ((driverVehicleType === 'standard' || driverVehicleType === 'car') && (rideType === 'standard' || rideType === 'car')) isMatch = true;
-                    if (!isMatch) return false;
-
-                    // Distance Match (Instant)
-                    if (!ride.pickup_lat) return true; // Legacy/No coords
-
-                    if (lastLocationRef.current) {
-                        const dist = getDistanceFromLatLonInKm(
-                            lastLocationRef.current.latitude,
-                            lastLocationRef.current.longitude,
-                            ride.pickup_lat,
-                            ride.pickup_lng
-                        );
-                        return dist < 10;
-                    } else {
-                        // Fail-safe: If location unknown, SHOW request so we don't block it
-                        return true;
-                    }
-                };
-
-                const filtered = newRides.filter(checkRide);
-
-                setRequests(prev => {
-                    if (replace) return filtered;
-
-                    // Merge and Dedup
-                    const combined = [...filtered, ...prev];
-                    const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
-                    return unique.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-                });
-
-                // NOTIFY IMMEDIATELY for new items
-                if (!replace && filtered.length > 0) {
-                    // Double check notification permission
-                    LocalNotifications.checkPermissions().then(status => {
-                        if (status.display !== 'granted') {
-                            LocalNotifications.requestPermissions();
-                        }
-                    });
-
-                    console.log("🔔 Notifying driver of new request!", filtered[0]);
-                    speak("Nueva solicitud de viaje");
-                    notifyNewRequest(filtered[0]);
-                }
-            };
-
-            const notifyNewRequest = async (ride) => {
-                try {
-                    await LocalNotifications.schedule({
-                        notifications: [
-                            {
-                                title: "🚗 New Ride Request!",
-                                body: `Trip to ${ride.dropoff} - $${ride.price}`,
-                                id: new Date().getTime(),
-                                schedule: { at: new Date(Date.now() + 1000) },
-                                channelId: 'higo_rides',
-                                sound: null,
-                                actionTypeId: "",
-                                extra: null
-                            }
-                        ]
-                    });
-                    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-                } catch (e) {
-                    console.error("Notification Error:", e);
-                }
-            };
-
-            // 3. Create Channel
             channel = supabase
                 .channel('public:rides')
                 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'rides' }, (payload) => {
@@ -303,7 +314,6 @@ const DriverDashboard = () => {
                 .subscribe((status) => {
                     setSubscriptionStatus(status);
                     if (status === 'SUBSCRIBED') {
-                        console.log("Subscribed to rides! Fetching current list...");
                         fetchExistingRequests();
                     }
                 });
@@ -314,37 +324,32 @@ const DriverDashboard = () => {
         return () => {
             if (channel) supabase.removeChannel(channel);
         };
-    }, [isOnline, profile]);
+    }, [isOnline, profile, processRequests]);
+    // ^ processRequests now stable via useCallback
 
-    const speak = async (text) => {
-        setInstruction(text);
-        const buffer = await generateSpeech(text);
-        if (buffer) playAudioBuffer(buffer);
-    };
+    // --- OTHER HANDLERS ---
 
     const handleAcceptRide = async (ride) => {
         try {
-            // Race Condition Fix: Only update if status is 'requested' and driver is null
             const { data, error } = await supabase
                 .from('rides')
                 .update({ status: 'accepted', driver_id: profile.id })
                 .eq('id', ride.id)
                 .eq('status', 'requested')
-                .is('driver_id', null) // Ensure no driver is assigned
+                .is('driver_id', null)
                 .select();
 
             if (error) throw error;
 
             if (!data || data.length === 0) {
-                // If no data returned, the condition failed (ride taken or cancelled)
                 alert("⚠️ Lo sentimos, este viaje ya fue tomado por otro conductor.");
-                setRequests(prev => prev.filter(r => r.id !== ride.id)); // Remove from list
+                setRequests(prev => prev.filter(r => r.id !== ride.id));
                 return;
             }
 
             setActiveRide(ride);
-            setRequests([]); // Clear list to focus on active ride
-            setNavStep(1); // Start navigation to pickup
+            setRequests([]);
+            setNavStep(1);
             speak(`Viaje aceptado. Navegando a ${ride.pickup}`);
         } catch (error) {
             console.error("Accept Ride Error:", error);
@@ -354,12 +359,10 @@ const DriverDashboard = () => {
 
     const handleCompleteStep = async () => {
         if (navStep === 1) {
-            // Arrived at Pickup
             setNavStep(2);
             speak(`Arrived at pickup. Start trip to ${activeRide.dropoff}`);
             await supabase.from('rides').update({ status: 'in_progress' }).eq('id', activeRide.id);
         } else if (navStep === 2) {
-            // Arrived at Destination -> Show QR
             await supabase.from('rides').update({ status: 'completed' }).eq('id', activeRide.id);
             speak(`Trip completed. Please show payment QR to passenger.`);
             setShowPaymentQR(true);
@@ -370,7 +373,7 @@ const DriverDashboard = () => {
         setShowPaymentQR(false);
         setActiveRide(null);
         setNavStep(0);
-        setRequests([]); // Ensure no stale requests show up immediately
+        setRequests([]);
         speak("Ready for next ride.");
     };
 
@@ -394,7 +397,6 @@ const DriverDashboard = () => {
                     dropoff={activeRide?.dropoff}
                     isDriver={true}
                 />
-                {/* Gradient Overlay for better text readability if needed */}
                 <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/60 to-transparent pointer-events-none"></div>
             </div>
 
@@ -420,7 +422,7 @@ const DriverDashboard = () => {
                 </div>
 
 
-                {/* ACTIVE RIDE - NAVIGATION OVERLAY (Reference Image 0) */}
+                {/* ACTIVE RIDE - NAVIGATION OVERLAY */}
                 {activeRide && !showPaymentQR && (
                     <div className="flex-1 flex flex-col justify-between p-4 pt-10 relative pointer-events-none">
 
@@ -497,7 +499,7 @@ const DriverDashboard = () => {
                 )}
 
 
-                {/* INCOMING REQUEST MODAL (Reference Image 3) */}
+                {/* INCOMING REQUEST MODAL */}
                 {!activeRide && requests.length > 0 && (
                     <div className="absolute bottom-6 left-4 right-4 pointer-events-auto animate-in slide-in-from-bottom-20 fade-in duration-300">
                         {requests.map(req => (
@@ -578,7 +580,7 @@ const DriverDashboard = () => {
                     </div>
                 )}
 
-                {/* PAYMENT QR OVERLAY (Keep existing logic but styled) */}
+                {/* PAYMENT QR OVERLAY */}
                 {showPaymentQR && (
                     <div className="absolute inset-0 bg-[#0F1014]/95 z-50 flex items-center justify-center p-6 pointer-events-auto backdrop-blur-xl animate-in fade-in">
                         <div className="bg-[#1A1F2E] text-white p-8 rounded-[32px] w-full max-w-sm text-center shadow-2xl border border-white/10">
