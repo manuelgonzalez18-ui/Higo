@@ -50,6 +50,16 @@ const RideStatusPage = () => {
     };
 
     useEffect(() => {
+        // Request Notification Permissions on mount
+        const requestPermissions = async () => {
+            try {
+                await LocalNotifications.requestPermissions();
+            } catch (e) {
+                console.error("Permission Error:", e);
+            }
+        };
+        requestPermissions();
+
         fetchRide();
 
         const channel = supabase
@@ -59,20 +69,28 @@ const RideStatusPage = () => {
 
                 // NOTIFICATION: Driver Arrived (in_progress)
                 if (payload.new.status === 'in_progress') {
+                    // Always vibrate and alert as backup
+                    if (navigator.vibrate) navigator.vibrate([500, 300, 500]);
+
                     try {
                         await LocalNotifications.schedule({
                             notifications: [{
                                 title: "Higo",
-                                body: "Ha Llegado un Higo Driver por Usted",
+                                body: "🚗 ¡El conductor ha llegado!",
                                 id: new Date().getTime(),
                                 schedule: { at: new Date(Date.now()) },
-                                sound: 'beep.wav'
+                                sound: 'beep.wav',
+                                attachments: null,
+                                actionTypeId: "",
+                                extra: null
                             }]
                         });
-                        if (navigator.vibrate) navigator.vibrate([500, 300, 500]);
                     } catch (e) {
                         console.error("Notification Error:", e);
                     }
+
+                    // Fallback visual alert (Guaranteed to show if app is open)
+                    alert("🔔 ¡Tu conductor ha llegado!");
                 }
 
                 if (payload.new.driver_id) {

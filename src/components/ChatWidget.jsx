@@ -68,7 +68,13 @@ const ChatWidget = () => {
     }, [rideId]);
 
     const handleSend = async () => {
-        if (!inputValue.trim() || !rideId || !userId) return;
+        console.log("Attempting to send:", { inputValue, rideId, userId }); // DEBUG
+
+        if (!inputValue.trim() || !rideId || !userId) {
+            console.error("Missing data for chat:", { inputValue, rideId, userId });
+            alert("Error: Faltan datos para enviar el mensaje (ID de viaje o usuario).");
+            return;
+        }
 
         const content = inputValue.trim();
         setInputValue(''); // Optimistic clear
@@ -83,8 +89,10 @@ const ChatWidget = () => {
 
         if (error) {
             console.error('Error sending message:', error);
-            alert('Error al enviar mensaje');
+            alert(`Error al enviar: ${error.message}`);
             setInputValue(content); // Restore if failed
+        } else {
+            console.log("Message sent successfully");
         }
     };
 
