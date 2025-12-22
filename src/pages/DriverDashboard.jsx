@@ -31,10 +31,24 @@ const DriverDashboard = () => {
     const requestNotificationPermissions = async () => {
         try {
             await LocalNotifications.requestPermissions();
+
+            // Create Channel (Required for Android 8+)
+            await LocalNotifications.createChannel({
+                id: 'higo_rides',
+                name: 'New Ride Requests',
+                description: 'Notifications for new ride requests nearby',
+                importance: 5, // High
+                visibility: 1, // Public
+                vibration: true,
+                sound: 'beep.wav' // Tries to play beep.wav from res/raw, falls back to default if missing logic varies by OS but safer to be consistent. 
+                // actually, let's just use default sound logic if file missing
+            });
         } catch (e) {
             console.error("Error requesting notifications", e);
         }
     };
+
+
 
     const checkUser = async () => {
         const userProfile = await getUserProfile();
@@ -265,7 +279,10 @@ const DriverDashboard = () => {
                                 body: `Trip to ${ride.dropoff} - $${ride.price}`,
                                 id: new Date().getTime(),
                                 schedule: { at: new Date(Date.now() + 1000) },
-                                sound: 'beep.wav'
+                                channelId: 'higo_rides',
+                                sound: null,
+                                actionTypeId: "",
+                                extra: null
                             }
                         ]
                     });
