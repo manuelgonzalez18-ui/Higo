@@ -174,6 +174,16 @@ const RequestRidePage = () => {
         });
     };
 
+    const [currentUser, setCurrentUser] = useState(null);
+
+    useEffect(() => {
+        const checkUser = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            setCurrentUser(user);
+        };
+        checkUser();
+    }, []);
+
     // Start Auth Check on Profile Click
     const handleProfileClick = async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -183,12 +193,12 @@ const RequestRidePage = () => {
             if (profile?.role === 'driver') {
                 navigate('/driver');
             } else {
-                // If passenger, maybe show "Cerrar Sesión" or profile settings? 
-                // For now, let's just alert or stay here. User wanted "Iniciar Sesion" if not logged in.
-                // If logged in as passenger, maybe show "Mis Viajes" or similar later.
-                // For now let's just toggle a simple alert or do nothing as they are ON the dashboard.
-                // Or maybe redirect to auth to switch accounts?
-                alert("Hola Pasajero! Ya has iniciado sesión.");
+                // Logout logic for passenger
+                if (window.confirm("¿Deseas cerrar sesión?")) {
+                    await supabase.auth.signOut();
+                    setCurrentUser(null);
+                    navigate('/auth');
+                }
             }
         } else {
             navigate('/auth');
@@ -221,10 +231,10 @@ const RequestRidePage = () => {
                 <div onClick={handleProfileClick} className="bg-[#1A1F2E]/80 backdrop-blur-md rounded-full pl-1 pr-4 py-1 flex items-center gap-3 border border-white/10 shadow-lg cursor-pointer hover:bg-[#252A3A] transition-colors">
                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 p-[1px]">
                         <div className="w-full h-full rounded-full bg-black/50 overflow-hidden">
-                            <img src="https://picsum.photos/100" className="w-full h-full object-cover" alt="Profile" />
+                            <img src={currentUser ? `https://ui-avatars.com/api/?name=${currentUser.email}&background=random` : "https://picsum.photos/100"} className="w-full h-full object-cover" alt="Profile" />
                         </div>
                     </div>
-                    <span className="font-bold text-sm">Iniciar Sesión</span>
+                    <span className="font-bold text-sm">{currentUser ? "Mi Perfil" : "Iniciar Sesión"}</span>
                 </div>
             </header>
 
