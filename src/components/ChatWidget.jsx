@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../services/supabase';
+import { LocalNotifications } from '@capacitor/local-notifications';
 
 const ChatWidget = () => {
     const [isOpen, setIsOpen] = useState(false);
