@@ -12,6 +12,40 @@ const RideStatusPage = () => {
     const [submitted, setSubmitted] = useState(false);
 
     const [showDriverDetails, setShowDriverDetails] = useState(true);
+    const [showCancelModal, setShowCancelModal] = useState(false);
+    const [selectedReason, setSelectedReason] = useState(null);
+
+    const cancelReasons = [
+        "La espera fue demasiado larga",
+        "Hubo un cambio de planes",
+        "El conductor pidió dinero extra",
+        "El conductor me pidió que cancele el viaje",
+        "El automóvil no venía hacia mí",
+        "Baja calificación del conductor",
+        "El conductor se fue sin mí"
+    ];
+
+    const handleCancelRide = async () => {
+        if (!selectedReason) {
+            alert("Por favor selecciona un motivo");
+            return;
+        }
+
+        const { error } = await supabase
+            .from('rides')
+            .update({
+                status: 'cancelled',
+                cancellation_reason: selectedReason
+            })
+            .eq('id', id);
+
+        if (error) {
+            console.error(error);
+            alert("Error al cancelar el viaje");
+        } else {
+            navigate('/');
+        }
+    };
 
     useEffect(() => {
         fetchRide();
@@ -160,26 +194,10 @@ const RideStatusPage = () => {
                 {/* Drag Handle */}
                 <div className="w-12 h-1.5 bg-gray-600/50 rounded-full mx-auto mb-6 cursor-pointer" onClick={() => setShowDriverDetails(!showDriverDetails)}></div>
 
-                {/* Driver Info Header */}
-                <div className="flex items-center gap-4 mb-6">
-                    <div className="relative">
-                        <div className="w-16 h-16 rounded-full bg-gray-700 bg-center bg-cover border-2 border-white/10"
-                            style={{ backgroundImage: `url('${driver?.avatar_url || "https://picsum.photos/200"}')` }}>
-                        </div>
-                        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-[#1A1E29] border border-white/10 px-2 py-0.5 rounded-full flex items-center gap-1 text-[10px]">
-                            <span className="text-yellow-400 text-xs">★</span> 4.9
-                        </div>
-                    </div>
-                    <div className="flex-1">
-                        <h2 className="text-xl font-bold text-white">{driver?.full_name || "Buscando conductor..."}</h2>
-                        <p className="text-gray-400 text-sm">{driver?.vehicle_brand ? driver.vehicle_brand + ' ' : ''}{driver?.vehicle_model || "Vehículo estándar"} • {driver?.vehicle_color || "Color"}</p>
-                    </div>
-                    <div className="flex flex-col items-end">
-                        <div className="px-3 py-1.5 rounded-xl border border-white/10 bg-[#252A3A] text-center">
-                            <p className="text-[9px] text-gray-400 uppercase font-bold text-center">PLACA</p>
-                            <p className="font-mono font-bold text-white tracking-widest leading-none mt-0.5">{driver?.license_plate || "---"}</p>
-                        </div>
-                    </div>
+                {/* Driver Info Header - Simplified */}
+                <div className="mb-6">
+                    <h2 className="text-xl font-bold text-white">{driver?.full_name || "Buscando a Higo Driver"}</h2>
+                    <p className="text-gray-400 text-sm">{driver?.vehicle_brand ? driver.vehicle_brand + ' ' : ''}{driver?.vehicle_model || "Vehículo estándar"} • {driver?.vehicle_color || "Color"}</p>
                 </div>
 
                 {/* Actions */}
@@ -224,13 +242,52 @@ const RideStatusPage = () => {
                         <div className="w-10 h-10 rounded-full bg-[#252A3A] flex items-center justify-center"><span className="material-symbols-outlined text-lg">sos</span></div>
                         <span className="text-[10px]">S.O.S</span>
                     </button>
-                    <button className="flex flex-col items-center gap-1 text-gray-400 hover:text-white transition-colors">
+                    <button onClick={() => setShowCancelModal(true)} className="flex flex-col items-center gap-1 text-gray-400 hover:text-white transition-colors">
                         <div className="w-10 h-10 rounded-full bg-[#252A3A] flex items-center justify-center"><span className="material-symbols-outlined text-lg">close</span></div>
                         <span className="text-[10px]">Cancelar</span>
                     </button>
                 </div>
 
             </div>
+
+            {/* Cancel Reason Modal */}
+            {showCancelModal && (
+                <div className="absolute inset-0 bg-[#0F1014] z-50 p-6 flex flex-col animate-in fade-in slide-in-from-bottom duration-300">
+                    <div className="flex justify-between items-start mb-8">
+                        <h2 className="text-2xl font-bold text-white max-w-[80%]">¿Por qué cancelaste el viaje?</h2>
+                        <button onClick={() => setShowCancelModal(false)} className="p-2 bg-[#1A1E29] rounded-full">
+                            <span className="material-symbols-outlined text-white">close</span>
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                        {cancelReasons.map((reason, index) => (
+                            <label key={index} className="flex items-center justify-between p-2 cursor-pointer group">
+                                <span className="text-gray-300 text-lg group-hover:text-white transition-colors">{reason}</span>
+                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${selectedReason === reason ? 'border-[#FF4444] bg-[#FF4444]' : 'border-gray-600'}`}>
+                                    {selectedReason === reason && <span className="material-symbols-outlined text-white text-sm">check</span>}
+                                </div>
+                                <input
+                                    type="radio"
+                                    name="cancelReason"
+                                    value={reason}
+                                    className="hidden"
+                                    onChange={() => setSelectedReason(reason)}
+                                />
+                            </label>
+                        ))}
+                    </div>
+
+                    <button
+                        onClick={handleCancelRide}
+                        className={`w-full py-4 rounded-xl font-bold text-lg mt-6 transition-all ${selectedReason ? 'bg-[#FF4444] text-white shadow-lg shadow-red-500/20' : 'bg-gray-700 text-gray-400 cursor-not-allowed'}`}
+                        disabled={!selectedReason}
+                    >
+                        Listo
+                    </button>
+                </div>
+            )}
+
         </div>
     );
 };
