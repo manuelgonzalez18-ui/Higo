@@ -142,10 +142,23 @@ const DriverDashboard = () => {
                 .order('created_at', { ascending: false });
 
             if (data) {
+                // Filter by Vehicle Type
+                // Normalize types to lower case for comparison
+                const driverVehicleType = profile.vehicle_type ? profile.vehicle_type.toLowerCase() : 'standard'; // Default to standard if missing
+
+                const filteredData = data.filter(ride => {
+                    const rideType = ride.type ? ride.type.toLowerCase() : 'standard';
+
+                    // Simple matching logic
+                    if (driverVehicleType === 'moto') return rideType === 'moto';
+                    if (driverVehicleType === 'van' || driverVehicleType === 'camioneta') return rideType === 'van';
+                    return rideType === 'standard' || rideType === 'car'; // Default bucket
+                });
+
                 // Client-side filtering for demo (ideally PostGIS)
                 navigator.geolocation.getCurrentPosition((pos) => {
                     const { latitude, longitude } = pos.coords;
-                    const nearbyRequests = data.filter(ride => {
+                    const nearbyRequests = filteredData.filter(ride => {
                         // If ride has no coords, show it (legacy support)
                         if (!ride.pickup_lat) return true;
                         const dist = getDistanceFromLatLonInKm(latitude, longitude, ride.pickup_lat, ride.pickup_lng);
@@ -162,6 +175,17 @@ const DriverDashboard = () => {
             .channel('public:rides')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'rides' }, async (payload) => {
                 if (payload.new.status === 'requested') {
+                    // Check Vehicle Type Match
+                    const driverVehicleType = profile.vehicle_type ? profile.vehicle_type.toLowerCase() : 'standard';
+                    const rideType = payload.new.type ? payload.new.type.toLowerCase() : 'standard';
+
+                    let isMatch = false;
+                    if (driverVehicleType === 'moto' && rideType === 'moto') isMatch = true;
+                    else if ((driverVehicleType === 'van' || driverVehicleType === 'camioneta') && rideType === 'van') isMatch = true;
+                    else if ((driverVehicleType === 'standard' || driverVehicleType === 'car') && (rideType === 'standard' || rideType === 'car')) isMatch = true;
+
+                    if (!isMatch) return; // Ignore request if type doesn't match
+
                     // Check distance for new request
                     navigator.geolocation.getCurrentPosition(async (pos) => {
                         const { latitude, longitude } = pos.coords;

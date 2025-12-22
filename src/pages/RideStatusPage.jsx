@@ -16,13 +16,13 @@ const RideStatusPage = () => {
     const [selectedReason, setSelectedReason] = useState(null);
 
     const cancelReasons = [
-        "La espera fue demasiado larga",
-        "Hubo un cambio de planes",
-        "El conductor pidió dinero extra",
-        "El conductor me pidió que cancele el viaje",
-        "El automóvil no venía hacia mí",
-        "Baja calificación del conductor",
-        "El conductor se fue sin mí"
+        { icon: 'schedule', text: "La espera fue demasiado larga" },
+        { icon: 'directions_walk', text: "Hubo un cambio de planes" },
+        { icon: 'payments', text: "El conductor pidió dinero extra" },
+        { icon: 'person_cancel', text: "El conductor me pidió que cancele el viaje" },
+        { icon: 'directions_car', text: "El automóvil no venía hacia mí" },
+        { icon: 'star', text: "Baja calificación del conductor" },
+        { icon: 'history', text: "El conductor se fue sin mí" }
     ];
 
     const handleCancelRide = async () => {
@@ -43,6 +43,7 @@ const RideStatusPage = () => {
             console.error(error);
             alert("Error al cancelar el viaje");
         } else {
+            alert("El viaje ha sido cancelado y el conductor ha sido notificado.");
             navigate('/');
         }
     };
@@ -194,11 +195,38 @@ const RideStatusPage = () => {
                 {/* Drag Handle */}
                 <div className="w-12 h-1.5 bg-gray-600/50 rounded-full mx-auto mb-6 cursor-pointer" onClick={() => setShowDriverDetails(!showDriverDetails)}></div>
 
-                {/* Driver Info Header - Simplified */}
-                <div className="mb-6">
-                    <h2 className="text-xl font-bold text-white">{driver?.full_name || "Buscando a Higo Driver"}</h2>
-                    <p className="text-gray-400 text-sm">{driver?.vehicle_brand ? driver.vehicle_brand + ' ' : ''}{driver?.vehicle_model || "Vehículo estándar"} • {driver?.vehicle_color || "Color"}</p>
-                </div>
+                {/* Driver Info Header */}
+                {driver ? (
+                    <div className="flex items-center gap-4 mb-6">
+                        <div className="relative">
+                            <div className="w-16 h-16 rounded-full bg-gray-700 bg-center bg-cover border-2 border-white/10"
+                                style={{ backgroundImage: `url('${driver.avatar_url || "https://picsum.photos/200"}')` }}>
+                            </div>
+                            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-[#1A1E29] border border-white/10 px-2 py-0.5 rounded-full flex items-center gap-1 text-[10px]">
+                                <span className="text-yellow-400 text-xs">★</span> 4.9
+                            </div>
+                        </div>
+                        <div className="flex-1">
+                            <h2 className="text-xl font-bold text-white">{driver.full_name}</h2>
+                            <p className="text-gray-400 text-sm">{driver.vehicle_brand} {driver.vehicle_model} • {driver.vehicle_color}</p>
+                        </div>
+                        <div className="flex flex-col items-end">
+                            <div className="px-3 py-1.5 rounded-xl border border-white/10 bg-[#252A3A] text-center">
+                                <p className="text-[9px] text-gray-400 uppercase font-bold text-center">PLACA</p>
+                                <p className="font-mono font-bold text-white tracking-widest leading-none mt-0.5">{driver.license_plate}</p>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="mb-6">
+                        <h2 className="text-xl font-bold text-white">Buscando a Higo Driver...</h2>
+                        <div className="flex items-center gap-2 mt-2">
+                            <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+                            <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Actions */}
                 {driver && (
@@ -261,18 +289,21 @@ const RideStatusPage = () => {
                     </div>
 
                     <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                        {cancelReasons.map((reason, index) => (
-                            <label key={index} className="flex items-center justify-between p-2 cursor-pointer group">
-                                <span className="text-gray-300 text-lg group-hover:text-white transition-colors">{reason}</span>
-                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${selectedReason === reason ? 'border-[#FF4444] bg-[#FF4444]' : 'border-gray-600'}`}>
-                                    {selectedReason === reason && <span className="material-symbols-outlined text-white text-sm">check</span>}
+                        {cancelReasons.map((item, index) => (
+                            <label key={index} className="flex items-center justify-between p-3 rounded-xl hover:bg-[#1A1E29] cursor-pointer group transition-colors">
+                                <div className="flex items-center gap-4">
+                                    <span className="material-symbols-outlined text-gray-400 group-hover:text-white transition-colors">{item.icon}</span>
+                                    <span className="text-gray-300 text-lg group-hover:text-white transition-colors">{item.text}</span>
+                                </div>
+                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${selectedReason === item.text ? 'border-[#8B5CF6] bg-[#8B5CF6]' : 'border-gray-600'}`}>
+                                    {selectedReason === item.text && <span className="material-symbols-outlined text-white text-sm">check</span>}
                                 </div>
                                 <input
                                     type="radio"
                                     name="cancelReason"
-                                    value={reason}
+                                    value={item.text}
                                     className="hidden"
-                                    onChange={() => setSelectedReason(reason)}
+                                    onChange={() => setSelectedReason(item.text)}
                                 />
                             </label>
                         ))}
@@ -280,7 +311,7 @@ const RideStatusPage = () => {
 
                     <button
                         onClick={handleCancelRide}
-                        className={`w-full py-4 rounded-xl font-bold text-lg mt-6 transition-all ${selectedReason ? 'bg-[#FF4444] text-white shadow-lg shadow-red-500/20' : 'bg-gray-700 text-gray-400 cursor-not-allowed'}`}
+                        className={`w-full py-4 rounded-xl font-bold text-lg mt-6 transition-all ${selectedReason ? 'bg-[#8B5CF6] text-white shadow-lg shadow-[#8B5CF6]/20' : 'bg-gray-700 text-gray-400 cursor-not-allowed'}`}
                         disabled={!selectedReason}
                     >
                         Listo
