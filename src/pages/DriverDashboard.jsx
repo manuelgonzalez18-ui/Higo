@@ -128,103 +128,133 @@ const DriverDashboard = () => {
     };
 
     // Filter Requests Logic
+    const [subscriptionStatus, setSubscriptionStatus] = useState('DISCONNECTED');
+
     useEffect(() => {
+        let channel;
+
         if (!isOnline) {
             setRequests([]);
+            setSubscriptionStatus('DISCONNECTED');
             return;
         }
 
-        const fetchRequests = async () => {
-            const { data } = await supabase
-                .from('rides')
-                .select('*')
-                .eq('status', 'requested')
-                .order('created_at', { ascending: false });
+        const setupRealtime = async () => {
+            setSubscriptionStatus('CONNECTING');
 
-            if (data) {
-                // Filter by Vehicle Type
-                // Normalize types to lower case for comparison
-                const driverVehicleType = profile.vehicle_type ? profile.vehicle_type.toLowerCase() : 'standard'; // Default to standard if missing
+            // 1. Define Fetch Function
+            const fetchExistingRequests = async () => {
+                const { data, error } = await supabase
+                    .from('rides')
+                    .select('*')
+                    .eq('status', 'requested')
+                    .order('created_at', { ascending: false });
 
-                const filteredData = data.filter(ride => {
-                    const rideType = ride.type ? ride.type.toLowerCase() : 'standard';
+                if (error) {
+                    console.error("Error fetching requests:", error);
+                    return;
+                }
 
-                    // Simple matching logic
-                    if (driverVehicleType === 'moto') return rideType === 'moto';
-                    if (driverVehicleType === 'van' || driverVehicleType === 'camioneta') return rideType === 'van';
-                    return rideType === 'standard' || rideType === 'car'; // Default bucket
-                });
+                if (data) {
+                    processRequests(data, true); // true = replace all
+                }
+            };
 
-                // Client-side filtering for demo (ideally PostGIS)
+            // 2. Define Request Processor (for both Fetch and Realtime)
+            const processRequests = (newRides, replace = false) => {
+                const driverVehicleType = profile.vehicle_type ? profile.vehicle_type.toLowerCase() : 'standard';
+
                 navigator.geolocation.getCurrentPosition((pos) => {
                     const { latitude, longitude } = pos.coords;
-                    const nearbyRequests = filteredData.filter(ride => {
-                        // If ride has no coords, show it (legacy support)
-                        if (!ride.pickup_lat) return true;
+
+                    const filtered = newRides.filter(ride => {
+                        // Type Match
+                        const rideType = ride.type ? ride.type.toLowerCase() : 'standard';
+                        let isMatch = false;
+                        if (driverVehicleType === 'moto' && rideType === 'moto') isMatch = true;
+                        else if ((driverVehicleType === 'van' || driverVehicleType === 'camioneta') && rideType === 'van') isMatch = true;
+                        else if ((driverVehicleType === 'standard' || driverVehicleType === 'car') && (rideType === 'standard' || rideType === 'car')) isMatch = true;
+                        if (!isMatch) return false;
+
+                        // Distance Match
+                        if (!ride.pickup_lat) return true; // Legacy/No coords
                         const dist = getDistanceFromLatLonInKm(latitude, longitude, ride.pickup_lat, ride.pickup_lng);
-                        return dist < 10; // 10km Radius
+                        return dist < 10;
                     });
-                    setRequests(nearbyRequests);
+
+                    setRequests(prev => {
+                        if (replace) return filtered;
+
+                        // Merge and Dedup
+                        const combined = [...filtered, ...prev];
+                        const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
+                        return unique.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                    });
+
+                    if (!replace && filtered.length > 0) {
+                        speak("New ride request nearby");
+                        notifyNewRequest(filtered[0]);
+                    }
+                }, (err) => {
+                    console.error("Geo Error:", err);
+                    // Fallback if geo fails: show all matching type? Or assume 0 dist?
+                    // For safety, let's show them if type matches, assuming driver will check distance manually/visually
+                    const filteredByType = newRides.filter(ride => {
+                        const rideType = ride.type ? ride.type.toLowerCase() : 'standard';
+                        if (driverVehicleType === 'moto') return rideType === 'moto';
+                        if ((driverVehicleType === 'van' || driverVehicleType === 'camioneta') && rideType === 'van') return true;
+                        return (rideType === 'standard' || rideType === 'car') && (driverVehicleType === 'standard' || driverVehicleType === 'car');
+                    });
+                    setRequests(prev => {
+                        if (replace) return filteredByType;
+                        const combined = [...filteredByType, ...prev];
+                        return Array.from(new Map(combined.map(item => [item.id, item])).values());
+                    });
                 });
-            }
+            };
+
+            const notifyNewRequest = async (ride) => {
+                try {
+                    await LocalNotifications.schedule({
+                        notifications: [
+                            {
+                                title: "🚗 New Ride Request!",
+                                body: `Trip to ${ride.dropoff} - $${ride.price}`,
+                                id: new Date().getTime(),
+                                schedule: { at: new Date(Date.now() + 1000) },
+                                sound: 'beep.wav'
+                            }
+                        ]
+                    });
+                    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                } catch (e) {
+                    console.error("Notification Error:", e);
+                }
+            };
+
+            // 3. Create Channel
+            channel = supabase
+                .channel('public:rides')
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'rides' }, (payload) => {
+                    if (payload.new.status === 'requested') {
+                        processRequests([payload.new], false);
+                    }
+                })
+                .subscribe((status) => {
+                    setSubscriptionStatus(status);
+                    if (status === 'SUBSCRIBED') {
+                        console.log("Subscribed to rides! Fetching current list...");
+                        fetchExistingRequests();
+                    }
+                });
         };
 
-        fetchRequests();
+        setupRealtime();
 
-        const channel = supabase
-            .channel('public:rides')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'rides' }, async (payload) => {
-                if (payload.new.status === 'requested') {
-                    // Check Vehicle Type Match
-                    const driverVehicleType = profile.vehicle_type ? profile.vehicle_type.toLowerCase() : 'standard';
-                    const rideType = payload.new.type ? payload.new.type.toLowerCase() : 'standard';
-
-                    let isMatch = false;
-                    if (driverVehicleType === 'moto' && rideType === 'moto') isMatch = true;
-                    else if ((driverVehicleType === 'van' || driverVehicleType === 'camioneta') && rideType === 'van') isMatch = true;
-                    else if ((driverVehicleType === 'standard' || driverVehicleType === 'car') && (rideType === 'standard' || rideType === 'car')) isMatch = true;
-
-                    if (!isMatch) return; // Ignore request if type doesn't match
-
-                    // Check distance for new request
-                    navigator.geolocation.getCurrentPosition(async (pos) => {
-                        const { latitude, longitude } = pos.coords;
-                        const dist = payload.new.pickup_lat
-                            ? getDistanceFromLatLonInKm(latitude, longitude, payload.new.pickup_lat, payload.new.pickup_lng)
-                            : 0;
-
-                        if (dist < 10) {
-                            setRequests(prev => [payload.new, ...prev]);
-                            speak("New ride request nearby");
-                            // Trigger Background Notification
-                            try {
-                                await LocalNotifications.schedule({
-                                    notifications: [
-                                        {
-                                            title: "🚗 New Ride Request!",
-                                            body: `Trip to ${payload.new.dropoff} - $${payload.new.price}`,
-                                            id: new Date().getTime(),
-                                            schedule: { at: new Date(Date.now() + 1000) },
-                                            sound: 'beep.wav',
-                                            attachments: null,
-                                            actionTypeId: "",
-                                            extra: null
-                                        }
-                                    ]
-                                });
-                                // Haptic feedback if available (using browser API as fallback or Capacitor Haptics if added)
-                                if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-                            } catch (e) {
-                                console.error("Notification Error:", e);
-                            }
-                        }
-                    });
-                }
-            })
-            .subscribe();
-
-        return () => supabase.removeChannel(channel);
-    }, [isOnline]);
+        return () => {
+            if (channel) supabase.removeChannel(channel);
+        };
+    }, [isOnline, profile]);
 
     const speak = async (text) => {
         setInstruction(text);
@@ -315,8 +345,13 @@ const DriverDashboard = () => {
                 <div className="p-4 flex justify-between items-start pointer-events-auto">
                     {!activeRide && (
                         <div className="bg-[#1A1F2E]/90 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-3 shadow-lg">
-                            <div className={`w-3 h-3 rounded-full ${isOnline ? 'bg-green-500 animate-pulse shadow-[0_0_10px_#22c55e]' : 'bg-red-500'}`}></div>
-                            <span className="font-bold text-sm tracking-wide">{isOnline ? 'En línea' : 'Desconectado'}</span>
+                            <div className={`w-3 h-3 rounded-full ${isOnline && subscriptionStatus === 'SUBSCRIBED' ? 'bg-green-500 animate-pulse shadow-[0_0_10px_#22c55e]' : isOnline ? 'bg-amber-500 animate-pulse' : 'bg-red-500'}`}></div>
+                            <span className="font-bold text-sm tracking-wide">
+                                {!isOnline ? 'Desconectado' :
+                                    subscriptionStatus === 'SUBSCRIBED' ? 'En línea' :
+                                        subscriptionStatus === 'CONNECTING' ? 'Conectando...' :
+                                            'Reconectando...'}
+                            </span>
                         </div>
                     )}
                     <button onClick={handleLogout} className="w-10 h-10 bg-[#1A1F2E]/90 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 shadow-lg hover:bg-red-500/20 transition-colors ml-auto">
