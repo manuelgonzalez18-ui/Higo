@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import { LocalNotifications } from '@capacitor/local-notifications';
 
 const RideStatusPage = () => {
     const { id } = useParams();
@@ -41,7 +42,7 @@ const RideStatusPage = () => {
 
         if (error) {
             console.error(error);
-            alert("Error al cancelar el viaje");
+            alert(`Error al cancelar el viaje: ${error.message}`);
         } else {
             alert("El viaje ha sido cancelado y el conductor ha sido notificado.");
             navigate('/');
@@ -55,6 +56,25 @@ const RideStatusPage = () => {
             .channel(`ride:${id}`)
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rides', filter: `id=eq.${id}` }, async (payload) => {
                 setRide(payload.new);
+
+                // NOTIFICATION: Driver Arrived (in_progress)
+                if (payload.new.status === 'in_progress') {
+                    try {
+                        await LocalNotifications.schedule({
+                            notifications: [{
+                                title: "Higo",
+                                body: "Ha Llegado un Higo Driver por Usted",
+                                id: new Date().getTime(),
+                                schedule: { at: new Date(Date.now()) },
+                                sound: 'beep.wav'
+                            }]
+                        });
+                        if (navigator.vibrate) navigator.vibrate([500, 300, 500]);
+                    } catch (e) {
+                        console.error("Notification Error:", e);
+                    }
+                }
+
                 if (payload.new.driver_id) {
                     const { data } = await supabase.from('profiles').select('*').eq('id', payload.new.driver_id).single();
                     if (data) setDriver(data);

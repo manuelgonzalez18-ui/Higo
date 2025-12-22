@@ -8,6 +8,7 @@ const ChatWidget = () => {
     const [inputValue, setInputValue] = useState('');
     const [rideId, setRideId] = useState(null);
     const [userId, setUserId] = useState(null);
+    const [chatTitle, setChatTitle] = useState("Chat");
     const messagesEndRef = useRef(null);
 
     const scrollToBottom = () => {
@@ -27,17 +28,13 @@ const ChatWidget = () => {
 
         const handleOpenChat = (event) => {
             setIsOpen(true);
-            // Ideally we get rideId from event, but for now we might need to grab it from URL or context if not passed
-            // In RideStatusPage, we should pass it. Let's assume the event detail has it, or we rely on URL parsing if simpler for now.
-            // Actually, let's update RideStatusPage to dispatch the ID. 
-            // If the event doesn't have it, we can't load specific chat. 
-            // For this specific 'single active ride' context, let's try to find active ride if not provided.
-
-            // For now, let's assume we are viewing the ride page or the layout knows the current ride. 
-            // But ChatWidget is global.
-            // Let's modify RideStatusPage to dispatch: window.dispatchEvent(new CustomEvent('open-chat', { detail: { rideId: ride.id } }));
             if (event.detail && event.detail.rideId) {
                 setRideId(event.detail.rideId);
+            }
+            if (event.detail && event.detail.title) {
+                setChatTitle(event.detail.title);
+            } else {
+                setChatTitle("Chat"); // Default
             }
         };
 
@@ -48,32 +45,21 @@ const ChatWidget = () => {
     useEffect(() => {
         if (!rideId) return;
 
-        // Fetch initial messages
         const fetchMessages = async () => {
-            setIsLoading(true);
             const { data, error } = await supabase
-                .from('messages')
+                .from('ride_messages')
                 .select('*')
                 .eq('ride_id', rideId)
                 .order('created_at', { ascending: true });
 
-            if (!error && data) {
-                setMessages(data);
-            }
-            setIsLoading(false);
+            if (data) setMessages(data);
         };
 
         fetchMessages();
 
-        // Subscribe to new messages
         const channel = supabase
             .channel(`chat:${rideId}`)
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'messages',
-                filter: `ride_id=eq.${rideId}`
-            }, (payload) => {
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ride_messages', filter: `ride_id=eq.${rideId}` }, (payload) => {
                 setMessages(prev => [...prev, payload.new]);
             })
             .subscribe();
@@ -84,38 +70,26 @@ const ChatWidget = () => {
     const handleSend = async () => {
         if (!inputValue.trim() || !rideId || !userId) return;
 
-        // Optimistic UI update? strict consistency is better for chat usually, but let's wait for confirm or subscription
-        // We'll just insert and let subscription update UI (or manual update if local echo needed)
-
-        const text = inputValue.trim();
-        setInputValue('');
+        const content = inputValue.trim();
+        setInputValue(''); // Optimistic clear
 
         const { error } = await supabase
-            .from('messages')
+            .from('ride_messages')
             .insert({
                 ride_id: rideId,
                 sender_id: userId,
-                content: text
+                content: content
             });
 
         if (error) {
-            console.error("Error sending message:", error);
-            // Optionally restore input or show error
+            console.error('Error sending message:', error);
+            alert('Error al enviar mensaje');
+            setInputValue(content); // Restore if failed
         }
     };
 
     if (!isOpen) {
-        // If hidden, we don't render the bubble unless we want it always visible. 
-        // The user said "remove AI", implies keep chat functionality.
-        // If we want it global, we need a trigger.
-        // But in RideStatusPage, there is a chat button that effectively "Opens" this widget.
-        // So the bubble trigger might be redundant if the page controls it, but let's keep it for closing/reopening.
-        return null; // Or keep the floating button? 
-        // RideStatusPage has a "Chat" button in the driver card.
-        // Let's keep the floating button only if isOpen is false? Or maybe we rely on the page button to open it initially.
-        // Let's render nothing if not open, and rely on the event to open it.
-        // WAIT: If I return null, the user can't open it unless they click the button in RideStatusPage again. 
-        // That's fine.
+        return null;
     }
 
     return (
@@ -124,7 +98,7 @@ const ChatWidget = () => {
                 <div className="p-4 bg-violet-100 dark:bg-violet-900/20 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                     <div className="flex items-center gap-2">
                         <span className="material-symbols-outlined text-violet-600">chat</span>
-                        <h3 className="font-bold text-gray-800 dark:text-white">Chat con Conductor</h3>
+                        <h3 className="font-bold text-gray-800 dark:text-white">{chatTitle}</h3>
                     </div>
                     <button onClick={() => setIsOpen(false)} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
                         <span className="material-symbols-outlined">close</span>

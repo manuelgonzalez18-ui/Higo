@@ -280,10 +280,18 @@ const DriverDashboard = () => {
         setShowPaymentQR(false);
         setActiveRide(null);
         setNavStep(0);
+        setRequests([]); // Ensure no stale requests show up immediately
         speak("Ready for next ride.");
     };
 
-    if (loading) return <div className="h-screen flex items-center justify-center">Loading Driver Profile...</div>;
+    const handleLogout = async () => {
+        if (activeRide) {
+            alert("Completa el viaje actual antes de salir.");
+            return;
+        }
+        await supabase.auth.signOut();
+        navigate('/');
+    };
 
     if (loading) return <div className="h-screen flex items-center justify-center bg-[#0F1014] text-white">Loading Driver Profile...</div>;
 
@@ -311,15 +319,15 @@ const DriverDashboard = () => {
                             <span className="font-bold text-sm tracking-wide">{isOnline ? 'En línea' : 'Desconectado'}</span>
                         </div>
                     )}
-                    <div className="w-10 h-10 bg-[#1A1F2E]/90 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 shadow-lg">
-                        <span className="material-symbols-outlined text-white">menu</span>
-                    </div>
+                    <button onClick={handleLogout} className="w-10 h-10 bg-[#1A1F2E]/90 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 shadow-lg hover:bg-red-500/20 transition-colors ml-auto">
+                        <span className="material-symbols-outlined text-white">logout</span>
+                    </button>
                 </div>
 
 
                 {/* ACTIVE RIDE - NAVIGATION OVERLAY (Reference Image 0) */}
                 {activeRide && !showPaymentQR && (
-                    <div className="flex-1 flex flex-col justify-between p-4 pt-10">
+                    <div className="flex-1 flex flex-col justify-between p-4 pt-10 relative pointer-events-none">
 
                         {/* Top: Direction Pill */}
                         <div className="bg-[#1A1F2E] rounded-full p-4 pl-6 pr-6 shadow-2xl border border-white/10 flex items-center justify-between mx-auto w-full max-w-sm pointer-events-auto animate-in slide-in-from-top-4">
@@ -334,54 +342,51 @@ const DriverDashboard = () => {
                             </div>
                         </div>
 
-                        {/* Mid: Passenger on Map (Simulated) */}
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-auto">
-                            <div className="relative">
-                                <div className="w-12 h-12 rounded-full border-2 border-white shadow-lg overflow-hidden">
-                                    <img src="https://picsum.photos/100" className="w-full h-full object-cover" />
-                                </div>
-                                <div className="absolute -bottom-2 -translate-x-1/2 left-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-t-[8px] border-t-white border-r-[6px] border-r-transparent"></div>
-                            </div>
-                        </div>
-
-
                         {/* Bottom: Passenger Card & Action */}
-                        <div className="bg-[#1A1F2E] rounded-[32px] p-6 shadow-2xl border border-white/5 pointer-events-auto animate-in slide-in-from-bottom-10">
-                            <div className="w-10 h-1.5 bg-gray-600/30 rounded-full mx-auto mb-6"></div>
+                        <div className="bg-[#1A1F2E] rounded-[32px] p-5 shadow-2xl border border-white/5 pointer-events-auto animate-in slide-in-from-bottom-10 pointer-events-auto mt-auto">
+                            <div className="w-10 h-1.5 bg-gray-600/30 rounded-full mx-auto mb-5"></div>
 
-                            <div className="flex items-center gap-4 mb-6">
-                                <div className="relative">
-                                    <div className="w-14 h-14 rounded-full bg-gray-700 bg-center bg-cover border border-white/10" style={{ backgroundImage: 'url(https://picsum.photos/200)' }}></div>
+                            <div className="flex items-center gap-3 mb-5">
+                                <div className="relative flex-shrink-0">
+                                    <div className="w-14 h-14 rounded-full bg-gray-700 bg-center bg-cover border-2 border-white/10 shadow-lg" style={{ backgroundImage: 'url(https://picsum.photos/200)' }}></div>
                                     <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-white text-black px-1.5 py-0.5 rounded-full text-[10px] font-bold border border-gray-200 shadow-sm flex items-center gap-0.5">
                                         <span>4.9</span> <span className="text-yellow-600">★</span>
                                     </div>
                                 </div>
-                                <div className="flex-1">
-                                    <h2 className="font-bold text-xl text-white">Sarah M.</h2>
-                                    <p className="text-gray-400 text-sm">Viaje Estándar • Efectivo</p>
+
+                                <div className="flex-1 min-w-0 pr-2">
+                                    <h2 className="font-bold text-xl text-white truncate leading-tight">Sarah M.</h2>
+                                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                        <span className="text-[10px] bg-violet-500/20 text-violet-300 px-1.5 py-0.5 rounded font-medium border border-violet-500/10">Estándar</span>
+                                        <span className="text-[10px] bg-green-500/20 text-green-300 px-1.5 py-0.5 rounded font-medium border border-green-500/10">Efectivo</span>
+                                    </div>
                                 </div>
-                                <div className="flex gap-2">
-                                    <a href={`tel:${activeRide.passenger_phone || ''}`} className="w-12 h-12 bg-[#252A3A] rounded-full flex items-center justify-center border border-white/5 hover:bg-[#2C3345]">
-                                        <span className="material-symbols-outlined text-white">call</span>
+
+                                <div className="flex gap-2 flex-shrink-0">
+                                    <a href={`tel:${activeRide.passenger_phone || ''}`} className="w-11 h-11 bg-[#252A3A] rounded-full flex items-center justify-center border border-white/5 hover:bg-[#2C3345] hover:text-green-400 transition-colors">
+                                        <span className="material-symbols-outlined text-white text-[20px]">call</span>
                                     </a>
-                                    <button className="w-12 h-12 bg-[#252A3A] rounded-full flex items-center justify-center border border-white/5 hover:bg-[#2C3345]">
-                                        <span className="material-symbols-outlined text-white">chat_bubble</span>
+                                    <button
+                                        onClick={() => window.dispatchEvent(new CustomEvent('open-chat', { detail: { rideId: activeRide.id, title: 'Chat con Pasajero' } }))}
+                                        className="w-11 h-11 bg-[#252A3A] rounded-full flex items-center justify-center border border-white/5 hover:bg-[#2C3345] hover:text-violet-400 transition-colors"
+                                    >
+                                        <span className="material-symbols-outlined text-white text-[20px]">chat_bubble</span>
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-4 mb-6 bg-[#0F1014]/50 p-4 rounded-2xl border border-white/5">
+                            <div className="grid grid-cols-3 gap-2 mb-5 bg-[#0F1014]/50 p-3 rounded-2xl border border-white/5">
                                 <div>
-                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">TIEMPO</p>
-                                    <p className="text-white font-bold text-lg">4 <span className="text-sm font-normal text-gray-400">min</span></p>
+                                    <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-0.5">TIEMPO</p>
+                                    <p className="text-white font-bold text-base">4 <span className="text-xs font-normal text-gray-400">min</span></p>
                                 </div>
-                                <div className="border-l border-white/5 pl-4">
-                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">DISTANCIA</p>
-                                    <p className="text-white font-bold text-lg">1.2 <span className="text-sm font-normal text-gray-400">km</span></p>
+                                <div className="border-l border-white/5 pl-3">
+                                    <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-0.5">DISTANCIA</p>
+                                    <p className="text-white font-bold text-base">1.2 <span className="text-xs font-normal text-gray-400">km</span></p>
                                 </div>
-                                <div className="border-l border-white/5 pl-4">
-                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">LLEGADA</p>
-                                    <p className="text-white font-bold text-lg">10:42</p>
+                                <div className="border-l border-white/5 pl-3">
+                                    <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-0.5">LLEGADA</p>
+                                    <p className="text-white font-bold text-base">10:42</p>
                                 </div>
                             </div>
 
@@ -483,7 +488,7 @@ const DriverDashboard = () => {
                     <div className="absolute inset-0 bg-[#0F1014]/95 z-50 flex items-center justify-center p-6 pointer-events-auto backdrop-blur-xl animate-in fade-in">
                         <div className="bg-[#1A1F2E] text-white p-8 rounded-[32px] w-full max-w-sm text-center shadow-2xl border border-white/10">
                             <h2 className="text-2xl font-black mb-2 text-white">Viaje Completado!</h2>
-                            <p className="text-gray-400 mb-8 text-sm">Muestra este código al pasajero</p>
+                            <p className="text-gray-400 mb-8 text-sm max-w-[200px] mx-auto leading-tight">Muestra este código al pasajero para que realice su pago movil</p>
 
                             <div className="bg-white p-4 rounded-3xl mb-8 mx-auto w-64 h-64 flex items-center justify-center border-4 border-[#8B5CF6] shadow-[0_0_20px_rgba(139,92,246,0.3)]">
                                 {profile?.payment_qr_url ? (

@@ -324,7 +324,7 @@ const RequestRidePage = () => {
                                     <button
                                         key={type}
                                         onClick={() => setSelectedRide(type)}
-                                        className={`flex-1 flex flex-col items-center p-3 rounded-xl border transition-all ${selectedRide === type ? 'bg-violet-600 border-violet-500 shadow-lg shadow-violet-600/20' : 'bg-[#0F1014] border-white/5 hover:bg-[#252A3A]'}`}
+                                        className={`flex-1 flex flex-col items-center justify-center p-3 rounded-xl border transition-all ${selectedRide === type ? 'bg-violet-600 border-violet-500 shadow-lg shadow-violet-600/20' : 'bg-[#0F1014] border-white/5 hover:bg-[#252A3A]'}`}
                                     >
                                         <span className="material-symbols-outlined text-xl mb-1">{type === 'moto' ? 'two_wheeler' : type === 'van' ? 'airport_shuttle' : 'local_taxi'}</span>
                                         <span className="text-[10px] font-bold uppercase">{type === 'van' ? 'Camioneta' : type}</span>

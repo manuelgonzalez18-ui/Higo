@@ -162,8 +162,7 @@ const ConfirmTripPage = () => {
                         </div>
                     </div>
                     <div className="text-right">
-                        <div className="w-10 h-8 mb-1 ml-auto bg-contain bg-no-repeat bg-center" style={{ backgroundImage: `url(${currentVehicle.image})` }}></div>
-                        <p className="text-[#A855F7] font-bold text-xl">${price.toFixed(2)}</p>
+                        <p className="text-[#A855F7] font-black text-3xl">${price.toFixed(2)}</p>
                     </div>
                 </div>
 
