@@ -59,13 +59,33 @@ const ChatWidget = () => {
 
         const channel = supabase
             .channel(`chat:${rideId}`)
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ride_messages', filter: `ride_id=eq.${rideId}` }, (payload) => {
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ride_messages', filter: `ride_id=eq.${rideId}` }, async (payload) => {
                 setMessages(prev => [...prev, payload.new]);
+
+                // Notify if message is NOT from me
+                if (payload.new.sender_id !== userId) {
+                    try {
+                        await LocalNotifications.schedule({
+                            notifications: [{
+                                title: "Nuevo Mensaje",
+                                body: payload.new.content,
+                                id: new Date().getTime(),
+                                schedule: { at: new Date(Date.now()) },
+                                sound: 'beep.wav',
+                                actionTypeId: "",
+                                extra: null
+                            }]
+                        });
+                        if (navigator.vibrate) navigator.vibrate(200);
+                    } catch (e) {
+                        console.error("Chat Notification Error:", e);
+                    }
+                }
             })
             .subscribe();
 
         return () => supabase.removeChannel(channel);
-    }, [rideId]);
+    }, [rideId, userId]);
 
     const handleSend = async () => {
         console.log("Attempting to send:", { inputValue, rideId, userId }); // DEBUG
