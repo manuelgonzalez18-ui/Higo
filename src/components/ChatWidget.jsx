@@ -171,9 +171,9 @@ const ChatWidget = () => {
             {/* Window */}
             {isOpen && (
                 <div className="mb-4 w-80 md:w-96 bg-white dark:bg-[#1a2c2c] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col max-h-[500px] animate-in fade-in slide-in-from-bottom-5 pointer-events-auto">
-                    <div className="p-4 bg-violet-100 dark:bg-violet-900/20 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                    <div className="p-4 bg-blue-600/10 dark:bg-blue-900/20 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                         <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-violet-600">chat</span>
+                            <span className="material-symbols-outlined text-blue-600">chat</span>
                             <h3 className="font-bold text-gray-800 dark:text-white">{chatTitle}</h3>
                         </div>
                         <button onClick={() => setIsOpen(false)} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
@@ -193,7 +193,7 @@ const ChatWidget = () => {
                             return (
                                 <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                                     <div className={`max-w-[80%] p-3 rounded-2xl ${isMe
-                                        ? 'bg-violet-600 text-white rounded-tr-none'
+                                        ? 'bg-blue-600 text-white rounded-tr-none'
                                         : 'bg-white dark:bg-[#233535] text-gray-800 dark:text-gray-200 rounded-tl-none shadow-sm'
                                         }`}>
                                         <p className="text-sm">{msg.content}</p>
@@ -207,7 +207,7 @@ const ChatWidget = () => {
                     <div className="p-3 bg-white dark:bg-[#1a2c2c] border-t border-gray-200 dark:border-gray-700 flex gap-2">
                         <input
                             type="text"
-                            className="flex-1 bg-gray-100 dark:bg-[#0f1c1c] border-none rounded-lg text-sm px-3 focus:ring-1 focus:ring-violet-500 text-gray-800 dark:text-white"
+                            className="flex-1 bg-gray-100 dark:bg-[#0f1c1c] border-none rounded-lg text-sm px-3 focus:ring-1 focus:ring-blue-600 text-gray-800 dark:text-white"
                             placeholder="Escribe un mensaje..."
                             value={inputValue}
                             onChange={(e) => setInputValue(e.target.value)}
@@ -216,7 +216,7 @@ const ChatWidget = () => {
                         <button
                             onClick={handleSend}
                             disabled={isLoading || !inputValue.trim()}
-                            className="p-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors"
+                            className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
                         >
                             <span className="material-symbols-outlined text-[20px]">send</span>
                         </button>

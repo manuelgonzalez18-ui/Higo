@@ -206,7 +206,7 @@ const RequestRidePage = () => {
     };
 
     return (
-        <div className="h-screen w-full relative bg-[#0F1014] text-white overflow-hidden font-sans">
+        <div className="h-screen w-full relative bg-[#020617] text-white overflow-hidden font-sans">
 
             {/* BACKGROUND MAP */}
             <div className="absolute inset-0 z-0">
@@ -229,7 +229,7 @@ const RequestRidePage = () => {
 
                 {/* Profile Pill */}
                 <div onClick={handleProfileClick} className="bg-[#1A1F2E]/80 backdrop-blur-md rounded-full pl-1 pr-4 py-1 flex items-center gap-2 border border-white/10 shadow-lg cursor-pointer hover:bg-[#252A3A] transition-colors max-w-[60%]">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 p-[1px] flex-shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-blue-600 p-[1px] flex-shrink-0">
                         <div className="w-full h-full rounded-full bg-black/50 overflow-hidden">
                             <img src={currentUser ? `https://ui-avatars.com/api/?name=${currentUser.email}&background=random` : "https://picsum.photos/100"} className="w-full h-full object-cover" alt="Profile" />
                         </div>
@@ -245,15 +245,15 @@ const RequestRidePage = () => {
 
                     {/* Floating Title (Optional branding) */}
                     <div className="mb-6 text-center">
-                        <h1 className="text-3xl font-black tracking-tight mb-1 bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">¿A dónde vamos?</h1>
+                        <h1 className="text-3xl font-black tracking-tight mb-1 text-white">¿A dónde vamos?</h1>
                         <p className="text-gray-400 text-sm font-medium">Viaja seguro en Higuerote</p>
                     </div>
 
                     {/* GLASS CARD FORM */}
-                    <div className="bg-[#1A1F2E] rounded-[32px] p-2 shadow-2xl border border-white/10 relative overflow-hidden">
+                    <div className="bg-[#1A1F2E] rounded-[32px] p-2 shadow-2xl border border-white/5 relative overflow-hidden">
 
                         {/* Decorative blurred glow */}
-                        <div className="absolute -top-20 -left-20 w-40 h-40 bg-violet-600/20 rounded-full blur-[50px] pointer-events-none"></div>
+                        <div className="absolute -top-20 -left-20 w-40 h-40 bg-blue-600/10 rounded-full blur-[50px] pointer-events-none"></div>
 
                         <div className="p-4 space-y-4 relative z-10">
 
@@ -263,7 +263,7 @@ const RequestRidePage = () => {
                                     placeholder="Punto de partida"
                                     defaultValue="Ubicación Actual"
                                     icon="my_location"
-                                    iconColor="text-violet-400"
+                                    iconColor="text-blue-500"
                                     showConnector={true}
                                     onChange={(name, place) => {
                                         setPickup(name);
@@ -303,7 +303,7 @@ const RequestRidePage = () => {
                                 {stops.length === 0 && (
                                     <button
                                         onClick={handleAddStop}
-                                        className="w-full py-2 flex items-center justify-center gap-2 text-sm font-medium text-violet-400 hover:text-violet-300 hover:bg-white/5 rounded-xl transition-colors border border-dashed border-violet-500/30"
+                                        className="w-full py-2 flex items-center justify-center gap-2 text-sm font-medium text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-xl transition-colors border border-dashed border-blue-500/30"
                                     >
                                         <span className="material-symbols-outlined text-[18px]">add_circle</span>
                                         <span>Agregar parada</span>
@@ -314,7 +314,7 @@ const RequestRidePage = () => {
                                     placeholder="¿A dónde vas?"
                                     defaultValue={dropoff}
                                     icon="location_on"
-                                    iconColor="text-fuchsia-500"
+                                    iconColor="text-blue-500"
                                     isLast={true}
                                     onChange={(name, place) => {
                                         setDropoff(name);
@@ -334,7 +334,7 @@ const RequestRidePage = () => {
                                     <button
                                         key={type}
                                         onClick={() => setSelectedRide(type)}
-                                        className={`flex-1 flex flex-col items-center justify-center p-3 rounded-xl border transition-all ${selectedRide === type ? 'bg-violet-600 border-violet-500 shadow-lg shadow-violet-600/20' : 'bg-[#0F1014] border-white/5 hover:bg-[#252A3A]'}`}
+                                        className={`flex-1 flex flex-col items-center justify-center p-3 rounded-xl border transition-all ${selectedRide === type ? 'bg-blue-600 border-blue-500 shadow-lg shadow-blue-500/20' : 'bg-[#0F1014] border-white/5 hover:bg-[#1E293B]'}`}
                                     >
                                         <span className="material-symbols-outlined text-xl mb-1">{type === 'moto' ? 'two_wheeler' : type === 'van' ? 'airport_shuttle' : 'local_taxi'}</span>
                                         <span className="text-[10px] font-bold uppercase">{type === 'van' ? 'Camioneta' : type}</span>
@@ -349,7 +349,7 @@ const RequestRidePage = () => {
                             {/* CTA BUTTON */}
                             <button
                                 onClick={handleRequest}
-                                className="w-full py-4 bg-gradient-to-r from-violet-600 to-[#A855F7] rounded-xl font-bold text-white text-lg shadow-lg shadow-violet-600/25 flex items-center justify-center gap-2 relative overflow-hidden group active:scale-[0.98] transition-all"
+                                className="w-full py-4 bg-blue-600 hover:bg-blue-700 rounded-xl font-bold text-white text-lg shadow-lg shadow-blue-600/25 flex items-center justify-center gap-2 relative overflow-hidden group active:scale-[0.98] transition-all"
                             >
                                 <span className="relative z-10">Pedir Higo</span>
                                 <span className="material-symbols-outlined relative z-10">arrow_forward</span>

@@ -170,7 +170,7 @@ const RideStatusPage = () => {
                 backgroundImage: 'linear-gradient(#2c2f3e 1px, transparent 1px), linear-gradient(90deg, #2c2f3e 1px, transparent 1px)',
                 backgroundSize: '40px 40px'
             }}></div>
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#0F1014]/90 pointer-events-none"></div>
+            <div className="absolute inset-0 bg-[#0F1014]/90 pointer-events-none"></div>
 
             {/* Top Bar */}
             <div className="absolute top-6 left-6 right-6 z-20 flex justify-between items-start">
@@ -182,7 +182,7 @@ const RideStatusPage = () => {
                 {ride.status !== 'completed' && (
                     <div className="bg-[#1A1E29]/90 backdrop-blur-md border border-white/10 px-6 py-3 rounded-2xl flex gap-6 shadow-xl">
                         <div className="text-center">
-                            <p className="text-[10px] text-[#A855F7] font-bold uppercase tracking-wider">EN VIAJE</p>
+                            <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider">EN VIAJE</p>
                             <p className="font-bold text-lg">12 min</p>
                         </div>
                         <div className="w-px bg-white/10"></div>
@@ -218,8 +218,8 @@ const RideStatusPage = () => {
             {/* Map placeholders (Pin, Route) - Simulated */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
                 <div className="bg-[#1A1E29] px-3 py-1 rounded-full border border-white/10 text-xs font-bold mb-2">Casa <span className="text-gray-500">10:45 PM</span></div>
-                <div className="w-4 h-4 rounded-full bg-white border-4 border-[#A855F7]"></div>
-                <div className="h-40 w-1 bg-gradient-to-b from-[#A855F7] to-transparent opacity-80 rounded-full blur-[1px]"></div>
+                <div className="w-4 h-4 rounded-full bg-white border-4 border-blue-500 shadow-lg"></div>
+                <div className="h-40 w-1 bg-blue-500 opacity-50 rounded-full"></div>
                 {/* Car Icon */}
                 <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(255,255,255,0.3)] z-10 mt-[-10px]">
                     <span className="material-symbols-outlined text-black text-2xl">local_taxi</span>
@@ -259,9 +259,9 @@ const RideStatusPage = () => {
                     <div className="mb-6">
                         <h2 className="text-xl font-bold text-white">Buscando a Higo Driver...</h2>
                         <div className="flex items-center gap-2 mt-2">
-                            <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
-                            <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                            <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
                         </div>
                     </div>
                 )}
@@ -270,7 +270,7 @@ const RideStatusPage = () => {
                 {driver && (
                     <div className="flex gap-4">
                         {driver.phone && (
-                            <button onClick={() => window.location.href = `tel:${driver.phone}`} className="flex-1 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-[#8B5CF6]/20 flex items-center justify-center gap-2 active:scale-95 transition-all">
+                            <button onClick={() => window.location.href = `tel:${driver.phone}`} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 active:scale-95 transition-all">
                                 <span className="material-symbols-outlined">call</span>
                                 Llamar al Conductor
                             </button>
@@ -333,7 +333,7 @@ const RideStatusPage = () => {
                                     <span className="material-symbols-outlined text-gray-400 group-hover:text-white transition-colors">{item.icon}</span>
                                     <span className="text-gray-300 text-lg group-hover:text-white transition-colors">{item.text}</span>
                                 </div>
-                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${selectedReason === item.text ? 'border-[#8B5CF6] bg-[#8B5CF6]' : 'border-gray-600'}`}>
+                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${selectedReason === item.text ? 'border-blue-500 bg-blue-500' : 'border-gray-600'}`}>
                                     {selectedReason === item.text && <span className="material-symbols-outlined text-white text-sm">check</span>}
                                 </div>
                                 <input
@@ -349,7 +349,7 @@ const RideStatusPage = () => {
 
                     <button
                         onClick={handleCancelRide}
-                        className={`w-full py-4 rounded-xl font-bold text-lg mt-6 transition-all ${selectedReason ? 'bg-[#8B5CF6] text-white shadow-lg shadow-[#8B5CF6]/20' : 'bg-gray-700 text-gray-400 cursor-not-allowed'}`}
+                        className={`w-full py-4 rounded-xl font-bold text-lg mt-6 transition-all ${selectedReason ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-gray-700 text-gray-400 cursor-not-allowed'}`}
                         disabled={!selectedReason}
                     >
                         Listo

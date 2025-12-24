@@ -467,7 +467,7 @@ const DriverDashboard = () => {
     if (loading) return <div className="h-screen flex items-center justify-center bg-[#0F1014] text-white">Loading Driver Profile...</div>;
 
     return (
-        <div className="h-screen w-full relative bg-[#0F1014] text-white overflow-hidden font-sans">
+        <div className="h-screen w-full relative bg-[#020617] text-white overflow-hidden font-sans">
             {/* Map */}
             <div className="absolute inset-0 z-0">
                 <InteractiveMap
@@ -484,8 +484,8 @@ const DriverDashboard = () => {
                 {/* Header / Online Status */}
                 <div className="p-4 flex justify-between items-start pointer-events-auto">
                     {!activeRide && (
-                        <div className="bg-[#1A1F2E]/90 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-3 shadow-lg">
-                            <div className={`w-3 h-3 rounded-full ${isOnline && subscriptionStatus === 'SUBSCRIBED' ? 'bg-green-500 animate-pulse shadow-[0_0_10px_#22c55e]' : isOnline ? 'bg-amber-500 animate-pulse' : 'bg-red-500'}`}></div>
+                        <div className="bg-[#0F172A]/90 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-3 shadow-lg">
+                            <div className={`w-3 h-3 rounded-full ${isOnline && subscriptionStatus === 'SUBSCRIBED' ? 'bg-green-500 animate-pulse' : isOnline ? 'bg-amber-500 animate-pulse' : 'bg-red-500'}`}></div>
                             <span className="font-bold text-sm tracking-wide">
                                 {!isOnline ? 'Desconectado' :
                                     subscriptionStatus === 'SUBSCRIBED' ? 'En línea' :
@@ -494,7 +494,7 @@ const DriverDashboard = () => {
                             </span>
                         </div>
                     )}
-                    <button onClick={handleLogout} className="w-10 h-10 bg-[#1A1F2E]/90 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 shadow-lg hover:bg-red-500/20 transition-colors ml-auto">
+                    <button onClick={handleLogout} className="w-10 h-10 bg-[#0F172A]/90 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 shadow-lg hover:bg-red-500/20 transition-colors ml-auto">
                         <span className="material-symbols-outlined text-white">logout</span>
                     </button>
                 </div>
@@ -505,7 +505,7 @@ const DriverDashboard = () => {
                     <div className="flex-1 flex flex-col justify-between p-4 pt-10 relative pointer-events-none">
 
                         {/* Top: Direction Pill */}
-                        <div className="bg-[#1A1F2E] rounded-full p-4 pl-6 pr-6 shadow-2xl border border-white/10 flex items-center justify-between mx-auto w-full max-w-sm pointer-events-auto animate-in slide-in-from-top-4">
+                        <div className="bg-[#0F172A] rounded-full p-4 pl-6 pr-6 shadow-2xl border border-white/10 flex items-center justify-between mx-auto w-full max-w-sm pointer-events-auto animate-in slide-in-from-top-4">
                             <div className="flex items-center gap-4">
                                 <div className="w-10 h-10 bg-[#252A3A] rounded-xl flex items-center justify-center">
                                     <span className="material-symbols-outlined text-white text-xl">turn_right</span>
@@ -518,7 +518,7 @@ const DriverDashboard = () => {
                         </div>
 
                         {/* Bottom: Passenger Card & Action */}
-                        <div className="bg-[#1A1F2E] rounded-[32px] p-5 shadow-2xl border border-white/5 pointer-events-auto animate-in slide-in-from-bottom-10 pointer-events-auto mt-auto">
+                        <div className="bg-[#0F172A] rounded-[32px] p-5 shadow-2xl border border-white/10 pointer-events-auto animate-in slide-in-from-bottom-10 pointer-events-auto mt-auto">
                             <div className="w-10 h-1.5 bg-gray-600/30 rounded-full mx-auto mb-5"></div>
 
                             <div className="flex items-center gap-3 mb-5">
@@ -532,8 +532,8 @@ const DriverDashboard = () => {
                                 <div className="flex-1 min-w-0 pr-2">
                                     <h2 className="font-bold text-xl text-white truncate leading-tight">Sarah M.</h2>
                                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                                        <span className="text-[10px] bg-violet-500/20 text-violet-300 px-1.5 py-0.5 rounded font-medium border border-violet-500/10">Estándar</span>
-                                        <span className="text-[10px] bg-green-500/20 text-green-300 px-1.5 py-0.5 rounded font-medium border border-green-500/10">Efectivo</span>
+                                        <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded font-medium border border-blue-500/10">Estándar</span>
+                                        <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-medium border border-emerald-500/10">Efectivo</span>
                                     </div>
                                 </div>
 
@@ -543,7 +543,7 @@ const DriverDashboard = () => {
                                     </a>
                                     <button
                                         onClick={() => window.dispatchEvent(new CustomEvent('open-chat', { detail: { rideId: activeRide.id, title: 'Chat con Pasajero' } }))}
-                                        className="w-11 h-11 bg-[#252A3A] rounded-full flex items-center justify-center border border-white/5 hover:bg-[#2C3345] hover:text-violet-400 transition-colors"
+                                        className="w-11 h-11 bg-[#252A3A] rounded-full flex items-center justify-center border border-white/5 hover:bg-[#2C3345] hover:text-blue-400 transition-colors"
                                     >
                                         <span className="material-symbols-outlined text-white text-[20px]">chat_bubble</span>
                                     </button>
@@ -567,7 +567,7 @@ const DriverDashboard = () => {
 
                             <button
                                 onClick={handleCompleteStep}
-                                className="w-full bg-[#8B5CF6] hover:bg-[#7C3AED] text-white py-4 rounded-[20px] font-bold text-lg shadow-lg shadow-[#8B5CF6]/20 flex items-center justify-center gap-2 active:scale-95 transition-all"
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-[20px] font-bold text-lg shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 active:scale-95 transition-all"
                             >
                                 <span>{navStep === 1 ? "He Llegado" : "Terminar Viaje"}</span>
                                 <span className="material-symbols-outlined">arrow_forward</span>
@@ -581,17 +581,17 @@ const DriverDashboard = () => {
                 {!activeRide && requests.length > 0 && (
                     <div className="absolute bottom-6 left-4 right-4 pointer-events-auto animate-in slide-in-from-bottom-20 fade-in duration-300">
                         {requests.map(req => (
-                            <div key={req.id} className="bg-[#1A1F2E] rounded-[32px] p-6 shadow-2xl border border-white/10 relative overflow-hidden">
+                            <div key={req.id} className="bg-[#0F172A] rounded-[32px] p-6 shadow-2xl border border-white/10 relative overflow-hidden">
                                 {/* Progress Bar */}
-                                <div className="absolute top-6 right-6 w-32 h-1.5 bg-[#252A3A] rounded-full overflow-hidden">
-                                    <div className="h-full bg-[#8B5CF6] w-2/3 shadow-[0_0_10px_#8B5CF6]"></div>
+                                <div className="absolute top-6 right-6 w-32 h-1.5 bg-[#1E293B] rounded-full overflow-hidden">
+                                    <div className="h-full bg-blue-500 w-2/3"></div>
                                 </div>
                                 <div className="absolute top-6 right-6 mt-3 text-right">
                                     <p className="text-xs text-gray-400">12s restantes</p>
                                 </div>
 
                                 <div className="flex gap-3 mb-6">
-                                    <div className="w-3 h-3 rounded-full bg-[#A855F7] mt-1.5 shadow-[0_0_8px_#A855F7]"></div>
+                                    <div className="w-3 h-3 rounded-full bg-blue-400 mt-1.5"></div>
                                     <div>
                                         <h2 className="text-xl font-bold text-white leading-none mb-1">Solicitud</h2>
                                         <h2 className="text-xl font-bold text-white leading-none">Nueva</h2>
@@ -605,7 +605,7 @@ const DriverDashboard = () => {
 
                                 <div className="space-y-6 relative pl-3 mb-8">
                                     {/* Timeline Line */}
-                                    <div className="absolute left-[5.5px] top-2 bottom-6 w-0.5 bg-gray-700 border-l border-dashed border-gray-600"></div>
+                                    <div className="absolute left-[5.5px] top-2 bottom-6 w-0.5 bg-slate-700 border-l border-dashed border-slate-600"></div>
 
                                     <div>
                                         <div className="flex items-center gap-2 mb-1">
@@ -619,9 +619,9 @@ const DriverDashboard = () => {
 
                                     <div>
                                         <div className="flex items-center gap-2 mb-1">
-                                            <div className="w-3 h-3 rounded-full bg-[#A855F7] shadow-[0_0_8px_#A855F7] z-10"></div>
-                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">DESTINO</p>
-                                            <span className="ml-auto text-xs bg-[#252A3A] px-2 py-0.5 rounded text-gray-300">15 min</span>
+                                            <div className="w-3 h-3 rounded-full bg-blue-500 z-10"></div>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">DESTINO</p>
+                                            <span className="ml-auto text-xs bg-[#1E293B] px-2 py-0.5 rounded text-slate-300">15 min</span>
                                         </div>
                                         <p className="text-white font-bold text-lg ml-5 truncate">{req.dropoff}</p>
                                         <p className="text-xs text-gray-500 ml-5">Entrada Principal</p>
@@ -630,10 +630,10 @@ const DriverDashboard = () => {
 
 
                                 <div className="flex gap-4">
-                                    <button onClick={() => setRequests(prev => prev.filter(r => r.id !== req.id))} className="w-14 h-14 rounded-full bg-[#252A3A] flex items-center justify-center border border-white/5 hover:bg-[#2C3345] transition-colors">
-                                        <span className="material-symbols-outlined text-gray-400">close</span>
+                                    <button onClick={() => setRequests(prev => prev.filter(r => r.id !== req.id))} className="w-14 h-14 rounded-full bg-[#1E293B] flex items-center justify-center border border-white/5 hover:bg-[#2C3345] transition-colors">
+                                        <span className="material-symbols-outlined text-slate-400">close</span>
                                     </button>
-                                    <button onClick={() => handleAcceptRide(req)} className="flex-1 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white rounded-[20px] font-bold text-lg shadow-lg shadow-[#8B5CF6]/30 flex items-center justify-center gap-2 active:scale-95 transition-all">
+                                    <button onClick={() => handleAcceptRide(req)} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-[20px] font-bold text-lg shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 active:scale-95 transition-all">
                                         Aceptar Viaje <span className="material-symbols-outlined">arrow_forward</span>
                                     </button>
                                 </div>
@@ -649,7 +649,7 @@ const DriverDashboard = () => {
                             onClick={toggleOnline}
                             className={`w-full py-4 rounded-[20px] font-bold text-lg shadow-2xl transition-all flex items-center justify-center gap-2 ${isOnline
                                 ? 'bg-[#EF4444] text-white shadow-red-500/20'
-                                : 'bg-[#1A1F2E] text-white border border-white/10 hover:bg-[#252A3A]'
+                                : 'bg-[#0F172A] text-white border border-white/10 hover:bg-[#1E293B] shadow-lg'
                                 }`}
                         >
                             <span className="material-symbols-outlined">{isOnline ? 'power_settings_new' : 'bolt'}</span>
@@ -665,7 +665,7 @@ const DriverDashboard = () => {
                             <h2 className="text-2xl font-black mb-2 text-white">Viaje Completado!</h2>
                             <p className="text-gray-400 mb-8 text-sm max-w-[200px] mx-auto leading-tight">Muestra este código al pasajero para que realice su pago movil</p>
 
-                            <div className="bg-white p-4 rounded-3xl mb-8 mx-auto w-64 h-64 flex items-center justify-center border-4 border-[#8B5CF6] shadow-[0_0_20px_rgba(139,92,246,0.3)]">
+                            <div className="bg-white p-4 rounded-3xl mb-8 mx-auto w-64 h-64 flex items-center justify-center border-4 border-blue-500 shadow-lg">
                                 {profile?.payment_qr_url ? (
                                     <img src={profile.payment_qr_url} alt="Payment QR" className="w-full h-full object-contain" />
                                 ) : (
@@ -676,7 +676,7 @@ const DriverDashboard = () => {
                                 )}
                             </div>
 
-                            <div className="text-3xl font-black mb-8 font-mono text-[#A855F7]">${activeRide?.price || '--'}</div>
+                            <div className="text-3xl font-black mb-8 font-mono text-white">${activeRide?.price || '--'}</div>
 
                             <button
                                 onClick={closeRide}

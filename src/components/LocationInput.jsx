@@ -60,19 +60,19 @@ const LocationInput = ({
     return (
         <div className="group relative flex items-center" ref={wrapperRef}>
             <div className="absolute left-3 top-1/2 -translate-y-1/2 flex flex-col items-center justify-center gap-1 z-10">
-                <span className={`material-symbols-outlined text-[20px] ${iconColor === 'text-violet-600' ? 'text-violet-600' : iconColor === 'text-secondary' ? 'text-gray-400' : 'text-red-500'}`}>{icon}</span>
+                <span className={`material-symbols-outlined text-[20px] ${iconColor === 'text-violet-600' ? 'text-blue-600' : iconColor === 'text-secondary' ? 'text-gray-400' : 'text-red-500'}`}>{icon}</span>
                 {showConnector && (
                     <>
-                        {!isLast && <div className="w-0.5 h-8 bg-violet-600/20 absolute -bottom-9"></div>}
-                        <div className="w-0.5 h-6 bg-violet-600/20 absolute -top-8"></div>
+                        {!isLast && <div className="w-0.5 h-8 bg-blue-600/20 absolute -bottom-9"></div>}
+                        <div className="w-0.5 h-6 bg-blue-600/20 absolute -top-8"></div>
                     </>
                 )}
                 {/* For the first item usually */}
-                {icon === 'my_location' && <div className="w-0.5 h-6 bg-violet-600/20 absolute -bottom-8"></div>}
+                {icon === 'my_location' && <div className="w-0.5 h-6 bg-blue-600/20 absolute -bottom-8"></div>}
             </div>
 
             <input
-                className="w-full pl-14 pr-10 py-3 bg-gray-50 dark:bg-[#152323] border-0 rounded-lg text-gray-800 dark:text-white placeholder:text-gray-400 focus:ring-2 focus:ring-violet-600 font-medium shadow-sm transition-all focus:outline-none"
+                className="w-full pl-14 pr-10 py-3 bg-gray-50 dark:bg-[#152323] border-0 rounded-lg text-gray-800 dark:text-white placeholder:text-gray-400 focus:ring-2 focus:ring-blue-600 font-medium shadow-sm transition-all focus:outline-none"
                 placeholder={placeholder}
                 type="text"
                 value={value}
@@ -92,7 +92,7 @@ const LocationInput = ({
             {onMapClick && !onRemove && (
                 <button
                     onClick={onMapClick}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-violet-600 transition-colors p-1"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors p-1"
                     title="Fijar en mapa"
                 >
                     <span className="material-symbols-outlined text-[20px]">map</span>
@@ -114,7 +114,7 @@ const LocationInput = ({
                             </div>
                         </button>
                     ))}
-                    <div className="bg-violet-50 px-4 py-1 text-[10px] text-gray-500 flex items-center justify-between">
+                    <div className="bg-blue-50 px-4 py-1 text-[10px] text-gray-500 flex items-center justify-between">
                         <span>Sugerencias de Google Maps</span>
                         <span className="material-symbols-outlined text-[12px]">google</span>
                     </div>

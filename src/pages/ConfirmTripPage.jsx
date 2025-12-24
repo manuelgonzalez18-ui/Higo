@@ -130,7 +130,7 @@ const ConfirmTripPage = () => {
 
                     {/* Pickup */}
                     <div className="flex items-start gap-4 z-10">
-                        <div className="mt-1 w-4 h-4 rounded-full border-2 border-[#A855F7] shadow-[0_0_10px_#A855F7]"></div>
+                        <div className="mt-1 w-4 h-4 rounded-full border-2 border-blue-500 shadow-lg"></div>
                         <div>
                             <p className="text-xs text-gray-400 font-bold tracking-wider mb-1">RECOGIDA</p>
                             <h3 className="text-lg font-bold text-white leading-tight">{pickup}</h3>
@@ -154,7 +154,7 @@ const ConfirmTripPage = () => {
                             <span className="material-symbols-outlined text-white text-2xl">{currentVehicle.icon}</span>
                         </div>
                         <div>
-                            <p className="text-[#A855F7] text-xs font-bold uppercase mb-0.5">Mejor Precio</p>
+                            <p className="text-blue-500 text-xs font-bold uppercase mb-0.5">Mejor Precio</p>
                             <h3 className="font-bold text-lg">{currentVehicle.title}</h3>
                             <p className="text-xs text-gray-400 flex items-center gap-1">
                                 <span className="material-symbols-outlined text-[10px]">person</span> {currentVehicle.seats} • 5 min lejos
@@ -162,7 +162,7 @@ const ConfirmTripPage = () => {
                         </div>
                     </div>
                     <div className="text-right">
-                        <p className="text-[#A855F7] font-black text-3xl">${price.toFixed(2)}</p>
+                        <p className="text-white font-black text-3xl">${price.toFixed(2)}</p>
                     </div>
                 </div>
 
@@ -172,7 +172,7 @@ const ConfirmTripPage = () => {
                 {/* Phone Input */}
                 <div>
                     <label className="text-xs font-bold text-gray-400 mb-2 block">Número de Teléfono <span className="text-gray-600 font-normal">(Opcional)</span></label>
-                    <div className="bg-[#1A1F2E] rounded-2xl flex items-center px-4 border border-white/5 focus-within:border-[#A855F7] transition-colors">
+                    <div className="bg-[#1A1F2E] rounded-2xl flex items-center px-4 border border-white/5 focus-within:border-blue-500 transition-colors">
                         <input
                             type="tel"
                             placeholder="Ej: 0412-0330315"
@@ -187,7 +187,7 @@ const ConfirmTripPage = () => {
                 <button
                     onClick={handleConfirm}
                     disabled={loading}
-                    className="mt-auto w-full bg-[#7C3AED] hover:bg-[#6D28D9] text-white py-4 rounded-[20px] font-bold text-lg shadow-lg shadow-[#7C3AED]/30 flex items-center justify-center gap-2 transition-all active:scale-95"
+                    className="mt-auto w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-[20px] font-bold text-lg shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-all active:scale-95"
                 >
                     {loading ? 'Confirmando...' : (
                         <>
