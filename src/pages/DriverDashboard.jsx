@@ -23,6 +23,64 @@ const DriverDashboard = () => {
     const [navStep, setNavStep] = useState(0); // 0: Idle, 1: To Pickup, 2: To Dropoff
     const [instruction, setInstruction] = useState("Waiting for rides...");
 
+    // --- NOTIFICATION SETUP ---
+    useEffect(() => {
+        const setupNotifications = async () => {
+            // 1. Create Channel
+            await LocalNotifications.createChannel({
+                id: 'higo_rides_v6',
+                name: 'New Ride Requests',
+                importance: 5,
+                visibility: 1,
+                sound: 'beep.wav',
+                vibration: true
+            });
+
+            // 2. Register Actions (THE MISSING PIECE)
+            await LocalNotifications.registerActionTypes({
+                types: [
+                    {
+                        id: 'RIDE_REQUEST_ACTIONS',
+                        actions: [
+                            {
+                                id: 'ACCEPT',
+                                title: '✅ Aceptar Viaje',
+                                foreground: true // Open app when clicked (necessary to run logic reliably)
+                            }
+                        ]
+                    }
+                ]
+            });
+
+            // 3. Request Permissions
+            const perm = await LocalNotifications.requestPermissions();
+            if (perm.display !== 'granted') console.warn('Notification permission denied');
+        };
+
+        setupNotifications();
+
+        // 4. Action Listener
+        const listener = LocalNotifications.addListener('localNotificationActionPerformed', async (notification) => {
+            console.log('🔔 Action Performed:', notification.actionId);
+            if (notification.actionId === 'ACCEPT' || notification.actionId === 'tap') {
+                const rideId = notification.notification.extra?.rideId;
+                if (rideId) {
+                    // Attempt to find the ride in current requests or fetch it
+                    // Since app opens, we can trigger the accept logic
+                    // For now, we rely on the app opening and the driver clicking, 
+                    // OR we can trigger it automatically if we are bold.
+                    // A safer bet is just bringing the app to foreground (foreground: true does this)
+                    // and maybe showing a specific toast.
+                    console.log("Opening for ride:", rideId);
+                }
+            }
+        });
+
+        return () => {
+            listener.remove();
+        };
+    }, []);
+
     useEffect(() => {
         checkUser();
         requestNotificationPermissions();
