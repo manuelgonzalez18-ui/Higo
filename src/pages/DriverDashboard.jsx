@@ -28,7 +28,7 @@ const DriverDashboard = () => {
         const setupNotifications = async () => {
             // 1. Create Channel
             await LocalNotifications.createChannel({
-                id: 'higo_rides_v7',
+                id: 'higo_rides_v8',
                 name: 'New Ride Requests (High Priority)',
                 importance: 5,
                 visibility: 1,
@@ -298,10 +298,12 @@ const DriverDashboard = () => {
                         id: new Date().getTime(),
                         schedule: { at: new Date(Date.now() + 1000) },
                         schedule: { at: new Date(Date.now() + 1000) },
-                        channelId: 'higo_rides_v7',
-                        smallIcon: 'ic_stat_icon_config_sample', // Standard system icon fallback
+                        channelId: 'higo_rides_v8',
+                        // smallIcon removed to use system default
                         actionTypeId: 'RIDE_REQUEST_ACTIONS', // Attach Action Button
-                        extra: { rideId: ride.id }
+                        extra: { rideId: ride.id },
+                        visibility: 1, // Public visibility on lock screen
+                        sound: 'beep.wav'
                     }
                 ]
             });
