@@ -10,6 +10,7 @@ const ChatWidget = () => {
     const [rideId, setRideId] = useState(null);
     const [userId, setUserId] = useState(null);
     const [chatTitle, setChatTitle] = useState("Chat");
+    const [unreadCount, setUnreadCount] = useState(0);
     const messagesEndRef = useRef(null);
 
     const scrollToBottom = () => {
@@ -20,12 +21,29 @@ const ChatWidget = () => {
         scrollToBottom();
     }, [messages, isOpen]);
 
+    // Clear unread on open
     useEffect(() => {
+        if (isOpen) {
+            setUnreadCount(0);
+        }
+    }, [isOpen]);
+
+    useEffect(() => {
+        // 1. Get Initial Session
         const fetchUser = async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) setUserId(user.id);
         };
         fetchUser();
+
+        // 2. Listen for Auth Changes (Login/Logout)
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (session?.user) {
+                setUserId(session.user.id);
+            } else {
+                setUserId(null);
+            }
+        });
 
         const handleOpenChat = (event) => {
             setIsOpen(true);
@@ -37,10 +55,15 @@ const ChatWidget = () => {
             } else {
                 setChatTitle("Chat"); // Default
             }
+            // Re-fetch user on open just in case
+            fetchUser();
         };
 
         window.addEventListener('open-chat', handleOpenChat);
-        return () => window.removeEventListener('open-chat', handleOpenChat);
+        return () => {
+            window.removeEventListener('open-chat', handleOpenChat);
+            subscription.unsubscribe();
+        };
     }, []);
 
     useEffect(() => {
@@ -65,6 +88,15 @@ const ChatWidget = () => {
 
                 // Notify if message is NOT from me
                 if (payload.new.sender_id !== userId) {
+                    if (!isOpen) {
+                        setUnreadCount(prev => prev + 1);
+                    }
+
+                    // Vibrate for internal message
+                    if (navigator.vibrate) {
+                        navigator.vibrate([200, 100, 200]);
+                    }
+
                     try {
                         await LocalNotifications.schedule({
                             notifications: [{
@@ -72,12 +104,13 @@ const ChatWidget = () => {
                                 body: payload.new.content,
                                 id: new Date().getTime(),
                                 schedule: { at: new Date(Date.now()) },
-                                sound: 'beep.wav',
+                                channelId: 'higo_rides', // Use same High Imp channel
                                 actionTypeId: "",
                                 extra: null
                             }]
                         });
-                        if (navigator.vibrate) navigator.vibrate(200);
+                        // Use default system sound by NOT specifying 'sound' or 'vibrate' manually here if channel handles it
+                        // Or specify basic vibration if needed, but let channel rule.
                     } catch (e) {
                         console.error("Chat Notification Error:", e);
                     }
@@ -86,11 +119,9 @@ const ChatWidget = () => {
             .subscribe();
 
         return () => supabase.removeChannel(channel);
-    }, [rideId, userId]);
+    }, [rideId, userId, isOpen]);
 
     const handleSend = async () => {
-        console.log("Attempting to send:", { inputValue, rideId, userId }); // DEBUG
-
         if (!inputValue.trim() || !rideId || !userId) {
             console.error("Missing data for chat:", { inputValue, rideId, userId });
             alert("Error: Faltan datos para enviar el mensaje (ID de viaje o usuario).");
@@ -112,80 +143,70 @@ const ChatWidget = () => {
             console.error('Error sending message:', error);
             alert(`Error al enviar: ${error.message}`);
             setInputValue(content); // Restore if failed
-        } else {
-            console.log("Message sent successfully");
         }
     };
 
-    if (!isOpen) {
-        return null;
-    }
+    if (!rideId) return null; // Don't render anything if no ride context (except initial listener)
 
     return (
-        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
-            <div className="mb-4 w-80 md:w-96 bg-white dark:bg-[#1a2c2c] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col max-h-[500px] animate-in fade-in slide-in-from-bottom-5">
-                <div className="p-4 bg-violet-100 dark:bg-violet-900/20 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-violet-600">chat</span>
-                        <h3 className="font-bold text-gray-800 dark:text-white">{chatTitle}</h3>
-                    </div>
-                    <button onClick={() => setIsOpen(false)} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
-                        <span className="material-symbols-outlined">close</span>
-                    </button>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-[#152323] min-h-[300px]">
-                    {messages.length === 0 && !isLoading && (
-                        <div className="text-center text-gray-400 mt-10">
-                            <p>Envía un mensaje para comenzar...</p>
+        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end pointer-events-none">
+            {/* Window */}
+            {isOpen && (
+                <div className="mb-4 w-80 md:w-96 bg-white dark:bg-[#1a2c2c] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col max-h-[500px] animate-in fade-in slide-in-from-bottom-5 pointer-events-auto">
+                    <div className="p-4 bg-violet-100 dark:bg-violet-900/20 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-violet-600">chat</span>
+                            <h3 className="font-bold text-gray-800 dark:text-white">{chatTitle}</h3>
                         </div>
-                    )}
+                        <button onClick={() => setIsOpen(false)} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
+                            <span className="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
 
-                    {messages.map((msg) => {
-                        const isMe = msg.sender_id === userId;
-                        return (
-                            <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[80%] p-3 rounded-2xl ${isMe
-                                    ? 'bg-violet-600 text-white rounded-tr-none'
-                                    : 'bg-white dark:bg-[#233535] text-gray-800 dark:text-gray-200 rounded-tl-none shadow-sm'
-                                    }`}>
-                                    <p className="text-sm">{msg.content}</p>
-                                </div>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-[#152323] min-h-[300px]">
+                        {messages.length === 0 && !isLoading && (
+                            <div className="text-center text-gray-400 mt-10">
+                                <p>Envía un mensaje para comenzar...</p>
                             </div>
-                        );
-                    })}
-                    <div ref={messagesEndRef} />
-                </div>
+                        )}
 
-                <div className="p-3 bg-white dark:bg-[#1a2c2c] border-t border-gray-200 dark:border-gray-700 flex gap-2">
-                    <input
-                        type="text"
-                        className="flex-1 bg-gray-100 dark:bg-[#0f1c1c] border-none rounded-lg text-sm px-3 focus:ring-1 focus:ring-violet-500 text-gray-800 dark:text-white"
-                        placeholder="Escribe un mensaje..."
-                        value={inputValue}
-                        onChange={(e) => setInputValue(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                    />
-                    <button
-                        onClick={handleSend}
-                        disabled={isLoading || !inputValue.trim()}
-                        className="p-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors"
-                    >
-                        <span className="material-symbols-outlined text-[20px]">send</span>
-                    </button>
-                </div>
-            </div>
+                        {messages.map((msg) => {
+                            const isMe = msg.sender_id === userId;
+                            return (
+                                <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`max-w-[80%] p-3 rounded-2xl ${isMe
+                                        ? 'bg-violet-600 text-white rounded-tr-none'
+                                        : 'bg-white dark:bg-[#233535] text-gray-800 dark:text-gray-200 rounded-tl-none shadow-sm'
+                                        }`}>
+                                        <p className="text-sm">{msg.content}</p>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        <div ref={messagesEndRef} />
+                    </div>
 
-            {/* 
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-14 h-14 bg-violet-600 hover:bg-violet-700 rounded-full shadow-lg shadow-violet-600/30 flex items-center justify-center text-white transition-transform hover:scale-105"
-            >
-                <span className="material-symbols-outlined text-3xl">
-                    {isOpen ? 'close' : 'chat_bubble'}
-                </span>
-            </button> 
-            */}
+                    <div className="p-3 bg-white dark:bg-[#1a2c2c] border-t border-gray-200 dark:border-gray-700 flex gap-2">
+                        <input
+                            type="text"
+                            className="flex-1 bg-gray-100 dark:bg-[#0f1c1c] border-none rounded-lg text-sm px-3 focus:ring-1 focus:ring-violet-500 text-gray-800 dark:text-white"
+                            placeholder="Escribe un mensaje..."
+                            value={inputValue}
+                            onChange={(e) => setInputValue(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                        />
+                        <button
+                            onClick={handleSend}
+                            disabled={isLoading || !inputValue.trim()}
+                            className="p-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors"
+                        >
+                            <span className="material-symbols-outlined text-[20px]">send</span>
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Floating Button - REMOVED as per user request */}
         </div>
     );
 };

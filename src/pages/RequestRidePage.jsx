@@ -228,18 +228,18 @@ const RequestRidePage = () => {
                 </button>
 
                 {/* Profile Pill */}
-                <div onClick={handleProfileClick} className="bg-[#1A1F2E]/80 backdrop-blur-md rounded-full pl-1 pr-4 py-1 flex items-center gap-3 border border-white/10 shadow-lg cursor-pointer hover:bg-[#252A3A] transition-colors">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 p-[1px]">
+                <div onClick={handleProfileClick} className="bg-[#1A1F2E]/80 backdrop-blur-md rounded-full pl-1 pr-4 py-1 flex items-center gap-2 border border-white/10 shadow-lg cursor-pointer hover:bg-[#252A3A] transition-colors max-w-[60%]">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 p-[1px] flex-shrink-0">
                         <div className="w-full h-full rounded-full bg-black/50 overflow-hidden">
                             <img src={currentUser ? `https://ui-avatars.com/api/?name=${currentUser.email}&background=random` : "https://picsum.photos/100"} className="w-full h-full object-cover" alt="Profile" />
                         </div>
                     </div>
-                    <span className="font-bold text-sm">{currentUser ? "Mi Perfil" : "Iniciar Sesión"}</span>
+                    <span className="font-bold text-sm truncate">{currentUser ? "Mi Perfil" : "Iniciar Sesión"}</span>
                 </div>
             </header>
 
             {/* MAIN CONTENT - Floating Bottom Panel */}
-            <main className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center pb-8 px-4 sm:px-0 pointer-events-none">
+            <main className="absolute bottom-0 left-0 right-0 z-30 flex flex-col items-center pb-8 px-4 sm:px-0 pointer-events-none">
 
                 <div className="w-full max-w-md pointer-events-auto">
 

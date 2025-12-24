@@ -39,8 +39,7 @@ const DriverDashboard = () => {
                 description: 'Notifications for new ride requests nearby',
                 importance: 5, // High
                 visibility: 1, // Public
-                vibration: true,
-                sound: 'beep.wav'
+                vibration: true
             });
         } catch (e) {
             console.error("Error requesting notifications", e);
@@ -87,6 +86,44 @@ const DriverDashboard = () => {
 
         return () => supabase.removeChannel(channel);
     }, [profile?.id]);
+
+    // Active Ride Cancellation Listener
+    useEffect(() => {
+        if (!activeRide) return;
+
+        const channel = supabase
+            .channel(`ride_cancel:${activeRide.id}`)
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rides', filter: `id=eq.${activeRide.id}` }, async (payload) => {
+                if (payload.new.status === 'cancelled') {
+                    // Notify Driver
+                    await LocalNotifications.schedule({
+                        notifications: [{
+                            title: "Viaje Cancelado",
+                            body: "El pasajero ha cancelado el viaje.",
+                            id: new Date().getTime(),
+                            schedule: { at: new Date() },
+                            importance: 5,
+                            visibility: 1,
+                            vibration: true,
+                            sound: 'alert_sound.wav' // Assuming default or mapping in Cap config
+                        }]
+                    });
+
+                    if (navigator.vibrate) navigator.vibrate([500, 500, 500, 500]); // LOOOONG vibration
+
+                    speak("El viajae ha sido cancelado por el pasajero.");
+                    alert("El pasajero ha cancelado el viaje.");
+
+                    // Reset UI
+                    setActiveRide(null);
+                    setNavStep(0);
+                    setInstruction("Waiting for rides...");
+                }
+            })
+            .subscribe();
+
+        return () => supabase.removeChannel(channel);
+    }, [activeRide]);
 
     const toggleOnline = () => {
         if (!isOnline) {
@@ -140,13 +177,22 @@ const DriverDashboard = () => {
                         id: new Date().getTime(),
                         schedule: { at: new Date(Date.now() + 1000) },
                         channelId: 'higo_rides',
-                        sound: null,
+                        sound: 'alert_sound.wav', // Ensure this file exists in android/app/src/main/res/raw for Capacitor
                         actionTypeId: "",
                         extra: null
                     }
                 ]
             });
-            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+
+            // Play Web Audio as backup/foreground
+            try {
+                const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'); // Example bell sound
+                audio.play().catch(e => console.log('Audio play failed', e));
+            } catch (e) { console.log('Audio init failed', e); }
+
+            // Stronger Vibration Pattern for Requests (matching user preference)
+            // Stronger Vibration Pattern for Requests (matching user preference)
+            if (navigator.vibrate) navigator.vibrate([1000, 500, 1000, 500, 1000]);
         } catch (e) {
             console.error("Notification Error:", e);
         }
@@ -154,19 +200,34 @@ const DriverDashboard = () => {
 
     const processRequests = useCallback((newRides, replace = false) => {
         if (!profile) return;
-        const driverVehicleType = profile.vehicle_type ? profile.vehicle_type.toLowerCase() : 'standard';
+
+        // Normalize Driver Vehicle (Handle 'Carro' from DB)
+        let driverVehicleType = profile.vehicle_type ? profile.vehicle_type.toLowerCase() : 'standard';
+        if (driverVehicleType === 'carro' || driverVehicleType === 'auto') driverVehicleType = 'standard';
 
         const checkRide = (ride) => {
-            // Type Match
-            const rideType = ride.type ? ride.type.toLowerCase() : 'standard';
+            // Fix: Use correct column 'ride_type' from DB, fallback to 'standard'
+            const rideType = ride.ride_type ? ride.ride_type.toLowerCase() : 'standard';
+
+            // Debug Log
+            console.log(`🔍 Checking Ride ${ride.id ? String(ride.id).slice(0, 4) : '???'}: Driver(${driverVehicleType}) vs Ride(${rideType})`);
+
             let isMatch = false;
             if (driverVehicleType === 'moto' && rideType === 'moto') isMatch = true;
             else if ((driverVehicleType === 'van' || driverVehicleType === 'camioneta') && rideType === 'van') isMatch = true;
-            else if ((driverVehicleType === 'standard' || driverVehicleType === 'car') && (rideType === 'standard' || rideType === 'car')) isMatch = true;
-            if (!isMatch) return false;
+            else if (driverVehicleType === 'standard' && (rideType === 'standard' || rideType === 'car')) isMatch = true;
+
+            if (!isMatch) {
+                console.log("❌ Type Mismatch");
+                return false;
+            }
 
             // Distance Match (Instant)
-            if (!ride.pickup_lat) return true;
+            // Fix: Check for pickup_lat (new schema) OR legacy pickup_location if needed, but assuming lat/lng exists for smart assignment
+            if (!ride.pickup_lat) {
+                console.log("⚠️ No pickup coords, allowing (Legacy/Manual)");
+                return true;
+            }
 
             if (lastLocationRef.current) {
                 const dist = getDistanceFromLatLonInKm(
@@ -175,9 +236,11 @@ const DriverDashboard = () => {
                     ride.pickup_lat,
                     ride.pickup_lng
                 );
+                console.log(`📏 Distance: ${dist.toFixed(2)}km (Limit: 10km)`);
                 return dist < 10;
             } else {
-                return true; // Fail-safe
+                console.log("⚠️ Driver location unknown, showing ride as fail-safe");
+                return true;
             }
         };
 

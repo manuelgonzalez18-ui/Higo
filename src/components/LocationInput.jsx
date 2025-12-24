@@ -72,7 +72,7 @@ const LocationInput = ({
             </div>
 
             <input
-                className="w-full pl-12 pr-10 py-3 bg-gray-50 dark:bg-[#152323] border-0 rounded-lg text-gray-800 dark:text-white placeholder:text-gray-400 focus:ring-2 focus:ring-violet-600 font-medium shadow-sm transition-all focus:outline-none"
+                className="w-full pl-14 pr-10 py-3 bg-gray-50 dark:bg-[#152323] border-0 rounded-lg text-gray-800 dark:text-white placeholder:text-gray-400 focus:ring-2 focus:ring-violet-600 font-medium shadow-sm transition-all focus:outline-none"
                 placeholder={placeholder}
                 type="text"
                 value={value}

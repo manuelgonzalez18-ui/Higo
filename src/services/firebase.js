@@ -21,6 +21,20 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
+// Inicializar Messaging (Solo si el navegador lo soporta)
+let messaging;
+try {
+    // Verificamos si window está definido (entorno del navegador) y si 'serviceWorker' está en navigator
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+        const { getMessaging } = require("firebase/messaging"); // Dynamic import to avoid SSR/build issues if any
+        messaging = getMessaging(app);
+    }
+} catch (error) {
+    console.log("Firebase Messaging not supported/enabled in this environment", error);
+}
+
+export { messaging };
+
 // Helper para App ID seguro
 export const getAppId = () => {
     const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'higo-v1';
