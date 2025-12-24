@@ -33,14 +33,15 @@ const DriverDashboard = () => {
             await LocalNotifications.requestPermissions();
 
             // Create Channel (Required for Android 8+)
+            // Update to v3 to force new sound config
             await LocalNotifications.createChannel({
-                id: 'higo_rides',
-                name: 'New Ride Requests',
-                description: 'Notifications for new ride requests nearby',
-                importance: 5, // High
-                visibility: 1, // Public
-                vibration: true,
-                sound: 'alert_sound.ogg' // Must match filename in res/raw for createChannel sometimes, or just 'alert_sound'
+                id: 'higo_rides_v6', // V6: System Default
+                name: 'Higo Driver Alerts V6',
+                description: 'Critical alerts for drivers',
+                importance: 5,
+                visibility: 1,
+                vibration: true
+                // sound property removed to use system default
             });
         } catch (e) {
             console.error("Error requesting notifications", e);
@@ -108,25 +109,31 @@ const DriverDashboard = () => {
 
         const channel = supabase
             .channel(`ride_cancel:${activeRide.id}`)
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rides', filter: `id=eq.${activeRide.id}` }, async (payload) => {
-                if (payload.new.status === 'cancelled') {
-                    // Notify Driver
-                    await LocalNotifications.schedule({
+            // Removing strict filter to debug, will filter inside
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rides' }, async (payload) => {
+                console.log("🔔 REALTIME UPDATE RECEIVED:", payload);
+                // Use loose equality for safety
+                if (payload.new.id == activeRide.id && payload.new.status === 'cancelled') {
+                    console.log("🚫 CANCEL DETECTED! Triggering alert...");
+
+                    // 1. IMMEDIATE PHYSICAL FEEDBACK
+                    if (navigator.vibrate) navigator.vibrate([1000, 500, 1000]);
+                    speak("El viaje ha sido cancelado por el pasajero.");
+
+                    // 2. Schedule Notification (Async, don't await blocking)
+                    LocalNotifications.schedule({
                         notifications: [{
                             title: "Viaje Cancelado",
                             body: "El pasajero ha cancelado el viaje.",
                             id: new Date().getTime(),
                             schedule: { at: new Date() },
-                            channelId: 'higo_rides', // Use the channel we created
-                            sound: 'alert_sound.ogg',
+                            channelId: 'higo_rides_v6', // Updated channel
+                            // sound removed
                             actionTypeId: "",
                             extra: null
                         }]
-                    });
+                    }).catch(e => console.error("Cancel Notification Fail:", e));
 
-                    if (navigator.vibrate) navigator.vibrate([500, 500, 500, 500]);
-
-                    speak("El viaje ha sido cancelado por el pasajero.");
                     alert("El pasajero ha cancelado el viaje. Volviendo al mapa...");
 
                     // Force a reload to clear state cleanly and re-fetch
@@ -136,6 +143,43 @@ const DriverDashboard = () => {
             .subscribe();
 
         return () => supabase.removeChannel(channel);
+    }, [activeRide]);
+
+    // Polling Logic for Cancellation (Backup to Realtime)
+    useEffect(() => {
+        if (!activeRide) return;
+        const interval = setInterval(async () => {
+            const { data, error } = await supabase
+                .from('rides')
+                .select('status')
+                .eq('id', activeRide.id)
+                .single();
+
+            if (data && data.status === 'cancelled') {
+                console.log("🚫 POLLING: CANCELLATION DETECTED");
+
+                // 1. Feedback
+                if (navigator.vibrate) navigator.vibrate([1000, 1000]);
+                alert("El viaje ha sido cancelado (Sincronizado).");
+
+                // 2. Reset immediately
+                window.location.reload();
+
+                // 3. Try Notification (Low Priority)
+                LocalNotifications.schedule({
+                    notifications: [{
+                        title: "Viaje Cancelado",
+                        body: "Detectado por sincronización.",
+                        id: new Date().getTime(),
+                        schedule: { at: new Date() },
+                        channelId: 'higo_rides_v6',
+                        // sound removed
+                        extra: null
+                    }]
+                }).catch(e => console.log("Poll notify fail", e));
+            }
+        }, 5000); // Check every 5 seconds
+        return () => clearInterval(interval);
     }, [activeRide]);
 
     const toggleOnline = () => {
@@ -181,6 +225,19 @@ const DriverDashboard = () => {
     // --- HOISTED LOGIC FOR PROCESSING REQUESTS ---
 
     const notifyNewRequest = useCallback(async (ride) => {
+        console.log("🚨 ATTEMPTING TO NOTIFY NEW REQUEST", ride);
+
+        // 1. IMMEDIATE FEEDBACK (Priority)
+        if (navigator.vibrate) navigator.vibrate([1000, 500, 1000, 500, 1000]);
+        speak("Nueva solicitud de viaje");
+
+        // 2. Web Audio Backup (Standard Beep)
+        try {
+            const audio = new Audio('https://www.soundjay.com/buttons/beep-01a.mp3');
+            audio.play().catch(e => console.log('Web Audio play failed', e));
+        } catch (e) { console.log('Audio init failed', e); }
+
+        // 3. Native Notification (Async)
         try {
             await LocalNotifications.schedule({
                 notifications: [
@@ -189,23 +246,13 @@ const DriverDashboard = () => {
                         body: `Trip to ${ride.dropoff} - $${ride.price}`,
                         id: new Date().getTime(),
                         schedule: { at: new Date(Date.now() + 1000) },
-                        channelId: 'higo_rides',
-                        sound: 'alert_sound.ogg', // Updated to .ogg
+                        channelId: 'higo_rides_v6',
+                        // sound removed
                         actionTypeId: "",
                         extra: null
                     }
                 ]
             });
-
-            // Play Web Audio as backup/foreground
-            try {
-                const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'); // Example bell sound
-                audio.play().catch(e => console.log('Audio play failed', e));
-            } catch (e) { console.log('Audio init failed', e); }
-
-            // Stronger Vibration Pattern for Requests (matching user preference)
-            // Stronger Vibration Pattern for Requests (matching user preference)
-            if (navigator.vibrate) navigator.vibrate([1000, 500, 1000, 500, 1000]);
         } catch (e) {
             console.error("Notification Error:", e);
         }

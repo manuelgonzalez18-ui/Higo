@@ -84,6 +84,7 @@ const ChatWidget = () => {
         const channel = supabase
             .channel(`chat:${rideId}`)
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ride_messages', filter: `ride_id=eq.${rideId}` }, async (payload) => {
+                console.log("💬 CHAT MESSAGE RECEIVED:", payload);
                 setMessages(prev => [...prev, payload.new]);
 
                 // Notify if message is NOT from me
@@ -97,6 +98,12 @@ const ChatWidget = () => {
                         navigator.vibrate([200, 100, 200]);
                     }
 
+                    // Web Audio Backup for Chat (Standard Beep)
+                    try {
+                        const audio = new Audio('https://www.soundjay.com/buttons/beep-01a.mp3');
+                        audio.play().catch(e => console.log('Chat Audio play failed', e));
+                    } catch (e) { console.log('Chat Audio init failed', e); }
+
                     try {
                         await LocalNotifications.schedule({
                             notifications: [{
@@ -104,8 +111,8 @@ const ChatWidget = () => {
                                 body: payload.new.content,
                                 id: new Date().getTime(),
                                 schedule: { at: new Date(Date.now()) },
-                                channelId: 'higo_rides',
-                                sound: 'alert_sound.ogg', // Explicitly set sound
+                                channelId: 'higo_rides_v6',
+                                // sound removed
                                 actionTypeId: "",
                                 extra: null
                             }]
@@ -128,13 +135,13 @@ const ChatWidget = () => {
             await LocalNotifications.requestPermissions();
             // Ensure channel exists (idempotent)
             await LocalNotifications.createChannel({
-                id: 'higo_rides',
-                name: 'Higo Chat',
+                id: 'higo_rides_v6',
+                name: 'Higo Chat V6',
                 description: 'Chat and Ride Notifications',
                 importance: 5,
                 visibility: 1,
-                vibration: true,
-                sound: 'alert_sound.ogg'
+                vibration: true
+                // sound removed
             });
         };
         setupNotifications();
