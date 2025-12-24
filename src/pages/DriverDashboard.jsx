@@ -24,8 +24,13 @@ const DriverDashboard = () => {
     const [instruction, setInstruction] = useState("Waiting for rides...");
 
     // --- NOTIFICATION SETUP ---
+    const notificationSetupDone = React.useRef(false);
+
     useEffect(() => {
         const setupNotifications = async () => {
+            if (notificationSetupDone.current) return;
+            notificationSetupDone.current = true; // Mark as done
+
             // 0. Request Permissions FIRST
             const perm = await LocalNotifications.requestPermissions();
             if (perm.display !== 'granted') console.warn('Notification permission denied');
