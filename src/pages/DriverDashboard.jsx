@@ -39,7 +39,8 @@ const DriverDashboard = () => {
                 description: 'Notifications for new ride requests nearby',
                 importance: 5, // High
                 visibility: 1, // Public
-                vibration: true
+                vibration: true,
+                sound: 'alert_sound'
             });
         } catch (e) {
             console.error("Error requesting notifications", e);
@@ -64,6 +65,20 @@ const DriverDashboard = () => {
         }
 
         setProfile(userProfile);
+
+        // Restore Active Ride
+        const { data: activeRides } = await supabase
+            .from('rides')
+            .select('*')
+            .eq('driver_id', userProfile.id)
+            .in('status', ['accepted', 'in_progress'])
+            .maybeSingle();
+
+        if (activeRides) {
+            setActiveRide(activeRides);
+            setNavStep(activeRides.status === 'accepted' ? 1 : 2);
+        }
+
         setLoading(false);
     };
 
@@ -105,7 +120,7 @@ const DriverDashboard = () => {
                             importance: 5,
                             visibility: 1,
                             vibration: true,
-                            sound: 'alert_sound.wav' // Assuming default or mapping in Cap config
+                            sound: 'alert_sound' // No extension for Android res/raw
                         }]
                     });
 

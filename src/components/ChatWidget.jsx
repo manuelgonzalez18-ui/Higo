@@ -121,6 +121,24 @@ const ChatWidget = () => {
         return () => supabase.removeChannel(channel);
     }, [rideId, userId, isOpen]);
 
+    // Request Permissions on mount
+    useEffect(() => {
+        const setupNotifications = async () => {
+            await LocalNotifications.requestPermissions();
+            // Ensure channel exists (idempotent)
+            await LocalNotifications.createChannel({
+                id: 'higo_rides',
+                name: 'Higo Chat',
+                description: 'Chat and Ride Notifications',
+                importance: 5,
+                visibility: 1,
+                vibration: true,
+                sound: 'alert_sound'
+            });
+        };
+        setupNotifications();
+    }, []);
+
     const handleSend = async () => {
         if (!inputValue.trim() || !rideId || !userId) {
             console.error("Missing data for chat:", { inputValue, rideId, userId });
