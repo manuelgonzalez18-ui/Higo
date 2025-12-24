@@ -26,9 +26,13 @@ const DriverDashboard = () => {
     // --- NOTIFICATION SETUP ---
     useEffect(() => {
         const setupNotifications = async () => {
-            // 1. Create Channel
+            // 0. Request Permissions FIRST
+            const perm = await LocalNotifications.requestPermissions();
+            if (perm.display !== 'granted') console.warn('Notification permission denied');
+
+            // 1. Create Channel (v10 - Force Fresh Config)
             await LocalNotifications.createChannel({
-                id: 'higo_rides_v9',
+                id: 'higo_rides_v10',
                 name: 'New Ride Requests (High Priority)',
                 importance: 5,
                 visibility: 1,
@@ -36,7 +40,7 @@ const DriverDashboard = () => {
                 vibration: true
             });
 
-            // 2. Register Actions (THE MISSING PIECE)
+            // 2. Register Actions
             await LocalNotifications.registerActionTypes({
                 types: [
                     {
@@ -45,16 +49,12 @@ const DriverDashboard = () => {
                             {
                                 id: 'ACCEPT',
                                 title: '✅ Aceptar Viaje',
-                                foreground: true // Open app when clicked (necessary to run logic reliably)
+                                foreground: true // Open app when clicked
                             }
                         ]
                     }
                 ]
             });
-
-            // 3. Request Permissions
-            const perm = await LocalNotifications.requestPermissions();
-            if (perm.display !== 'granted') console.warn('Notification permission denied');
         };
 
         setupNotifications();
@@ -296,12 +296,13 @@ const DriverDashboard = () => {
                         title: "🚗 New Ride Request!",
                         body: `$${ride.price} - ${ride.dropoff}${distText}`,
                         id: new Date().getTime(),
-                        schedule: { at: new Date(Date.now() + 1000) },
-                        channelId: 'higo_rides_v9',
+                        schedule: { at: new Date(Date.now() + 50) }, // Almost immediate
+                        channelId: 'higo_rides_v10',
                         // smallIcon removed to use system default
                         actionTypeId: 'RIDE_REQUEST_ACTIONS', // Attach Action Button
                         extra: { rideId: ride.id },
                         visibility: 1, // Public visibility on lock screen
+                        priority: 2, // High Priority (Legacy Android)
                         sound: 'alert_sound.wav'
                     }
                 ]
