@@ -213,7 +213,7 @@ const DriverDashboard = () => {
                         body: "Detectado por sincronización.",
                         id: new Date().getTime(),
                         schedule: { at: new Date() },
-                        channelId: 'higo_rides_v6',
+                        channelId: 'higo_rides_v8',
                         // sound removed
                         extra: null
                     }]
@@ -297,7 +297,7 @@ const DriverDashboard = () => {
                         body: `$${ride.price} - ${ride.dropoff}${distText}`,
                         id: new Date().getTime(),
                         schedule: { at: new Date(Date.now() + 1000) },
-                        schedule: { at: new Date(Date.now() + 1000) },
+
                         channelId: 'higo_rides_v8',
                         // smallIcon removed to use system default
                         actionTypeId: 'RIDE_REQUEST_ACTIONS', // Attach Action Button
