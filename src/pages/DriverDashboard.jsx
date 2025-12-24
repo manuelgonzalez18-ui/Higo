@@ -542,11 +542,11 @@ const DriverDashboard = () => {
     };
 
     const closeRide = () => {
-        setShowPaymentQR(false);
+        setShowPaymentQR(false); // Close UI immediately
         setActiveRide(null);
         setNavStep(0);
         setRequests([]);
-        speak("Ready for next ride.");
+        // speak("Ready for next ride."); // Removed to fix delay
     };
 
     const handleLogout = async () => {
