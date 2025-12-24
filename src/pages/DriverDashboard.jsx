@@ -28,11 +28,11 @@ const DriverDashboard = () => {
         const setupNotifications = async () => {
             // 1. Create Channel
             await LocalNotifications.createChannel({
-                id: 'higo_rides_v8',
+                id: 'higo_rides_v9',
                 name: 'New Ride Requests (High Priority)',
                 importance: 5,
                 visibility: 1,
-                sound: 'beep.wav',
+                sound: 'alert_sound.wav',
                 vibration: true
             });
 
@@ -297,13 +297,12 @@ const DriverDashboard = () => {
                         body: `$${ride.price} - ${ride.dropoff}${distText}`,
                         id: new Date().getTime(),
                         schedule: { at: new Date(Date.now() + 1000) },
-
-                        channelId: 'higo_rides_v8',
+                        channelId: 'higo_rides_v9',
                         // smallIcon removed to use system default
                         actionTypeId: 'RIDE_REQUEST_ACTIONS', // Attach Action Button
                         extra: { rideId: ride.id },
                         visibility: 1, // Public visibility on lock screen
-                        sound: 'beep.wav'
+                        sound: 'alert_sound.wav'
                     }
                 ]
             });
@@ -547,11 +546,13 @@ const DriverDashboard = () => {
     };
 
     const closeRide = () => {
-        setShowPaymentQR(false); // Close UI immediately
-        setActiveRide(null);
-        setNavStep(0);
-        setRequests([]);
-        // speak("Ready for next ride."); // Removed to fix delay
+        setShowPaymentQR(false); // 1. Close UI immediately
+        // 2. Defer heavy cleanup to allow animation to finish
+        setTimeout(() => {
+            setActiveRide(null);
+            setNavStep(0);
+            setRequests([]);
+        }, 150);
     };
 
     const handleLogout = async () => {
