@@ -65,96 +65,29 @@ const DriverDashboard = () => {
             if (notification.actionId === 'ACCEPT' || notification.actionId === 'tap') {
                 const rideId = notification.notification.extra?.rideId;
                 if (rideId) {
-                    // Attempt to find the ride in current requests or fetch it
-                    // Since app opens, we can trigger the accept logic
-                    // For now, we rely on the app opening and the driver clicking, 
-                    // OR we can trigger it automatically if we are bold.
-                    // A safer bet is just bringing the app to foreground (foreground: true does this)
-                    // and maybe showing a specific toast.
-                    console.log("Opening for ride:", rideId);
+                    try {
+                        const { data: { user } } = await supabase.auth.getUser();
+                        if (user) {
+                            await supabase.from('rides')
+                                .update({ status: 'accepted', driver_id: user.id })
+                                .eq('id', rideId)
+                                .eq('status', 'requested');
+                            window.location.reload();
+                        }
+                    } catch (e) { console.error("Accept Error:", e); }
                 }
             }
         });
+
+        // Initialize User Check
+        checkUser();
 
         return () => {
             listener.remove();
         };
     }, []);
 
-    useEffect(() => {
-        checkUser();
-        requestNotificationPermissions();
-    }, []);
-
-    // NEW: Listen for "Accept" Action from Notification
-    useEffect(() => {
-        const listener = LocalNotifications.addListener('localNotificationActionPerformed', async (action) => {
-            console.log("🔔 Action Performed:", action);
-            if (action.actionId === 'ACCEPT') {
-                const rideId = action.notification.extra?.rideId;
-                if (!rideId) return;
-
-                // Optimistic Alert
-                // alert("Procesando aceptación..."); 
-
-                try {
-                    const { data: { user } } = await supabase.auth.getUser();
-                    if (!user) return;
-
-                    // Attempt to accept directly via DB
-                    const { error } = await supabase
-                        .from('rides')
-                        .update({ status: 'accepted', driver_id: user.id })
-                        .eq('id', rideId)
-                        .eq('status', 'requested'); // Safety check
-
-                    if (!error) {
-                        // Reload to ensure state sync
-                        window.location.reload();
-                    } else {
-                        console.error("Accept Error:", error);
-                    }
-                } catch (e) {
-                    console.error("Action Handler Error:", e);
-                }
-            }
-        });
-
-        return () => {
-            listener.then(l => l.remove());
-        };
-    }, []);
-
-    const requestNotificationPermissions = async () => {
-        try {
-            await LocalNotifications.requestPermissions();
-
-            // Register Action Types (ACCEPT Button)
-            await LocalNotifications.registerActionTypes({
-                types: [{
-                    id: 'RIDE_REQUEST_ACTIONS',
-                    actions: [{
-                        id: 'ACCEPT',
-                        title: 'ACEPTAR VIAJE',
-                        foreground: true
-                    }]
-                }]
-            });
-
-            // Create Channel (Required for Android 8+)
-            // Update to v6 - System Default Sound
-            await LocalNotifications.createChannel({
-                id: 'higo_rides_v6',
-                name: 'Higo Driver Alerts V6',
-                description: 'Critical alerts for drivers',
-                importance: 5,
-                visibility: 1,
-                vibration: true
-            });
-        } catch (e) {
-            console.error("Error requesting notifications", e);
-        }
-    };
+    // Old duplicate effects removed
 
     const checkUser = async () => {
         const userProfile = await getUserProfile();
@@ -347,11 +280,21 @@ const DriverDashboard = () => {
 
         // 3. Native Notification (Async)
         try {
+            // Calculate Distance dynamically for notification
+            let distText = "";
+            if (lastLocationRef.current && ride.pickup_lat) {
+                const dist = getDistanceFromLatLonInKm(
+                    lastLocationRef.current.latitude, lastLocationRef.current.longitude,
+                    ride.pickup_lat, ride.pickup_lng
+                );
+                distText = ` | ${dist.toFixed(1)} km`;
+            }
+
             await LocalNotifications.schedule({
                 notifications: [
                     {
                         title: "🚗 New Ride Request!",
-                        body: `Trip to ${ride.dropoff} - $${ride.price}`,
+                        body: `$${ride.price} - ${ride.dropoff}${distText}`,
                         id: new Date().getTime(),
                         schedule: { at: new Date(Date.now() + 1000) },
                         channelId: 'higo_rides_v6',
