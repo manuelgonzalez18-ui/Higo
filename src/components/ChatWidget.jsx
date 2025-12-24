@@ -148,9 +148,19 @@ const ChatWidget = () => {
     }, []);
 
     const handleSend = async () => {
-        if (!inputValue.trim() || !rideId || !userId) {
-            console.error("Missing data for chat:", { inputValue, rideId, userId });
-            alert("Error: Faltan datos para enviar el mensaje (ID de viaje o usuario).");
+        // Retry fetching user if missing
+        let currentUserId = userId;
+        if (!currentUserId) {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                setUserId(user.id);
+                currentUserId = user.id;
+            }
+        }
+
+        if (!inputValue.trim() || !rideId || !currentUserId) {
+            console.error("Missing data for chat:", { inputValue, rideId, userId: currentUserId });
+            alert("Error: Faltan datos para enviar el mensaje (ID de viaje o usuario). Intenta recargar.");
             return;
         }
 
