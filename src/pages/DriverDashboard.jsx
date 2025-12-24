@@ -40,7 +40,7 @@ const DriverDashboard = () => {
                 importance: 5, // High
                 visibility: 1, // Public
                 vibration: true,
-                sound: 'alert_sound'
+                sound: 'alert_sound.ogg' // Must match filename in res/raw for createChannel sometimes, or just 'alert_sound'
             });
         } catch (e) {
             console.error("Error requesting notifications", e);
@@ -117,22 +117,20 @@ const DriverDashboard = () => {
                             body: "El pasajero ha cancelado el viaje.",
                             id: new Date().getTime(),
                             schedule: { at: new Date() },
-                            importance: 5,
-                            visibility: 1,
-                            vibration: true,
-                            sound: 'alert_sound' // No extension for Android res/raw
+                            channelId: 'higo_rides', // Use the channel we created
+                            sound: 'alert_sound.ogg',
+                            actionTypeId: "",
+                            extra: null
                         }]
                     });
 
-                    if (navigator.vibrate) navigator.vibrate([500, 500, 500, 500]); // LOOOONG vibration
+                    if (navigator.vibrate) navigator.vibrate([500, 500, 500, 500]);
 
-                    speak("El viajae ha sido cancelado por el pasajero.");
-                    alert("El pasajero ha cancelado el viaje.");
+                    speak("El viaje ha sido cancelado por el pasajero.");
+                    alert("El pasajero ha cancelado el viaje. Volviendo al mapa...");
 
-                    // Reset UI
-                    setActiveRide(null);
-                    setNavStep(0);
-                    setInstruction("Waiting for rides...");
+                    // Force a reload to clear state cleanly and re-fetch
+                    window.location.reload();
                 }
             })
             .subscribe();
@@ -192,7 +190,7 @@ const DriverDashboard = () => {
                         id: new Date().getTime(),
                         schedule: { at: new Date(Date.now() + 1000) },
                         channelId: 'higo_rides',
-                        sound: 'alert_sound.wav', // Ensure this file exists in android/app/src/main/res/raw for Capacitor
+                        sound: 'alert_sound.ogg', // Updated to .ogg
                         actionTypeId: "",
                         extra: null
                     }

@@ -104,7 +104,8 @@ const ChatWidget = () => {
                                 body: payload.new.content,
                                 id: new Date().getTime(),
                                 schedule: { at: new Date(Date.now()) },
-                                channelId: 'higo_rides', // Use same High Imp channel
+                                channelId: 'higo_rides',
+                                sound: 'alert_sound.ogg', // Explicitly set sound
                                 actionTypeId: "",
                                 extra: null
                             }]
@@ -133,7 +134,7 @@ const ChatWidget = () => {
                 importance: 5,
                 visibility: 1,
                 vibration: true,
-                sound: 'alert_sound'
+                sound: 'alert_sound.ogg'
             });
         };
         setupNotifications();
