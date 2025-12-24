@@ -28,20 +28,70 @@ const DriverDashboard = () => {
         requestNotificationPermissions();
     }, []);
 
+    // NEW: Listen for "Accept" Action from Notification
+    useEffect(() => {
+        const listener = LocalNotifications.addListener('localNotificationActionPerformed', async (action) => {
+            console.log("🔔 Action Performed:", action);
+            if (action.actionId === 'ACCEPT') {
+                const rideId = action.notification.extra?.rideId;
+                if (!rideId) return;
+
+                // Optimistic Alert
+                // alert("Procesando aceptación..."); 
+
+                try {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (!user) return;
+
+                    // Attempt to accept directly via DB
+                    const { error } = await supabase
+                        .from('rides')
+                        .update({ status: 'accepted', driver_id: user.id })
+                        .eq('id', rideId)
+                        .eq('status', 'requested'); // Safety check
+
+                    if (!error) {
+                        // Reload to ensure state sync
+                        window.location.reload();
+                    } else {
+                        console.error("Accept Error:", error);
+                    }
+                } catch (e) {
+                    console.error("Action Handler Error:", e);
+                }
+            }
+        });
+
+        return () => {
+            listener.then(l => l.remove());
+        };
+    }, []);
+
     const requestNotificationPermissions = async () => {
         try {
             await LocalNotifications.requestPermissions();
 
+            // Register Action Types (ACCEPT Button)
+            await LocalNotifications.registerActionTypes({
+                types: [{
+                    id: 'RIDE_REQUEST_ACTIONS',
+                    actions: [{
+                        id: 'ACCEPT',
+                        title: 'ACEPTAR VIAJE',
+                        foreground: true
+                    }]
+                }]
+            });
+
             // Create Channel (Required for Android 8+)
-            // Update to v3 to force new sound config
+            // Update to v6 - System Default Sound
             await LocalNotifications.createChannel({
-                id: 'higo_rides_v6', // V6: System Default
+                id: 'higo_rides_v6',
                 name: 'Higo Driver Alerts V6',
                 description: 'Critical alerts for drivers',
                 importance: 5,
                 visibility: 1,
                 vibration: true
-                // sound property removed to use system default
             });
         } catch (e) {
             console.error("Error requesting notifications", e);
@@ -247,9 +297,8 @@ const DriverDashboard = () => {
                         id: new Date().getTime(),
                         schedule: { at: new Date(Date.now() + 1000) },
                         channelId: 'higo_rides_v6',
-                        // sound removed
-                        actionTypeId: "",
-                        extra: null
+                        actionTypeId: 'RIDE_REQUEST_ACTIONS', // Attach Action Button
+                        extra: { rideId: ride.id }
                     }
                 ]
             });
