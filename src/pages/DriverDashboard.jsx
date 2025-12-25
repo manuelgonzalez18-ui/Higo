@@ -280,6 +280,7 @@ const DriverDashboard = () => {
         // 2. Web Audio Backup (Standard Beep)
         try {
             const audio = new Audio('https://www.soundjay.com/buttons/beep-01a.mp3');
+            audio.volume = 1.0;
             audio.play().catch(e => console.log('Web Audio play failed', e));
         } catch (e) { console.log('Audio init failed', e); }
 

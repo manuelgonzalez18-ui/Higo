@@ -111,8 +111,8 @@ const ChatWidget = () => {
                                 body: payload.new.content,
                                 id: new Date().getTime(),
                                 schedule: { at: new Date(Date.now()) },
-                                channelId: 'higo_rides_v6',
-                                // sound removed
+                                channelId: 'higo_messages_v1',
+                                sound: 'alert_sound.wav',
                                 actionTypeId: "",
                                 extra: null
                             }]
@@ -135,13 +135,13 @@ const ChatWidget = () => {
             await LocalNotifications.requestPermissions();
             // Ensure channel exists (idempotent)
             await LocalNotifications.createChannel({
-                id: 'higo_rides_v6',
-                name: 'Higo Chat V6',
-                description: 'Chat and Ride Notifications',
+                id: 'higo_messages_v1',
+                name: 'Higo Chat Messages',
+                description: 'Notifications for new messages',
                 importance: 5,
                 visibility: 1,
-                vibration: true
-                // sound removed
+                vibration: true,
+                sound: 'alert_sound.wav'
             });
         };
         setupNotifications();

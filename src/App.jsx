@@ -13,9 +13,12 @@ import AuthPage from './pages/AuthPage';
 
 import { messaging } from './services/firebase';
 import { getToken, onMessage } from 'firebase/messaging';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import DriverRequestCard from './components/DriverRequestCard';
 
 const App = () => {
+  const [incomingRequest, setIncomingRequest] = useState(null);
+
   useEffect(() => {
     const setupMessaging = async () => {
       if (!messaging) return;
@@ -29,15 +32,7 @@ const App = () => {
           // Get Token
           const token = await getToken(messaging, {
             vapidKey: 'BMQJ_...YOUR_VAPID_KEY_IF_NEEDED_OR_USE_DEFAULT_FROM_CONFIG...'
-            // Note: If using default credentials in sw, purely getToken() might work if vapid key is not required strictly or handled by config
-            // But usually vapidKey is needed for web push. 
-            // Let's use the one from the user config if available or skip argument to see if it grabs from default
           });
-          // Using a VAPID key is standard for Web Push. 
-          // Since I don't have the user's VAPID key handy in the snippets (only API key), 
-          // I will try to get token without it or log it. 
-          // Actually, I should probably check if they have one. 
-          // For now, I'll logging the token.
           console.log('FCM Token:', token);
         } else {
           console.log('Unable to get permission to notify.');
@@ -53,18 +48,49 @@ const App = () => {
     if (messaging) {
       onMessage(messaging, (payload) => {
         console.log('Message received. ', payload);
-        // Customize notification here
-        // Note: Foreground messages don't pop up system notification automatically
-        // We show a toast or alert
+
+        // Check if the message is a ride request
+        // This logic assumes the payload contains specific data fields
+        // Adapt as needed based on your backend payload structure
         const { title, body } = payload.notification || {};
-        if (title && navigator.vibrate) {
-          navigator.vibrate([200, 100, 200]);
+        const data = payload.data || {};
+
+        if (data.type === 'ride_request' || title?.includes('Nuevo Viaje') || title?.includes('Request')) {
+          setIncomingRequest({
+            price: data.price || '1.5',
+            distance: data.distance || '1.9 km',
+            duration: data.duration || '15 min',
+            pickupLocation: data.pickupLocation || 'Ubicación Actual',
+            pickupAddress: data.pickupAddress || 'Downtown District',
+            dropoffLocation: data.dropoffLocation || 'Centro Comercial Flamingo',
+            dropoffAddress: data.dropoffAddress || 'Entrada Principal',
+            ...data
+          });
+
+          // Vibrate pattern for urgency
+          if (navigator.vibrate) {
+            navigator.vibrate([500, 200, 500, 200, 500]);
+          }
+        } else {
+          // Standard notification for other messages
+          if (title && navigator.vibrate) {
+            navigator.vibrate([200, 100, 200]);
+          }
         }
-        // Optional: Show in-app toast
-        // toast(title + ": " + body); 
       });
     }
   }, []);
+
+  const handleAcceptRequest = () => {
+    console.log('Request accepted:', incomingRequest);
+    setIncomingRequest(null);
+    // Navigate to driver map or specific logic here
+  };
+
+  const handleDeclineRequest = () => {
+    console.log('Request declined');
+    setIncomingRequest(null);
+  };
 
   return (
     <HashRouter>
@@ -78,6 +104,35 @@ const App = () => {
         <Route path="/admin/drivers" element={<AdminDriversPage />} />
       </Routes>
       <ChatWidget />
+
+      {/* Driver Request Overlay */}
+      <DriverRequestCard
+        isVisible={!!incomingRequest}
+        request={incomingRequest}
+        onAccept={handleAcceptRequest}
+        onDecline={handleDeclineRequest}
+      />
+
+      {/* Temporary Debug Button - Remove before production */}
+      <button
+        onClick={() => {
+          // Test Native Overlay
+          try { OverlayPlugin.show(); } catch (e) { console.error(e); }
+
+          setIncomingRequest({
+            price: '1.5',
+            distance: '1.9 km',
+            duration: '15 min',
+            pickupLocation: 'Ubicación Actual',
+            pickupAddress: 'Downtown District',
+            dropoffLocation: 'Centro Comercial Flamingo',
+            dropoffAddress: 'Entrada Principal',
+          });
+        }}
+        className="fixed bottom-4 left-4 z-[60] bg-red-600 text-white px-3 py-2 text-xs font-bold rounded shadow-lg opacity-80 hover:opacity-100"
+      >
+        TEST REQUEST
+      </button>
     </HashRouter>
   );
 };
