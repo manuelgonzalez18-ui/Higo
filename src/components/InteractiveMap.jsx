@@ -7,7 +7,7 @@ import MotoIcon from '../assets/moto_top_view.png';
 import StandardIcon from '../assets/car_top_view.png';
 import VanIcon from '../assets/van_top_view.png';
 import PassengerPin from '../assets/passenger_pin.png';
-import DestinationPin from '../assets/destination_pin_checkered.png'; // New 3D destination pin with flag
+import DestinationPin from '../assets/destination_pin_v2.png'; // New 3D destination pin with flag
 
 // Fallback Center
 const HIGUEROTE_CENTER = { lat: 10.4850, lng: -66.0950 };
