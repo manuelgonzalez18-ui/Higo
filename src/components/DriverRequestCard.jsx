@@ -70,7 +70,7 @@ const DriverRequestCard = ({ request, onAccept, onDecline, isVisible }) => {
                 <div className="mb-6">
                     <p className="text-xs text-gray-400 font-semibold tracking-wider uppercase mb-1">TARIFA ESTIMADA</p>
                     <div className="text-5xl font-extrabold tracking-tight">
-                        ${Number(request.price).toFixed(2) || '0.00'}
+                        ${parseFloat(request.price).toFixed(2)}
                     </div>
                 </div>
 
