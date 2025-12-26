@@ -94,6 +94,54 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
         }
     }, [map, center, showPin]);
 
+    // Mock Drivers State for Simulation (Requested to be restored)
+    const [mockDrivers, setMockDrivers] = useState([]);
+
+    // Initialize Simulated Drivers on mount
+    useEffect(() => {
+        if (assignedDriver) {
+            setMockDrivers([]);
+            return;
+        }
+
+        // Generate 3-5 random drivers around the center
+        const newDrivers = Array.from({ length: 4 }).map((_, i) => ({
+            id: `sim-${i}`,
+            lat: (center?.lat || HIGUEROTE_CENTER.lat) + (Math.random() - 0.5) * 0.015,
+            lng: (center?.lng || HIGUEROTE_CENTER.lng) + (Math.random() - 0.5) * 0.015,
+            type: Math.random() > 0.6 ? 'moto' : 'standard',
+            heading: Math.floor(Math.random() * 360),
+            name: 'Higo Driver'
+        }));
+        setMockDrivers(newDrivers);
+    }, [center, assignedDriver]);
+
+    // Animation Loop for Simulated Drivers
+    useEffect(() => {
+        if (assignedDriver) return;
+
+        const interval = setInterval(() => {
+            setMockDrivers(prev => prev.map(d => {
+                const moveLat = (Math.random() - 0.5) * 0.0001;
+                const moveLng = (Math.random() - 0.5) * 0.0001;
+                const newLat = d.lat + moveLat;
+                const newLng = d.lng + moveLng;
+
+                // Calculate heading
+                const angle = Math.atan2(moveLng, moveLat) * 180 / Math.PI;
+
+                return {
+                    ...d,
+                    lat: newLat,
+                    lng: newLng,
+                    heading: angle
+                };
+            }));
+        }, 3000);
+
+        return () => clearInterval(interval);
+    }, [assignedDriver]);
+
     // Initialize Real Drivers (Real-time from Supabase)
     useEffect(() => {
         if (assignedDriver) {
@@ -220,7 +268,7 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                     }}
                     className="w-full h-full"
                 >
-                    {/* Render Simulated Drivers */}
+                    {/* Render Real Drivers Only */}
                     {!assignedDriver && drivers.map(driver => (
                         <AdvancedMarker
                             key={driver.id}
@@ -235,7 +283,7 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                             >
                                 <img
                                     src={getIconForType(driver.type)}
-                                    className="w-10 h-10 object-contain drop-shadow-xl opacity-80"
+                                    className="w-10 h-10 object-contain drop-shadow-xl"
                                     alt="vehicle"
                                 />
                             </div>
