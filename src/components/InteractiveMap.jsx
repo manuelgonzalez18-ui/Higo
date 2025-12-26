@@ -4,8 +4,8 @@ import { supabase } from '../services/supabase';
 
 // Import Realistic Icons
 import MotoIcon from '../assets/moto_marker_realistic.png';
-import StandardIcon from '../assets/car_marker_realistic.png';
-import VanIcon from '../assets/van_marker_realistic.png';
+import StandardIcon from '../assets/car_marker_red.png';
+import VanIcon from '../assets/van_marker_white.png';
 import PassengerPin from '../assets/passenger_pin.png';
 import DestinationPin from '../assets/destination_pin_v2.png'; // New 3D destination pin with flag
 
