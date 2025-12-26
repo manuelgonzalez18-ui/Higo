@@ -14,12 +14,15 @@ import AuthPage from './pages/AuthPage';
 import { messaging } from './services/firebase';
 import { getToken, onMessage } from 'firebase/messaging';
 import { useEffect, useState } from 'react';
+import { initGlobalAudio } from './services/notificationService';
 import DriverRequestCard from './components/DriverRequestCard';
 
 const App = () => {
   const [incomingRequest, setIncomingRequest] = useState(null);
 
   useEffect(() => {
+    initGlobalAudio(); // Unlock audio context on first interaction
+
     const setupMessaging = async () => {
       if (!messaging) return;
 
@@ -34,6 +37,7 @@ const App = () => {
             vapidKey: 'BMQJ_...YOUR_VAPID_KEY_IF_NEEDED_OR_USE_DEFAULT_FROM_CONFIG...'
           });
           console.log('FCM Token:', token);
+          alert('FCM Token Copiar: ' + token); // Temporary for debugging
         } else {
           console.log('Unable to get permission to notify.');
         }

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { playIntenseBeep, vibrateIntense } from '../services/notificationService';
 
 const ChatWidget = () => {
     const [isOpen, setIsOpen] = useState(false);
@@ -93,16 +94,9 @@ const ChatWidget = () => {
                         setUnreadCount(prev => prev + 1);
                     }
 
-                    // Vibrate for internal message
-                    if (navigator.vibrate) {
-                        navigator.vibrate([200, 100, 200]);
-                    }
-
-                    // Web Audio Backup for Chat (Standard Beep)
-                    try {
-                        const audio = new Audio('https://www.soundjay.com/buttons/beep-01a.mp3');
-                        audio.play().catch(e => console.log('Chat Audio play failed', e));
-                    } catch (e) { console.log('Chat Audio init failed', e); }
+                    // Intense Vibration and Sound using Service
+                    vibrateIntense();
+                    playIntenseBeep();
 
                     try {
                         await LocalNotifications.schedule({
@@ -112,13 +106,11 @@ const ChatWidget = () => {
                                 id: new Date().getTime(),
                                 schedule: { at: new Date(Date.now()) },
                                 channelId: 'higo_messages_v1',
-                                sound: 'alert_sound.wav',
+                                // sound: 'alert_sound.wav', // Removed to avoid conflict with intense beep
                                 actionTypeId: "",
                                 extra: null
                             }]
                         });
-                        // Use default system sound by NOT specifying 'sound' or 'vibrate' manually here if channel handles it
-                        // Or specify basic vibration if needed, but let channel rule.
                     } catch (e) {
                         console.error("Chat Notification Error:", e);
                     }
@@ -141,7 +133,7 @@ const ChatWidget = () => {
                 importance: 5,
                 visibility: 1,
                 vibration: true,
-                sound: 'alert_sound.wav'
+                // sound: 'alert_sound.wav' // Removed
             });
         };
         setupNotifications();
@@ -225,7 +217,7 @@ const ChatWidget = () => {
                     <div className="p-3 bg-white dark:bg-[#1a2c2c] border-t border-gray-200 dark:border-gray-700 flex gap-2">
                         <input
                             type="text"
-                            className="flex-1 bg-gray-100 dark:bg-[#0f1c1c] border-none rounded-lg text-sm px-3 focus:ring-1 focus:ring-blue-600 text-gray-800 dark:text-white"
+                            className="flex-1 bg-gray-100 dark:bg-[#0f1c1c] border-none outline-none rounded-lg text-sm px-3 focus:ring-1 focus:ring-blue-600 text-gray-800 dark:text-white"
                             placeholder="Escribe un mensaje..."
                             value={inputValue}
                             onChange={(e) => setInputValue(e.target.value)}

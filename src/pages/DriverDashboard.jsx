@@ -22,6 +22,30 @@ const DriverDashboard = () => {
     // Navigation State
     const [navStep, setNavStep] = useState(0); // 0: Idle, 1: To Pickup, 2: To Dropoff
     const [instruction, setInstruction] = useState("Waiting for rides...");
+    const [currentLoc, setCurrentLoc] = useState(null);
+    const [navInfo, setNavInfo] = useState(null);
+    const lastInstruction = React.useRef("");
+
+    // --- HELPER FUNCTIONS ---
+    const speak = useCallback(async (text) => {
+        setInstruction(text);
+        const buffer = await generateSpeech(text);
+        if (buffer) playAudioBuffer(buffer);
+    }, []);
+
+    const handleRouteData = useCallback((data) => {
+        setNavInfo(data);
+        if (data?.next_step?.instruction) {
+            // Strip HTML for speech
+            const cleanText = data.next_step.instruction.replace(/<[^>]*>/g, '');
+
+            if (cleanText !== lastInstruction.current) {
+                lastInstruction.current = cleanText;
+                console.log("🗣️ Speaking Instruction:", cleanText);
+                speak(cleanText);
+            }
+        }
+    }, [speak]); // Add speak dependency if stable, or leave empty if hoisted
 
     // --- NOTIFICATION SETUP ---
     const notificationSetupDone = React.useRef(false);
@@ -228,28 +252,44 @@ const DriverDashboard = () => {
         return () => clearInterval(interval);
     }, [activeRide]);
 
-    const toggleOnline = () => {
+    const toggleOnline = async () => {
         if (!isOnline) {
             // Trying to go ONLINE
             if (profile.subscription_status === 'suspended') {
                 alert("⚠️ Your account is suspended due to missed payment. Please contact admin.");
                 return;
             }
-            setIsOnline(true);
-            speak("You are now online. Waiting for requests.");
+
+            try {
+                // Sync status to DB
+                const { error } = await supabase.from('profiles')
+                    .update({ status: 'online', last_location_update: new Date() })
+                    .eq('id', profile.id);
+
+                if (error) throw error;
+
+                setIsOnline(true);
+                speak("You are now online. Waiting for requests.");
+            } catch (e) {
+                console.error("Error going online:", e);
+                alert("Error al conectar: " + e.message);
+            }
         } else {
-            setIsOnline(false);
-            speak("You are offline.");
+            // Going OFFLINE
+            try {
+                await supabase.from('profiles')
+                    .update({ status: 'offline' })
+                    .eq('id', profile.id);
+
+                setIsOnline(false);
+                speak("You are offline.");
+            } catch (e) {
+                console.error("Error going offline:", e);
+            }
         }
     };
 
     // --- HELPER FUNCTIONS ---
-
-    const speak = async (text) => {
-        setInstruction(text);
-        const buffer = await generateSpeech(text);
-        if (buffer) playAudioBuffer(buffer);
-    };
 
     const deg2rad = (deg) => {
         return deg * (Math.PI / 180);
@@ -422,6 +462,9 @@ const DriverDashboard = () => {
 
                     // Update Profile Logic
                     if (profile?.id) {
+                        // Force re-render for map route update
+                        setCurrentLoc({ lat: latitude, lng: longitude });
+
                         await supabase.from('profiles').update({
                             curr_lat: latitude,
                             curr_lng: longitude,
@@ -578,9 +621,23 @@ const DriverDashboard = () => {
             {/* Map */}
             <div className="absolute inset-0 z-0">
                 <InteractiveMap
-                    pickup={activeRide?.pickup}
-                    dropoff={activeRide?.dropoff}
-                    isDriver={true}
+                    origin={
+                        activeRide && navStep === 1
+                            ? (lastLocationRef.current ? { lat: lastLocationRef.current.latitude, lng: lastLocationRef.current.longitude } : null)
+                            : (activeRide && navStep === 2
+                                ? (lastLocationRef.current ? { lat: lastLocationRef.current.latitude, lng: lastLocationRef.current.longitude } : { lat: activeRide.pickup_lat, lng: activeRide.pickup_lng })
+                                : null)
+                    }
+                    destination={
+                        activeRide && navStep === 1
+                            ? { lat: activeRide.pickup_lat, lng: activeRide.pickup_lng }
+                            : (activeRide && navStep === 2
+                                ? { lat: activeRide.dropoff_lat, lng: activeRide.dropoff_lng }
+                                : null)
+                    }
+                    assignedDriver={null}
+                    destinationIconType={navStep === 1 ? 'passenger' : 'flag'}
+                    onRouteData={handleRouteData}
                 />
                 <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/60 to-transparent pointer-events-none"></div>
             </div>
@@ -618,8 +675,13 @@ const DriverDashboard = () => {
                                     <span className="material-symbols-outlined text-white text-xl">turn_right</span>
                                 </div>
                                 <div>
-                                    <h2 className="font-bold text-white text-base leading-tight">Gira a la derecha en Main...</h2>
-                                    <p className="text-gray-400 text-xs">200m • Luego gira a la izquierda</p>
+                                    <h2
+                                        className="font-bold text-white text-base leading-tight text-left max-w-[200px]"
+                                        dangerouslySetInnerHTML={{ __html: navInfo?.next_step?.instruction || "Calculando ruta..." }}
+                                    ></h2>
+                                    <p className="text-gray-400 text-xs text-left">
+                                        {navInfo?.next_step?.distance?.text || "--"} • {navInfo?.duration?.text || "--"}
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -778,16 +840,29 @@ const DriverDashboard = () => {
                                 ) : (
                                     <div className="text-center text-gray-400">
                                         <span className="material-symbols-outlined text-4xl mb-2 text-black">qr_code_scanner</span>
-                                        <p className="text-black text-xs">No QR Code</p>
+                                        <p className="text-black text-xs font-bold">No QR Configurado</p>
+                                        <button
+                                            onClick={() => alert("Función de carga de QR en construcción. Por favor contacta a soporte.")}
+                                            className="mt-2 text-[10px] bg-blue-100 text-blue-600 px-3 py-1 rounded-full font-bold"
+                                        >
+                                            Cargar QR
+                                        </button>
                                     </div>
                                 )}
                             </div>
 
-                            <div className="text-3xl font-black mb-8 font-mono text-white">${activeRide?.price || '--'}</div>
+                            <p className="text-4xl font-black text-white mb-8 tracking-tighter">
+                                ${activeRide?.price?.toFixed(2)}
+                            </p>
 
                             <button
-                                onClick={closeRide}
-                                className="w-full bg-white text-black py-4 rounded-[20px] font-bold text-lg hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-xl"
+                                onClick={() => {
+                                    setShowPaymentQR(false);
+                                    setActiveRide(null);
+                                    setNavStep(0);
+                                    window.location.reload();
+                                }}
+                                className="w-full py-4 bg-white text-black rounded-[20px] font-bold text-lg hover:bg-gray-100 transition-colors shadow-lg active:scale-95"
                             >
                                 Cerrar y Listo
                             </button>

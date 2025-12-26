@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import InteractiveMap from '../components/InteractiveMap';
 
 import { supabase } from '../services/supabase';
 
@@ -72,7 +73,9 @@ const ConfirmTripPage = () => {
                     passenger_phone: passengerPhone || null,
                     // Smart Assignment: Save Coords
                     pickup_lat: pickupCoords?.lat || null,
-                    pickup_lng: pickupCoords?.lng || null
+                    pickup_lng: pickupCoords?.lng || null,
+                    dropoff_lat: dropoffCoords?.lat || null,
+                    dropoff_lng: dropoffCoords?.lng || null
                 }])
                 .select(); // Return inserted data
 
@@ -99,10 +102,12 @@ const ConfirmTripPage = () => {
             {/* Top Half - Map / Header */}
             <div className="relative w-full h-[45vh] bg-[#2C2F3E] rounded-b-[40px] overflow-hidden shadow-2xl z-10 mx-auto max-w-md md:max-w-full">
                 {/* Simulated Map Image */}
-                <img
-                    src="https://picsum.photos/seed/map/800/600?grayscale"
-                    alt="Map"
-                    className="w-full h-full object-cover opacity-60 mix-blend-overlay"
+                {/* Real Google Map */}
+                <InteractiveMap
+                    className="w-full h-full"
+                    center={pickupCoords}
+                    origin={pickupCoords}
+                    destination={dropoffCoords}
                 />
 
                 {/* Header Overlay */}

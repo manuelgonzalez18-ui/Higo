@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import InteractiveMap from '../components/InteractiveMap';
 
 const RideStatusPage = () => {
     const { id } = useParams();
@@ -103,6 +104,26 @@ const RideStatusPage = () => {
         return () => supabase.removeChannel(channel);
     }, [id]);
 
+    // Realtime Driver Location Tracking
+    useEffect(() => {
+        if (!ride?.driver_id) return;
+
+        const channel = supabase
+            .channel(`driver_loc:${ride.driver_id}`)
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'profiles',
+                filter: `id=eq.${ride.driver_id}`
+            }, (payload) => {
+                // Merge new profile data (especially curr_lat/lng) into driver state
+                setDriver(prev => ({ ...prev, ...payload.new }));
+            })
+            .subscribe();
+
+        return () => supabase.removeChannel(channel);
+    }, [ride?.driver_id]);
+
     const fetchRide = async () => {
         const { data, error } = await supabase.from('rides').select('*').eq('id', id).single();
         if (data) {
@@ -165,12 +186,37 @@ const RideStatusPage = () => {
     return (
         <div className="h-screen bg-[#0F1014] relative overflow-hidden font-sans text-white">
 
-            {/* Map Grid Background (CSS Grid simulation) */}
-            <div className="absolute inset-0 opacity-20" style={{
-                backgroundImage: 'linear-gradient(#2c2f3e 1px, transparent 1px), linear-gradient(90deg, #2c2f3e 1px, transparent 1px)',
-                backgroundSize: '40px 40px'
-            }}></div>
-            <div className="absolute inset-0 bg-[#0F1014]/90 pointer-events-none"></div>
+            {/* Map Grid Background -> Real Map */}
+            <div className="absolute inset-0 z-0">
+                <InteractiveMap
+                    className="w-full h-full"
+                    center={
+                        (driver?.curr_lat && !isNaN(Number(driver.curr_lat)))
+                            ? { lat: Number(driver.curr_lat), lng: Number(driver.curr_lng) }
+                            : (ride?.pickup_lat ? { lat: Number(ride.pickup_lat), lng: Number(ride.pickup_lng) } : null)
+                    }
+                    origin={
+                        (driver?.curr_lat && !isNaN(Number(driver.curr_lat))) && (ride?.status === 'in_progress' || ride?.status === 'accepted')
+                            ? { lat: Number(driver.curr_lat), lng: Number(driver.curr_lng) }
+                            : (ride?.pickup_lat ? { lat: Number(ride.pickup_lat), lng: Number(ride.pickup_lng) } : null)
+                    }
+                    destination={
+                        ride?.status === 'accepted'
+                            ? { lat: Number(ride.pickup_lat), lng: Number(ride.pickup_lng) }
+                            : (ride?.dropoff_lat ? { lat: Number(ride.dropoff_lat), lng: Number(ride.dropoff_lng) } : null)
+                    }
+                    assignedDriver={driver ? {
+                        lat: !isNaN(Number(driver.curr_lat)) ? Number(driver.curr_lat) : Number(ride?.pickup_lat || 10.4850),
+                        lng: !isNaN(Number(driver.curr_lng)) ? Number(driver.curr_lng) : Number(ride?.pickup_lng || -66.0950),
+                        type: driver.vehicle_type || 'standard',
+                        heading: Number(driver.heading || 0),
+                        name: driver.full_name,
+                        plate: driver.license_plate
+                    } : null}
+                />
+            </div>
+            {/* Reduced opacity for map visibility */}
+            <div className="absolute inset-0 bg-black/10 pointer-events-none"></div>
 
             {/* Top Bar */}
             <div className="absolute top-6 left-6 right-6 z-20 flex justify-between items-start">
@@ -178,53 +224,13 @@ const RideStatusPage = () => {
                     <span className="material-symbols-outlined text-white">arrow_back</span>
                 </button>
 
-                {/* Status Pill */}
-                {ride.status !== 'completed' && (
-                    <div className="bg-[#1A1E29]/90 backdrop-blur-md border border-white/10 px-6 py-3 rounded-2xl flex gap-6 shadow-xl">
-                        <div className="text-center">
-                            <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider">EN VIAJE</p>
-                            <p className="font-bold text-lg">12 min</p>
-                        </div>
-                        <div className="w-px bg-white/10"></div>
-                        <div className="text-center">
-                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">LLEGADA</p>
-                            <p className="font-bold text-lg">10:45 PM</p>
-                        </div>
-                    </div>
-                )}
+                {/* Status Pill Removed as per user request to clear map */}
 
-                {/* Spacer to balance the back button if needed, or just empty to keep flex layout working roughly same, 
-                   but since it's space-between and now we only have 2 items (back btn + status), they will spread out. 
-                   Actually, we want status centered usually. 
-                   The previous layout was: [Back] [Status] [Shield] (space-between? No, code says: flex justify-between items-start.
-                   Wait, the status pill is in the middle? No, the code structure is:
-                   <div className="... flex justify-between ...">
-                      <Button Back />
-                      <Status Pill />
-                      <Button Shield />
-                   </div>
-                   If I remove shield, it will be [Back] ... [Status]. That might look off. 
-                   Let's add an empty div of same size to keep balance if we want Status centered, or just let it float right.
-                   The user said "quitar el escudo". 
-                   Let's replace it with a transparent placeholder or just remove it. 
-                   If I remove it, flex-between will put Status on the far right. 
-                   Let's check if the Status Pill needs to be centered. 
-                   Usually yes.
-                   Let's use an invisible div to balance it.
-                */}
+
                 <div className="w-12"></div>
             </div>
 
-            {/* Map placeholders (Pin, Route) - Simulated */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-                <div className="bg-[#1A1E29] px-3 py-1 rounded-full border border-white/10 text-xs font-bold mb-2">Casa <span className="text-gray-500">10:45 PM</span></div>
-                <div className="w-4 h-4 rounded-full bg-white border-4 border-blue-500 shadow-lg"></div>
-                <div className="h-40 w-1 bg-blue-500 opacity-50 rounded-full"></div>
-                {/* Car Icon */}
-                <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(255,255,255,0.3)] z-10 mt-[-10px]">
-                    <span className="material-symbols-outlined text-black text-2xl">local_taxi</span>
-                </div>
-            </div>
+            {/* Simulated Overlay Removed */}
 
 
             {/* Bottom Sheet - Driver Details */}
@@ -256,13 +262,20 @@ const RideStatusPage = () => {
                         </div>
                     </div>
                 ) : (
-                    <div className="mb-6">
-                        <h2 className="text-xl font-bold text-white">Buscando a Higo Driver...</h2>
-                        <div className="flex items-center gap-2 mt-2">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                    <div className="mb-6 flex flex-col items-center justify-center py-4 relative">
+                        {/* Radar Animation */}
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="w-64 h-64 border border-blue-500/10 rounded-full animate-ping [animation-duration:3s]"></div>
+                            <div className="absolute w-48 h-48 border border-blue-500/20 rounded-full animate-ping [animation-duration:2s]"></div>
+                            <div className="absolute w-32 h-32 border border-blue-500/30 rounded-full animate-ping [animation-duration:1s]"></div>
                         </div>
+
+                        <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mb-4 relative z-10 animate-pulse">
+                            <span className="material-symbols-outlined text-blue-400 text-3xl">radar</span>
+                        </div>
+
+                        <h2 className="text-xl font-bold text-white text-center">Buscando un Higo Driver...</h2>
+                        <p className="text-gray-400 text-sm mt-1 text-center max-w-[250px]">Estamos conectando con los Higo Drivers cercanos</p>
                     </div>
                 )}
 

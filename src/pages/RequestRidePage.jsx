@@ -3,9 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import LocationInput from '../components/LocationInput';
 import InteractiveMap from '../components/InteractiveMap';
 import { supabase } from '../services/supabase';
+import { useGeolocation } from '../hooks/useGeolocation';
 
 const RequestRidePage = () => {
     const navigate = useNavigate();
+    const { location: userLocation } = useGeolocation();
+
     const [selectedRide, setSelectedRide] = useState('standard');
     const [pickup, setPickup] = useState("Ubicación Actual");
     const [pickupCoords, setPickupCoords] = useState(null); // {lat, lng}
@@ -15,6 +18,13 @@ const RequestRidePage = () => {
     const [price, setPrice] = useState(0);
     const [oldPrice, setOldPrice] = useState(0);
     const [showStopConfirm, setShowStopConfirm] = useState(false);
+
+    // Auto-set pickup to user location once found
+    useEffect(() => {
+        if (userLocation && pickup === "Ubicación Actual") {
+            setPickupCoords(userLocation);
+        }
+    }, [userLocation, pickup]);
 
     // Add a new empty stop
     const handleAddStop = () => {
@@ -136,10 +146,6 @@ const RequestRidePage = () => {
             const distNoStops = getDistanceFromLatLonInKm(pickupCoords.lat, pickupCoords.lng, dropoffCoords.lat, dropoffCoords.lng);
             const priceNoStops = calculatePrice(distNoStops, selectedRide, 0);
             setOldPrice(priceNoStops);
-
-            // Show confirm modal only if the last stop was just filled? 
-            // Or maybe we show it when the user clicks "Confirmar" in the UI
-
         }
         setPrice(newPrice);
     }, [pickupCoords, dropoffCoords, selectedRide, stops]);
@@ -211,13 +217,15 @@ const RequestRidePage = () => {
             {/* BACKGROUND MAP */}
             <div className="absolute inset-0 z-0">
                 <InteractiveMap
-                    // Pass coordinates if we have them using props or context
                     className="w-full h-full"
-                    markersProp={stops} // Pass stops for route visualization
+                    center={pickupCoords || userLocation}
+                    origin={pickupCoords}
+                    destination={dropoffCoords}
+                    markersProp={stops}
                 />
                 {/* Overlay Gradients */}
                 <div className="absolute inset-x-0 bottom-0 h-3/4 bg-gradient-to-t from-[#0F1014] via-[#0F1014]/90 to-transparent pointer-events-none"></div>
-                <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/60 to-transparent pointer-events-none"></div>
+                <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/90 via-black/50 to-transparent pointer-events-none"></div>
             </div>
 
             {/* HEADER - Transparent */}
@@ -244,9 +252,9 @@ const RequestRidePage = () => {
                 <div className="w-full max-w-md pointer-events-auto">
 
                     {/* Floating Title (Optional branding) */}
-                    <div className="mb-6 text-center">
+                    <div className="mb-6 text-center shadow-black/50 drop-shadow-lg">
                         <h1 className="text-3xl font-black tracking-tight mb-1 text-white">¿A dónde vamos?</h1>
-                        <p className="text-gray-400 text-sm font-medium">Viaja seguro en Higuerote</p>
+                        <p className="text-blue-500 text-sm font-bold tracking-wide">Viaja seguro en Higuerote</p>
                     </div>
 
                     {/* GLASS CARD FORM */}
@@ -273,7 +281,7 @@ const RequestRidePage = () => {
                                             setPickupCoords(null);
                                         }
                                     }}
-                                    onMapClick={() => setConfirmingLocation('pickup')}
+                                    onMapClick={() => { /* Not implemented yet */ }}
                                 />
 
                                 {/* Render Stops */}
@@ -324,7 +332,7 @@ const RequestRidePage = () => {
                                             setDropoffCoords(null);
                                         }
                                     }}
-                                    onMapClick={() => setConfirmingLocation('dropoff')}
+                                    onMapClick={() => { /* Not implemented yet */ }}
                                 />
                             </div>
 

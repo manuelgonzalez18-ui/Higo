@@ -72,6 +72,28 @@ const AdminDriversPage = () => {
         checkAuth();
     }, [navigate]);
 
+    // Reset Fleet - Reset all drivers to offline
+    const handleResetFleet = async () => {
+        if (!confirm('¿Estás seguro de desconectar a TODOS los conductores? Esto limpiará el mapa de usuarios fantasmas.')) return;
+        setLoading(true);
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .update({ status: 'offline' })
+                .eq('role', 'driver');
+
+            if (error) throw error;
+
+            setMessage({ type: 'success', text: 'Se ha reiniciado el estatus de la flota.' });
+            fetchDrivers();
+        } catch (error) {
+            console.error('Error resetting fleet:', error);
+            setMessage({ type: 'error', text: 'Error al reiniciar flota: ' + error.message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // Filter Logic
     const filteredDrivers = drivers.filter(driver => {
         const matchesSearch = driver.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -195,13 +217,22 @@ const AdminDriversPage = () => {
                         <p className="text-gray-400 text-sm font-medium">Gestión de Flota</p>
                     </div>
                 </div>
-                <button
-                    onClick={() => setShowRegisterModal(true)}
-                    className="bg-violet-600 hover:bg-violet-700 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:shadow-violet-600/30 transition-all active:scale-95"
-                >
-                    <span className="material-symbols-outlined">add</span>
-                    Registrar Nuevo Higo Driver
-                </button>
+                <div className="flex gap-3">
+                    <button
+                        onClick={handleResetFleet}
+                        className="bg-red-600/20 hover:bg-red-600/30 text-red-500 border border-red-600/50 px-4 py-3 rounded-xl font-bold flex items-center gap-2 transition-all"
+                        title="Desconectar a todos los conductores (Reset)"
+                    >
+                        <span className="material-symbols-outlined">power_settings_new</span>
+                    </button>
+                    <button
+                        onClick={() => setShowRegisterModal(true)}
+                        className="bg-violet-600 hover:bg-violet-700 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:shadow-violet-600/30 transition-all active:scale-95"
+                    >
+                        <span className="material-symbols-outlined">add</span>
+                        Registrar Nuevo Higo Driver
+                    </button>
+                </div>
             </div>
 
             {/* Alert / Warning */}

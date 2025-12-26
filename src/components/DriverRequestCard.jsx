@@ -1,11 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { X, ArrowRight, MapPin, Navigation } from 'lucide-react';
 
+import { startLoopingRequestAlert, stopLoopingRequestAlert } from '../services/notificationService';
+
 const DriverRequestCard = ({ request, onAccept, onDecline, isVisible }) => {
     const [timeLeft, setTimeLeft] = useState(15);
 
     useEffect(() => {
         if (isVisible) {
+            // Start intense alert
+            startLoopingRequestAlert();
+
             setTimeLeft(15);
             const timer = setInterval(() => {
                 setTimeLeft((prev) => {
@@ -17,7 +22,12 @@ const DriverRequestCard = ({ request, onAccept, onDecline, isVisible }) => {
                     return prev - 1;
                 });
             }, 1000);
-            return () => clearInterval(timer);
+            return () => {
+                clearInterval(timer);
+                stopLoopingRequestAlert(); // Stop alert on cleanup/unmount
+            };
+        } else {
+            stopLoopingRequestAlert(); // Stop alert if not visible
         }
     }, [isVisible, onDecline]);
 
@@ -60,7 +70,7 @@ const DriverRequestCard = ({ request, onAccept, onDecline, isVisible }) => {
                 <div className="mb-6">
                     <p className="text-xs text-gray-400 font-semibold tracking-wider uppercase mb-1">TARIFA ESTIMADA</p>
                     <div className="text-5xl font-extrabold tracking-tight">
-                        ${request.price || '0.00'}
+                        ${Number(request.price).toFixed(2) || '0.00'}
                     </div>
                 </div>
 
