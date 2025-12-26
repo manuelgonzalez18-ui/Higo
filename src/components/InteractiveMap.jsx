@@ -268,8 +268,8 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                     }}
                     className="w-full h-full"
                 >
-                    {/* Render Real Drivers Only */}
-                    {!assignedDriver && drivers.map(driver => (
+                    {/* Render Real + Simulated Drivers */}
+                    {!assignedDriver && [...drivers, ...mockDrivers].map(driver => (
                         <AdvancedMarker
                             key={driver.id}
                             position={{ lat: driver.lat, lng: driver.lng }}
