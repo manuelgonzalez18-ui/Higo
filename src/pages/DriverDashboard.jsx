@@ -769,7 +769,7 @@ const DriverDashboard = () => {
 
                                 <div className="mb-6">
                                     <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">TARIFA ESTIMADA</p>
-                                    <h1 className="text-4xl font-extrabold text-white">${req.price}</h1>
+                                    <h1 className="text-4xl font-extrabold text-white">${parseFloat(req.price).toFixed(2)}</h1>
                                 </div>
 
                                 <div className="space-y-6 relative pl-3 mb-8">
