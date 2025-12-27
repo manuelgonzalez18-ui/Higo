@@ -98,22 +98,20 @@ const ChatWidget = () => {
                     vibrateIntense();
                     playIntenseBeep();
 
-                    try {
-                        await LocalNotifications.schedule({
-                            notifications: [{
-                                title: "Nuevo Mensaje",
-                                body: payload.new.content,
-                                id: new Date().getTime(),
-                                schedule: { at: new Date(Date.now()) },
-                                channelId: 'higo_messages_v1',
-                                // sound: 'alert_sound.wav', // Removed to avoid conflict with intense beep
-                                actionTypeId: "",
-                                extra: null
-                            }]
-                        });
-                    } catch (e) {
-                        console.error("Chat Notification Error:", e);
-                    }
+                    // Native Notification for backup
+                    LocalNotifications.schedule({
+                        notifications: [{
+                            title: 'Nuevo Mensaje',
+                            body: payload.new.text || 'Tienes un nuevo mensaje',
+                            id: new Date().getTime(),
+                            schedule: { at: new Date() },
+                            sound: 'alert_sound',
+                            channelId: 'higo_rides_v11', // Reuse high priority channel
+                            extra: { rideId: rideId }
+                        }]
+                    });
+
+
                 }
             })
             .subscribe();

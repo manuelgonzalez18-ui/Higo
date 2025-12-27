@@ -61,11 +61,11 @@ const DriverDashboard = () => {
 
             // 1. Create Channel (v10 - Force Fresh Config)
             await LocalNotifications.createChannel({
-                id: 'higo_rides_v10',
+                id: 'higo_rides_v11',
                 name: 'New Ride Requests (High Priority)',
                 importance: 5,
                 visibility: 1,
-                sound: 'alert_sound.wav',
+                sound: 'alert_sound',
                 vibration: true
             });
 
@@ -343,7 +343,7 @@ const DriverDashboard = () => {
                         body: `$${ride.price} - ${ride.dropoff}${distText}`,
                         id: new Date().getTime(),
                         schedule: { at: new Date(Date.now() + 50) }, // Almost immediate
-                        channelId: 'higo_rides_v10',
+                        channelId: 'higo_rides_v11',
                         // smallIcon removed to use system default
                         actionTypeId: 'RIDE_REQUEST_ACTIONS', // Attach Action Button
                         extra: { rideId: ride.id },
