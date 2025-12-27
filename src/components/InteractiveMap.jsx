@@ -4,7 +4,7 @@ import { supabase } from '../services/supabase';
 
 // Import Realistic Icons
 import MotoIcon from '../assets/moto_marker_red.png';
-import StandardIcon from '../assets/car_marker_red.png';
+import StandardIcon from '../assets/car_top_view.png';
 import VanIcon from '../assets/van_marker_red.png';
 import PassengerPin from '../assets/passenger_pin_red.png';
 import DestinationPin from '../assets/destination_pin_checkered.png'; // Red Pin with Checkered Flag Emblem
