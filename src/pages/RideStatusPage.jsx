@@ -99,9 +99,19 @@ const RideStatusPage = () => {
                     if (data) setDriver(data);
                 }
             })
-            .subscribe();
+            .subscribe((status) => {
+                console.log("Subscription status:", status);
+            });
 
-        return () => supabase.removeChannel(channel);
+        // Backup Polling every 5 seconds in case socket fails
+        const interval = setInterval(() => {
+            fetchRide();
+        }, 5000);
+
+        return () => {
+            supabase.removeChannel(channel);
+            clearInterval(interval);
+        };
     }, [id]);
 
     // Realtime Driver Location Tracking
