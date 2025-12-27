@@ -3,7 +3,7 @@ import { APIProvider, Map, AdvancedMarker, Pin, useMap, useMapsLibrary } from '@
 import { supabase } from '../services/supabase';
 
 // Import Realistic Icons
-import MotoIcon from '../assets/moto_marker_realistic.png';
+import MotoIcon from '../assets/moto_marker_red.png';
 import StandardIcon from '../assets/car_marker_red.png';
 import VanIcon from '../assets/van_marker_red.png';
 import PassengerPin from '../assets/passenger_pin_red.png';
