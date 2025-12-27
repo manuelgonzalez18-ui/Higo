@@ -3,6 +3,7 @@ import { supabase, getUserProfile } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
 import InteractiveMap from '../components/InteractiveMap';
 import { generateSpeech, playAudioBuffer } from '../services/geminiService';
+import { startLoopingRequestAlert, stopLoopingRequestAlert } from '../services/notificationService';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { registerPlugin } from '@capacitor/core';
 import { App } from '@capacitor/app';
@@ -424,6 +425,10 @@ const DriverDashboard = () => {
 
             console.log("🔔 Notifying driver of new request!", filtered[0]);
             speak("Nueva solicitud de viaje");
+
+            // Loop until accepted or dismissed
+            startLoopingRequestAlert();
+
             notifyNewRequest(filtered[0]);
         }
     }, [profile, notifyNewRequest]);
@@ -575,6 +580,7 @@ const DriverDashboard = () => {
 
             setActiveRide(ride);
             setRequests([]);
+            stopLoopingRequestAlert(); // Stop sound
             setNavStep(1);
             speak(`Viaje aceptado. Navegando a ${ride.pickup}`);
         } catch (error) {
@@ -602,6 +608,7 @@ const DriverDashboard = () => {
             setActiveRide(null);
             setNavStep(0);
             setRequests([]);
+            stopLoopingRequestAlert(); // Stop sound
         }, 150);
     };
 
@@ -799,7 +806,13 @@ const DriverDashboard = () => {
 
 
                                 <div className="flex gap-4">
-                                    <button onClick={() => setRequests(prev => prev.filter(r => r.id !== req.id))} className="w-14 h-14 rounded-full bg-[#1E293B] flex items-center justify-center border border-white/5 hover:bg-[#2C3345] transition-colors">
+                                    <button onClick={() => {
+                                        setRequests(prev => {
+                                            const next = prev.filter(r => r.id !== req.id);
+                                            if (next.length === 0) stopLoopingRequestAlert();
+                                            return next;
+                                        });
+                                    }} className="w-14 h-14 rounded-full bg-[#1E293B] flex items-center justify-center border border-white/5 hover:bg-[#2C3345] transition-colors">
                                         <span className="material-symbols-outlined text-slate-400">close</span>
                                     </button>
                                     <button onClick={() => handleAcceptRide(req)} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-[20px] font-bold text-lg shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 active:scale-95 transition-all">

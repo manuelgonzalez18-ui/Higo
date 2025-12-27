@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { playIntenseBeep, vibrateIntense } from '../services/notificationService';
+import { playIntenseBeep, vibrateIntense, playAlertSound } from '../services/notificationService';
+
+
 
 const ChatWidget = () => {
     const [isOpen, setIsOpen] = useState(false);
@@ -96,13 +98,7 @@ const ChatWidget = () => {
 
                     // Intense Vibration and Sound using Service
                     vibrateIntense();
-                    // playIntenseBeep(); // Remplazado por sonido nativo de web
-                    try {
-                        const audio = new Audio('/alert_sound.wav');
-                        audio.play().catch(e => console.log('Audio play failed', e));
-                    } catch (e) {
-                        console.error("Audio Load Error:", e);
-                    }
+                    playAlertSound();
 
                     // Native Notification for backup
                     LocalNotifications.schedule({

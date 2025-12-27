@@ -87,13 +87,23 @@ export const startLoopingRequestAlert = () => {
     if (requestLoopInterval) return; // Already running
 
     // Play immediately
-    playIntenseBeep();
-    vibrateIntense();
+    try {
+        const audio = new Audio('/alert_sound.wav');
+        audio.play().catch(e => console.log('Loop Auto-play blocked', e));
+
+        // Vibrate
+        if (navigator.vibrate) navigator.vibrate([1000, 500, 1000]);
+    } catch (e) { console.error(e); }
 
     requestLoopInterval = setInterval(() => {
-        playIntenseBeep();
-        vibrateIntense();
-    }, 2000); // Repeat every 2 seconds
+        try {
+            const audio = new Audio('/alert_sound.wav');
+            audio.play().catch(e => console.log('Loop Auto-play blocked', e));
+
+            // Vibrate
+            if (navigator.vibrate) navigator.vibrate([1000, 500, 1000]);
+        } catch (e) { console.error(e); }
+    }, 3000); // Repeat every 3 seconds
 };
 
 /**
@@ -107,5 +117,33 @@ export const stopLoopingRequestAlert = () => {
     // Also stop vibration immediately
     if (navigator.vibrate) {
         navigator.vibrate(0);
+    }
+};
+
+/**
+ * Plays the 'alert_sound.wav' using AudioContext.
+ * This is more robust for async callbacks than new Audio().play().
+ */
+export const playAlertSound = async () => {
+    try {
+        initAudioContext();
+
+        // Fetch and decode if not cached (browser cache handles fetch usually)
+        const response = await fetch('/alert_sound.wav');
+        const arrayBuffer = await response.arrayBuffer();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
+        source.start(0);
+
+    } catch (e) {
+        console.error("AudioContext Play Error:", e);
+        // Fallback to HTML5 Audio if Context fails (though unlikely if unlocked)
+        try {
+            const audio = new Audio('/alert_sound.wav');
+            audio.play().catch(e => console.error("Fallback play failed", e));
+        } catch (err) { console.error(err); }
     }
 };
