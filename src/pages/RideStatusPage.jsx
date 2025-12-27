@@ -213,6 +213,7 @@ const RideStatusPage = () => {
                         name: driver.full_name,
                         plate: driver.license_plate
                     } : null}
+                    routeColor="#3B82F6" // Blue for passenger tracking
                 />
             </div>
             {/* Reduced opacity for map visibility */}

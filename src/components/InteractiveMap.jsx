@@ -12,7 +12,7 @@ import DestinationPin from '../assets/destination_pin_checkered.png'; // Red Pin
 // Fallback Center
 const HIGUEROTE_CENTER = { lat: 10.4850, lng: -66.0950 };
 
-const Directions = ({ origin, destination, onRouteData }) => {
+const Directions = ({ origin, destination, onRouteData, routeColor }) => {
     const map = useMap();
     const routesLibrary = useMapsLibrary('routes');
     const [directionsService, setDirectionsService] = useState(null);
@@ -26,7 +26,7 @@ const Directions = ({ origin, destination, onRouteData }) => {
             map,
             suppressMarkers: true, // We will use custom markers
             polylineOptions: {
-                strokeColor: '#22c55e', // Green route line
+                strokeColor: routeColor || '#22c55e', // Default or Custom
                 strokeOpacity: 1.0,
                 strokeWeight: 6,
             }
@@ -70,7 +70,7 @@ const Directions = ({ origin, destination, onRouteData }) => {
     return null;
 };
 
-const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = false, markersProp, center, origin, destination, assignedDriver, destinationIconType = 'flag', onRouteData, className }) => {
+const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = false, markersProp, center, origin, destination, assignedDriver, destinationIconType = 'flag', onRouteData, className, routeColor = "#8A2BE2" }) => {
     const [apiKey] = useState(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '');
     const map = useMap();
 
@@ -371,6 +371,7 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                             origin={origin}
                             destination={destination}
                             onRouteData={setRouteInfo}
+                            routeColor={routeColor}
                         />
                     )}
                 </Map>
