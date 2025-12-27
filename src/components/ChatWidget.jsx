@@ -96,7 +96,13 @@ const ChatWidget = () => {
 
                     // Intense Vibration and Sound using Service
                     vibrateIntense();
-                    playIntenseBeep();
+                    // playIntenseBeep(); // Remplazado por sonido nativo de web
+                    try {
+                        const audio = new Audio('/alert_sound.wav');
+                        audio.play().catch(e => console.log('Audio play failed', e));
+                    } catch (e) {
+                        console.error("Audio Load Error:", e);
+                    }
 
                     // Native Notification for backup
                     LocalNotifications.schedule({
