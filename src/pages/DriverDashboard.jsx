@@ -438,6 +438,47 @@ const DriverDashboard = () => {
         let watcherId;
 
         const startTracking = async () => {
+            // WEB FALLBACK for Driver Tracking
+            if (!Capacitor.isNativePlatform()) {
+                console.log("WebApp: Starting standard geolocation watch");
+                if (navigator.geolocation) {
+                    watcherId = navigator.geolocation.watchPosition(
+                        async (pos) => {
+                            const { latitude, longitude } = pos.coords;
+                            console.log("📍 Web Location Update:", latitude, longitude);
+                            lastLocationRef.current = { latitude, longitude };
+                            setCurrentLoc({ lat: latitude, lng: longitude });
+
+                            if (profile?.id) {
+                                // Sync to DB
+                                await supabase.from('profiles').update({
+                                    curr_lat: latitude,
+                                    curr_lng: longitude,
+                                    last_location_update: new Date(),
+                                    status: isOnline ? 'online' : 'offline'
+                                }).eq('id', profile.id);
+
+                                // Poll for rides
+                                const { data } = await supabase.rpc('get_nearby_rides', {
+                                    driver_lat: latitude,
+                                    driver_lng: longitude,
+                                    radius_km: 5.0,
+                                    driver_vehicle_type: profile.vehicle_type || 'standard'
+                                });
+
+                                if (data && data.length > 0) {
+                                    processRequests(data, false);
+                                }
+                            }
+                        },
+                        (err) => console.error("Web Geo Error:", err),
+                        { enableHighAccuracy: true, maximumAge: 0 }
+                    );
+                }
+                return;
+            }
+
+            // NATIVE BG TRACKING
             // Request Permissions
             try {
                 const status = await BackgroundGeolocation.checkPermissions();

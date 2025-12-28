@@ -11,8 +11,34 @@ export const useGeolocation = () => {
         setLoading(true);
         setError(null);
 
+        // WEB FALLBACK (Prioritize for Browser Testing)
+        if (!Capacitor.isNativePlatform()) {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        setLocation({
+                            lat: pos.coords.latitude,
+                            lng: pos.coords.longitude
+                        });
+                        setLoading(false);
+                    },
+                    (err) => {
+                        console.error("Browser Geolocation failed:", err);
+                        setError(err.message || 'Error getting location');
+                        setLoading(false);
+                    },
+                    { enableHighAccuracy: true, timeout: 10000 }
+                );
+                return;
+            } else {
+                setError('Geolocation not supported in this browser');
+                setLoading(false);
+                return;
+            }
+        }
+
+        // NATIVE (Android/iOS)
         try {
-            // Check permissions first
             const permissionStatus = await Geolocation.checkPermissions();
 
             if (permissionStatus.location !== 'granted') {
@@ -32,32 +58,10 @@ export const useGeolocation = () => {
                 lng: position.coords.longitude
             });
         } catch (e) {
-            console.warn("Capacitor Geolocation failed, trying browser fallback:", e);
-
-            // Fallback to browser API
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => {
-                        setLocation({
-                            lat: pos.coords.latitude,
-                            lng: pos.coords.longitude
-                        });
-                        setLoading(false);
-                    },
-                    (err) => {
-                        console.error("Browser Geolocation failed:", err);
-                        setError(err.message || 'Error getting location');
-                        setLoading(false);
-                    },
-                    { enableHighAccuracy: true, timeout: 10000 }
-                );
-                return; // Browser async handling
-            } else {
-                setError(e.message || 'Geolocation not supported');
-            }
+            console.warn("Capacitor Geolocation failed:", e);
+            setError(e.message || 'Error getting location');
         } finally {
-            // Capacitor is async/await, so we can unset loading here if not falling back
-            if (!navigator.geolocation || location) setLoading(false);
+            setLoading(false);
         }
     };
 
