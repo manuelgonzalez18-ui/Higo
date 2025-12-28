@@ -206,14 +206,18 @@ const RideStatusPage = () => {
                             : (ride?.pickup_lat ? { lat: Number(ride.pickup_lat), lng: Number(ride.pickup_lng) } : null)
                     }
                     origin={
-                        (driver?.curr_lat && !isNaN(Number(driver.curr_lat))) && (ride?.status === 'in_progress' || ride?.status === 'accepted')
-                            ? { lat: Number(driver.curr_lat), lng: Number(driver.curr_lng) }
-                            : (ride?.pickup_lat ? { lat: Number(ride.pickup_lat), lng: Number(ride.pickup_lng) } : null)
+                        (ride?.status === 'searching')
+                            ? { lat: Number(ride.pickup_lat), lng: Number(ride.pickup_lng) } // Center on Pickup for Radar
+                            : ((driver?.curr_lat && !isNaN(Number(driver.curr_lat)))
+                                ? { lat: Number(driver.curr_lat), lng: Number(driver.curr_lng) } // Driver Location
+                                : { lat: Number(ride.pickup_lat), lng: Number(ride.pickup_lng) }) // Fallback
                     }
                     destination={
-                        ride?.status === 'accepted'
-                            ? { lat: Number(ride.pickup_lat), lng: Number(ride.pickup_lng) }
-                            : (ride?.dropoff_lat ? { lat: Number(ride.dropoff_lat), lng: Number(ride.dropoff_lng) } : null)
+                        (ride?.status === 'searching')
+                            ? null // No route during search
+                            : (ride?.status === 'accepted')
+                                ? { lat: Number(ride.pickup_lat), lng: Number(ride.pickup_lng) } // Route Driver -> Pickup
+                                : (ride?.dropoff_lat ? { lat: Number(ride.dropoff_lat), lng: Number(ride.dropoff_lng) } : null) // Route Driver -> Dropoff (In Progress)
                     }
                     assignedDriver={driver ? {
                         lat: !isNaN(Number(driver.curr_lat)) ? Number(driver.curr_lat) : Number(ride?.pickup_lat || 10.4850),
