@@ -52,14 +52,23 @@ const Directions = ({ origin, destination, onRouteData, routeColor }) => {
             // Extract ETA data from the first leg
             const leg = response.routes[0]?.legs[0];
             if (leg && onRouteData) {
+                const nextStep = leg.steps?.[0];
+                let nextHeading = 0;
+                if (nextStep) {
+                    const s = nextStep.start_location;
+                    const e = nextStep.end_location;
+                    nextHeading = Math.atan2(e.lng() - s.lng(), e.lat() - s.lat()) * 180 / Math.PI;
+                }
+
                 onRouteData({
-                    duration: leg.duration, // { text: "6 min", value: 360 }
+                    duration: leg.duration,
                     distance: leg.distance,
                     end_location: leg.end_location,
                     start_location: leg.start_location,
-                    next_step: leg.steps?.[0] ? {
-                        instruction: leg.steps[0].instructions,
-                        distance: leg.steps[0].distance
+                    next_step: nextStep ? {
+                        instruction: nextStep.instructions,
+                        distance: nextStep.distance,
+                        heading: nextHeading
                     } : null
                 });
             }
@@ -70,7 +79,7 @@ const Directions = ({ origin, destination, onRouteData, routeColor }) => {
     return null;
 };
 
-const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = false, markersProp, center, origin, destination, assignedDriver, destinationIconType = 'flag', onRouteData, className, routeColor = "#8A2BE2" }) => {
+const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = false, markersProp, center, origin, destination, assignedDriver, destinationIconType = 'flag', onRouteData, className, routeColor = "#8A2BE2", isDriver = false, vehicleType = 'standard' }) => {
     const [apiKey] = useState(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '');
     const map = useMap();
 
@@ -268,8 +277,8 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                     }}
                     className="w-full h-full"
                 >
-                    {/* Render Real + Simulated Drivers */}
-                    {!assignedDriver && [...drivers, ...mockDrivers].map(driver => (
+                    {/* Render Real + Simulated Drivers (Only if NOT in Driver Navigation Mode) */}
+                    {!assignedDriver && !isDriver && [...drivers, ...mockDrivers].map(driver => (
                         <AdvancedMarker
                             key={driver.id}
                             position={{ lat: driver.lat, lng: driver.lng }}
@@ -320,7 +329,7 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                     )}
 
                     {/* Custom Origin/Dest Markers for Route */}
-                    {origin && !showPin && !assignedDriver && (
+                    {origin && !showPin && !assignedDriver && !isDriver && (
                         <AdvancedMarker position={origin}>
                             {/* Updated to use Passenger Pin Icon */}
                             <div className="relative -mt-10 flex items-center justify-center">
@@ -330,6 +339,27 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                                     <div className="absolute w-20 h-20 border border-blue-500/40 rounded-full animate-ping [animation-duration:1.5s]"></div>
                                 </div>
                                 <img src={PassengerPin} className="w-12 h-12 object-contain drop-shadow-lg z-10" alt="Pickup" />
+                            </div>
+                        </AdvancedMarker>
+                    )}
+
+                    {/* DRIVER SELF ICON (Refined for Dashboard) */}
+                    {isDriver && origin && (
+                        <AdvancedMarker
+                            position={routeInfo?.start_location || origin}
+                            zIndex={100}
+                        >
+                            <div
+                                style={{
+                                    transform: `rotate(${routeInfo?.next_step?.heading || (drivers.find(d => d.lat === origin.lat)?.heading || 0)}deg)`,
+                                    transition: 'all 0.5s ease-in-out'
+                                }}
+                            >
+                                <img
+                                    src={getIconForType(vehicleType)}
+                                    className="w-16 h-16 object-contain drop-shadow-2xl"
+                                    alt="My Vehicle"
+                                />
                             </div>
                         </AdvancedMarker>
                     )}
