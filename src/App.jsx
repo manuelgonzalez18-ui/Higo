@@ -100,7 +100,14 @@ const App = () => {
   return (
     <HashRouter>
       <Routes>
-        <Route path="/" element={<RequestRidePage />} />
+        <Route
+          path="/"
+          element={
+            window.location.hostname.includes('higodriver.com')
+              ? <DriverLandingPage />
+              : <RequestRidePage />
+          }
+        />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/schedule" element={<ScheduleRidePage />} />
         <Route path="/confirm" element={<ConfirmTripPage />} />
