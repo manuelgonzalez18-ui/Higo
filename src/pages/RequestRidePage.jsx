@@ -17,6 +17,7 @@ const RequestRidePage = () => {
     const [stops, setStops] = useState([]); // Array of objects {id, address, coords}
     const [price, setPrice] = useState(0);
     const [oldPrice, setOldPrice] = useState(0);
+    const [roadDistance, setRoadDistance] = useState(0); // Store actual road distance in meters
     const [showStopConfirm, setShowStopConfirm] = useState(false);
 
     // Auto-set pickup to user location once found
@@ -44,11 +45,11 @@ const RequestRidePage = () => {
     const handleUpdateStop = (id, name, place) => {
         const newStops = stops.map(s => {
             if (s.id === id) {
-                return {
-                    ...s,
-                    address: name,
-                    coords: (place && place.lat && place.lng) ? { lat: place.lat, lng: place.lng } : null
-                };
+                const updatedStop = { ...s, address: name };
+                if (place && place.lat && place.lng) {
+                    updatedStop.coords = { lat: place.lat, lng: place.lng };
+                }
+                return updatedStop;
             }
             return s;
         });
@@ -120,35 +121,34 @@ const RequestRidePage = () => {
     };
 
     const recalculatePrice = (start, end, currentStops, rideType) => {
+        // Preference: Use road distance if available from Google Maps
+        if (roadDistance > 0) {
+            const distKm = roadDistance / 1000;
+            const validStopsCount = currentStops.filter(s => s.coords).length;
+            return calculatePrice(distKm, rideType, validStopsCount);
+        }
+
         if (start && end) {
             const dist = calculateTotalDistance(start, end, currentStops);
-            // Verify if all stops have coords to be valid 'stops' for pricing
             const validStopsCount = currentStops.filter(s => s.coords).length;
-
-            const newPrice = calculatePrice(dist, rideType, validStopsCount);
-
-            // Should we update oldPrice? 
-            // Only if we are in the flow of "adding a stop" - logic handled in effect or handlers
-            return newPrice;
+            return calculatePrice(dist, rideType, validStopsCount);
         } else {
             return VEHICLE_RATES[rideType].base;
         }
     };
 
-    // Update Price when coords or ride type changes
+    // Update Price when coords, road distance, or ride type changes
     React.useEffect(() => {
         const newPrice = recalculatePrice(pickupCoords, dropoffCoords, stops, selectedRide);
 
-        // If we just added a stop and it has coords, we might want to show the diff
-        // For now, let's just update the main price
-        // If existing stops > 0, we can calculate "Old Price" as if stops didn't exist for the modal comparison
         if (stops.length > 0 && pickupCoords && dropoffCoords) {
-            const distNoStops = getDistanceFromLatLonInKm(pickupCoords.lat, pickupCoords.lng, dropoffCoords.lat, dropoffCoords.lng);
-            const priceNoStops = calculatePrice(distNoStops, selectedRide, 0);
+            // Recalculate old price (no stops) using best available distance
+            const baseDist = roadDistance > 0 ? (roadDistance / 1000) : getDistanceFromLatLonInKm(pickupCoords.lat, pickupCoords.lng, dropoffCoords.lat, dropoffCoords.lng);
+            const priceNoStops = calculatePrice(baseDist, selectedRide, 0);
             setOldPrice(priceNoStops);
         }
         setPrice(newPrice);
-    }, [pickupCoords, dropoffCoords, selectedRide, stops]);
+    }, [pickupCoords, dropoffCoords, selectedRide, stops, roadDistance]);
 
     // Check if we should show the "Confirm Stop" modal
     React.useEffect(() => {
@@ -222,6 +222,12 @@ const RequestRidePage = () => {
                     origin={pickupCoords}
                     destination={dropoffCoords}
                     markersProp={stops}
+                    onRouteData={(data) => {
+                        if (data?.distance?.value) {
+                            console.log("🛣️ Road distance updated:", data.distance.value);
+                            setRoadDistance(data.distance.value);
+                        }
+                    }}
                 />
                 {/* Overlay Gradients */}
                 <div className="absolute inset-x-0 bottom-0 h-3/4 bg-gradient-to-t from-[#0F1014] via-[#0F1014]/90 to-transparent pointer-events-none"></div>
@@ -277,8 +283,7 @@ const RequestRidePage = () => {
                                         setPickup(name);
                                         if (place && place.lat && place.lng) {
                                             setPickupCoords({ lat: place.lat, lng: place.lng });
-                                        } else {
-                                            setPickupCoords(null);
+                                            setRoadDistance(0);
                                         }
                                     }}
                                     onMapClick={() => { /* Not implemented yet */ }}
@@ -328,8 +333,7 @@ const RequestRidePage = () => {
                                         setDropoff(name);
                                         if (place && place.lat && place.lng) {
                                             setDropoffCoords({ lat: place.lat, lng: place.lng });
-                                        } else {
-                                            setDropoffCoords(null);
+                                            setRoadDistance(0); // Reset road distance to force recalculation for new destination
                                         }
                                     }}
                                     onMapClick={() => { /* Not implemented yet */ }}
