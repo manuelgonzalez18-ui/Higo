@@ -350,10 +350,6 @@ const RequestRidePage = () => {
                                     >
                                         <span className="material-symbols-outlined text-xl mb-1">{type === 'moto' ? 'two_wheeler' : type === 'van' ? 'airport_shuttle' : 'local_taxi'}</span>
                                         <span className="text-[10px] font-bold uppercase">{type === 'van' ? 'Camioneta' : type}</span>
-                                        {/* Show Base if no coords, else calculated */}
-                                        <span className="text-sm font-bold mt-1">
-                                            ${(pickupCoords && dropoffCoords ? calculatePrice(calculateTotalDistance(pickupCoords, dropoffCoords, stops), type, stops.filter(s => s.coords).length) : VEHICLE_RATES[type].base).toFixed(2)}
-                                        </span>
                                     </button>
                                 ))}
                             </div>
