@@ -4,6 +4,7 @@ import LocationInput from '../components/LocationInput';
 import InteractiveMap from '../components/InteractiveMap';
 import { supabase } from '../services/supabase';
 import { useGeolocation } from '../hooks/useGeolocation';
+import Logo from '../assets/logo.jpg';
 
 const RequestRidePage = () => {
     const navigate = useNavigate();
@@ -240,6 +241,11 @@ const RequestRidePage = () => {
                 <button className="w-10 h-10 rounded-full bg-[#1A1F2E]/80 backdrop-blur-md flex items-center justify-center border border-white/10 shadow-lg active:scale-95 transition-transform">
                     <span className="material-symbols-outlined text-white">menu</span>
                 </button>
+
+                {/* LOGO */}
+                <div className="h-8 flex items-center justify-center">
+                    <img src={Logo} alt="HIGO" className="h-full w-auto drop-shadow-lg" />
+                </div>
 
                 {/* Profile Pill */}
                 <div onClick={handleProfileClick} className="bg-[#1A1F2E]/80 backdrop-blur-md rounded-full pl-1 pr-4 py-1 flex items-center gap-2 border border-white/10 shadow-lg cursor-pointer hover:bg-[#252A3A] transition-colors max-w-[60%]">

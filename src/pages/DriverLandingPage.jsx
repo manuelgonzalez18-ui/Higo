@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import Logo from '../assets/logo.jpg';
 
 const DriverLandingPage = () => {
     const navigate = useNavigate();
@@ -63,10 +64,7 @@ const DriverLandingPage = () => {
             {/* Nav */}
             <nav className="p-6 flex justify-between items-center max-w-7xl mx-auto relative z-10">
                 <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-                    <div className="w-10 h-10 bg-gradient-to-br from-white to-gray-400 rounded-xl flex items-center justify-center shadow-lg transform rotate-3">
-                        <span className="text-black font-black text-xl italic">H</span>
-                    </div>
-                    <span className="text-2xl font-black tracking-tighter">HIGO <span className="text-gray-500 font-light">DRIVERS</span></span>
+                    <img src={Logo} alt="Higo Logo" className="h-10 w-auto rounded-lg shadow-lg" />
                 </div>
                 <button
                     onClick={() => navigate('/auth')}
