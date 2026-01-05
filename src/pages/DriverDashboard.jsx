@@ -5,7 +5,7 @@ import InteractiveMap from '../components/InteractiveMap';
 import { generateSpeech, playAudioBuffer } from '../services/geminiService';
 import { startLoopingRequestAlert, stopLoopingRequestAlert } from '../services/notificationService';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { registerPlugin } from '@capacitor/core';
+import { registerPlugin, Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 
 const BackgroundGeolocation = registerPlugin('BackgroundGeolocation');
@@ -60,31 +60,34 @@ const DriverDashboard = () => {
             const perm = await LocalNotifications.requestPermissions();
             if (perm.display !== 'granted') console.warn('Notification permission denied');
 
-            // 1. Create Channel (v10 - Force Fresh Config)
-            await LocalNotifications.createChannel({
-                id: 'higo_rides_v11',
-                name: 'New Ride Requests (High Priority)',
-                importance: 5,
-                visibility: 1,
-                sound: 'alert_sound',
-                vibration: true
-            });
+            // Native Only: Channels and Actions
+            if (Capacitor.isNativePlatform()) {
+                // 1. Create Channel (v10 - Force Fresh Config)
+                await LocalNotifications.createChannel({
+                    id: 'higo_rides_v11',
+                    name: 'New Ride Requests (High Priority)',
+                    importance: 5,
+                    visibility: 1,
+                    sound: 'alert_sound',
+                    vibration: true
+                });
 
-            // 2. Register Actions
-            await LocalNotifications.registerActionTypes({
-                types: [
-                    {
-                        id: 'RIDE_REQUEST_ACTIONS',
-                        actions: [
-                            {
-                                id: 'ACCEPT',
-                                title: '✅ Aceptar Viaje',
-                                foreground: true // Open app when clicked
-                            }
-                        ]
-                    }
-                ]
-            });
+                // 2. Register Actions
+                await LocalNotifications.registerActionTypes({
+                    types: [
+                        {
+                            id: 'RIDE_REQUEST_ACTIONS',
+                            actions: [
+                                {
+                                    id: 'ACCEPT',
+                                    title: '✅ Aceptar Viaje',
+                                    foreground: true // Open app when clicked
+                                }
+                            ]
+                        }
+                    ]
+                });
+            }
         };
 
         setupNotifications();
