@@ -336,7 +336,7 @@ const RequestRidePage = () => {
                                     <div className="space-y-3 bg-[#0F1014]/50 p-2 rounded-2xl border border-white/5">
                                         <LocationInput
                                             placeholder="Punto de partida"
-                                            defaultValue="Ubicación Actual"
+                                            defaultValue={serviceType === 'delivery' ? "Origen - Ubicación Actual" : "Ubicación Actual"}
                                             icon="my_location"
                                             iconColor="text-blue-500"
                                             showConnector={true}
@@ -379,13 +379,13 @@ const RequestRidePage = () => {
                                                 onClick={handleAddStop}
                                                 className="w-full py-2 flex items-center justify-center gap-2 text-sm font-medium text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-xl transition-colors border border-dashed border-blue-500/30"
                                             >
-                                                <span className="material-symbols-outlined text-[18px]">add_circle</span>
+                                                <span className="material-symbols-outlined text--[18px]">add_circle</span>
                                                 <span>Agregar parada</span>
                                             </button>
                                         )}
 
                                         <LocationInput
-                                            placeholder="¿A dónde vas?"
+                                            placeholder={serviceType === 'delivery' ? "Destino del Envío" : "¿A dónde vas?"}
                                             defaultValue={dropoff}
                                             icon="location_on"
                                             iconColor="text-blue-500"
