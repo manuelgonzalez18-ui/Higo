@@ -474,34 +474,32 @@ const RequestRidePage = () => {
                     </div>
                 )
             }
-        </div>
-    );
-};
 
-{/* MODALS */ }
+            {/* MODALS */}
 
-{/* Prohibited Items Modal */ }
-<ProhibitedItemsModal
-    isOpen={showProhibitedModal}
-    onClose={() => setShowProhibitedModal(false)}
-    onConfirm={() => {
-        setShowProhibitedModal(false);
-        setShowDeliveryForm(true);
-    }}
-/>
+            {/* Prohibited Items Modal */}
+            <ProhibitedItemsModal
+                isOpen={showProhibitedModal}
+                onClose={() => setShowProhibitedModal(false)}
+                onConfirm={() => {
+                    setShowProhibitedModal(false);
+                    setShowDeliveryForm(true);
+                }}
+            />
 
-{/* Delivery Form Steps */ }
-{
-    showDeliveryForm && (
-        <DeliveryFormSteps
-            onSubmit={handleDeliveryConfirm}
-            onCancel={() => setShowDeliveryForm(false)}
-        />
+            {/* Delivery Form Steps */}
+            {
+                showDeliveryForm && (
+                    <DeliveryFormSteps
+                        onSubmit={handleDeliveryConfirm}
+                        onCancel={() => setShowDeliveryForm(false)}
+                    />
+                )
+            }
+
+        </>
     )
 }
-            
-            </>
-            )}
         </div >
     );
 };
