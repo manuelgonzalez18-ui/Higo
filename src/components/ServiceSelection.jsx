@@ -1,5 +1,5 @@
 import React from 'react';
-import StandardIcon from '../assets/standard.png'; // Reuse existing icons or placeholders
+import StandardIcon from '../assets/car_yellow_cartoon.png';
 
 const ServiceSelection = ({ onSelect }) => {
     return (
