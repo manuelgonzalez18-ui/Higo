@@ -117,6 +117,50 @@ const DriverDashboard = () => {
         };
     }, []);
 
+    // 5. Deep Link Listener for Background "Accept" Action
+    useEffect(() => {
+        const handleDeepLink = async (event) => {
+            if (event.url.includes('higo://accept')) {
+                const url = new URL(event.url); // Use URL API if compatible or simple split
+                // URL might be "higo://accept?rideId=123"
+                const rideId = url.searchParams.get('rideId') || event.url.split('rideId=')[1];
+
+                console.log("🚀 Deep Link Accepted Ride:", rideId);
+
+                if (rideId) {
+                    try {
+                        const { data: { user } } = await supabase.auth.getUser();
+                        if (user) {
+                            await supabase.from('rides')
+                                .update({ status: 'accepted', driver_id: user.id })
+                                .eq('id', rideId)
+                                .eq('status', 'requested');
+
+                            alert("¡Viaje aceptado desde notificación!");
+                            window.location.reload();
+                        }
+                    } catch (e) {
+                        console.error("Deep Link Accept Error:", e);
+                        alert("Error al aceptar viaje.");
+                    }
+                }
+            }
+        };
+
+        App.addListener('appUrlOpen', handleDeepLink);
+
+        // Check if app was launched by URL (Cold Start)
+        App.getLaunchUrl().then(launchUrl => {
+            if (launchUrl && launchUrl.url) {
+                handleDeepLink(launchUrl);
+            }
+        });
+
+        return () => {
+            App.removeAllListeners('appUrlOpen');
+        };
+    }, []);
+
     // Old duplicate effects removed
 
     const checkUser = async () => {
