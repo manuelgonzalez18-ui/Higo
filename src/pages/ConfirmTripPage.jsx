@@ -11,20 +11,6 @@ import VanIcon from '../assets/van_yellow_cartoon.png';
 const ConfirmTripPage = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const {
-        selectedRide = 'standard',
-        price = 12.50,
-        pickup = "Club Puerto Azul",
-        dropoff = "Playa Los Totumos",
-        pickupCoords = null,
-        dropoffCoords = null
-    } = location.state || {};
-
-    console.log('ConfirmTripPage State:', { selectedRide, price, pickup, dropoff });
-
-    const [loading, setLoading] = useState(false);
-    const [passengerPhone, setPassengerPhone] = useState(''); // New state for phone
-    const [paymentMethod, setPaymentMethod] = useState('cash'); // Default to cash
 
     const VEHICLE_INFO = {
         moto: {
