@@ -479,6 +479,23 @@ const RequestRidePage = () => {
                     </div>
                 )
             }
+
+            {/* MODALS FOR DELIVERY */}
+            <ProhibitedItemsModal
+                isOpen={showProhibitedModal}
+                onClose={() => setShowProhibitedModal(false)}
+                onConfirm={() => {
+                    setShowProhibitedModal(false);
+                    setShowDeliveryForm(true);
+                }}
+            />
+
+            {showDeliveryForm && (
+                <DeliveryFormSteps
+                    onCancel={() => setShowDeliveryForm(false)}
+                    onSubmit={handleDeliveryConfirm}
+                />
+            )}
         </div>
     );
 };
