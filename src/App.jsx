@@ -126,26 +126,7 @@ const App = () => {
         onDecline={handleDeclineRequest}
       />
 
-      {/* Temporary Debug Button - Remove before production */}
-      <button
-        onClick={() => {
-          // Test Native Overlay
-          try { OverlayPlugin.show(); } catch (e) { console.error(e); }
 
-          setIncomingRequest({
-            price: '1.5',
-            distance: '1.9 km',
-            duration: '15 min',
-            pickupLocation: 'Ubicación Actual',
-            pickupAddress: 'Downtown District',
-            dropoffLocation: 'Centro Comercial Flamingo',
-            dropoffAddress: 'Entrada Principal',
-          });
-        }}
-        className="fixed bottom-4 left-4 z-[60] bg-red-600 text-white px-3 py-2 text-xs font-bold rounded shadow-lg opacity-80 hover:opacity-100"
-      >
-        TEST REQUEST
-      </button>
     </HashRouter>
   );
 };
