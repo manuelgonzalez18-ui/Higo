@@ -428,8 +428,9 @@ const RequestRidePage = () => {
 
                                 </div>
                             </div>
-
-                        </div>
+                        </>
+                    )}
+                </div>
             </main>
 
             {/* CONFIRM STOP BOTTOM SHEET */}
