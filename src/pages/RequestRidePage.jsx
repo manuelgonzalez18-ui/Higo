@@ -4,7 +4,11 @@ import LocationInput from '../components/LocationInput';
 import InteractiveMap from '../components/InteractiveMap';
 import { supabase } from '../services/supabase';
 import { useGeolocation } from '../hooks/useGeolocation';
-import Logo from '../assets/logo.jpg';
+
+import ServiceSelection from '../components/ServiceSelection';
+import DeliveryFormSteps from '../components/DeliveryFormSteps';
+import ProhibitedItemsModal from '../components/ProhibitedItemsModal';
+
 
 const RequestRidePage = () => {
     const navigate = useNavigate();
@@ -20,6 +24,12 @@ const RequestRidePage = () => {
     const [oldPrice, setOldPrice] = useState(0);
     const [roadDistance, setRoadDistance] = useState(0); // Store actual road distance in meters
     const [showStopConfirm, setShowStopConfirm] = useState(false);
+
+    // NEW STATES FOR HIGO ENVÍOS
+    const [serviceType, setServiceType] = useState(null); // 'ride' | 'delivery'
+    const [showProhibitedModal, setShowProhibitedModal] = useState(false);
+    const [showDeliveryForm, setShowDeliveryForm] = useState(false);
+    const [deliveryData, setDeliveryData] = useState(null);
 
     // Auto-set pickup to user location once found
     useEffect(() => {
@@ -39,7 +49,7 @@ const RequestRidePage = () => {
         const newStops = stops.filter(s => s.id !== id);
         setStops(newStops);
         // Force recalc price
-        recalculatePrice(pickupCoords, dropoffCoords, newStops, selectedRide);
+        // The new pricing useEffect will handle this automatically
     };
 
     // Update a stop's data
@@ -80,102 +90,136 @@ const RequestRidePage = () => {
         return d;
     };
 
-    // Calculate Price
     // Calculate Price with Stops
-    const calculatePrice = (distanceKm, type, stopsCount = 0) => {
-        const rates = VEHICLE_RATES[type];
-        if (!rates) return 0;
-
-        let finalPrice = 0;
-        if (distanceKm <= 2) {
-            finalPrice = rates.base;
-        } else {
-            // Logic: Base for first 2km + (Distance - 2) * PerKm
-            finalPrice = rates.base + ((distanceKm - 2) * rates.perKm);
+    // This useEffect replaces the previous calculatePrice and recalculatePrice functions
+    useEffect(() => {
+        if (!pickupCoords || !dropoffCoords) {
+            // If no valid route, set price to base for selected ride type or 0
+            setPrice(VEHICLE_RATES[selectedRide]?.base || 0);
+            setOldPrice(0); // Reset old price
+            return;
         }
 
-        // Add Stop Fees
-        // Moto: $0.50, Others: $1.00
+        // Calculate total distance including stops
+        let totalDistanceKm = 0;
+        let currentPath = [pickupCoords, ...stops.filter(s => s.coords).map(s => s.coords), dropoffCoords];
+
+        for (let i = 0; i < currentPath.length - 1; i++) {
+            totalDistanceKm += getDistanceFromLatLonInKm(
+                currentPath[i].lat, currentPath[i].lng,
+                currentPath[i + 1].lat, currentPath[i + 1].lng
+            );
+        }
+
+        // Use roadDistance if available and more accurate for the main leg
+        // This logic needs to be refined if roadDistance is for the whole route including stops
+        // For now, let's assume roadDistance is for pickup to dropoff without stops, or the full route if map provides it.
+        // If roadDistance is for the full route, it should be used directly.
+        // If roadDistance is only for pickup-dropoff, then stop distances need to be added.
+        // For simplicity, let's use the Haversine totalDistanceKm for now, and roadDistance can be integrated later if it provides a full route.
+        const distKm = roadDistance > 0 ? (roadDistance / 1000) : totalDistanceKm;
+
+
+        let basePrice = 0;
+        let perKm = 0;
+        let serviceFee = 0;
+
+        // Pricing Logic based on selectedRide (type)
+        const type = selectedRide; // Use selectedRide from state
+
+        if (type === 'moto') {
+            basePrice = distKm <= 2 ? 0.8 : 0.8;
+            perKm = distKm > 2 ? 0.25 : 0;
+            if (serviceType === 'delivery') serviceFee = 1.0; // Delivery fee
+        } else if (type === 'standard') { // Carro
+            basePrice = distKm <= 2 ? 1.5 : 1.5;
+            perKm = distKm > 2 ? 0.40 : 0;
+            if (serviceType === 'delivery') serviceFee = 2.0;
+        } else if (type === 'van') { // Camioneta
+            basePrice = distKm <= 2 ? 1.7 : 1.7;
+            perKm = distKm > 2 ? 0.60 : 0;
+            if (serviceType === 'delivery') serviceFee = 2.5;
+        }
+
+        // Add additional stops cost
+        const validStopsCount = stops.filter(s => s.coords).length;
         const stopFee = type === 'moto' ? 0.50 : 1.00;
-        finalPrice += (stopsCount * stopFee);
+        const stopsCost = validStopsCount * stopFee;
 
-        return Math.max(finalPrice, rates.base);
-    };
+        let calculated = basePrice + (Math.max(0, distKm - 2) * perKm) + stopsCost + serviceFee;
 
-    const calculateTotalDistance = (start, end, currentStops) => {
-        if (!start || !end) return 0;
+        // Minimums check
+        if (type === 'moto' && calculated < 0.8) calculated = 0.8;
+        if (type === 'standard' && calculated < 1.5) calculated = 1.5;
+        if (type === 'van' && calculated < 1.7) calculated = 1.7;
 
-        let totalDist = 0;
-        let lastPoint = start;
+        setPrice(parseFloat(calculated.toFixed(2)));
 
-        // Add distance for each stop
-        currentStops.forEach(stop => {
-            if (stop.coords) {
-                totalDist += getDistanceFromLatLonInKm(lastPoint.lat, lastPoint.lng, stop.coords.lat, stop.coords.lng);
-                lastPoint = stop.coords;
+        // Calculate old price (without stops) for comparison in modal
+        if (validStopsCount > 0) {
+            let baseDistNoStops = roadDistance > 0 ? (roadDistance / 1000) : getDistanceFromLatLonInKm(pickupCoords.lat, pickupCoords.lng, dropoffCoords.lat, dropoffCoords.lng);
+            let oldCalculated = 0;
+            if (type === 'moto') {
+                oldCalculated = (baseDistNoStops <= 2 ? 0.8 : 0.8) + (Math.max(0, baseDistNoStops - 2) * (baseDistNoStops > 2 ? 0.25 : 0)) + (serviceType === 'delivery' ? 1.0 : 0);
+                if (oldCalculated < 0.8) oldCalculated = 0.8;
+            } else if (type === 'standard') {
+                oldCalculated = (baseDistNoStops <= 2 ? 1.5 : 1.5) + (Math.max(0, baseDistNoStops - 2) * (baseDistNoStops > 2 ? 0.40 : 0)) + (serviceType === 'delivery' ? 2.0 : 0);
+                if (oldCalculated < 1.5) oldCalculated = 1.5;
+            } else if (type === 'van') {
+                oldCalculated = (baseDistNoStops <= 2 ? 1.7 : 1.7) + (Math.max(0, baseDistNoStops - 2) * (baseDistNoStops > 2 ? 0.60 : 0)) + (serviceType === 'delivery' ? 2.5 : 0);
+                if (oldCalculated < 1.7) oldCalculated = 1.7;
             }
-        });
-
-        // Add final leg
-        totalDist += getDistanceFromLatLonInKm(lastPoint.lat, lastPoint.lng, end.lat, end.lng);
-        return totalDist;
-    };
-
-    const recalculatePrice = (start, end, currentStops, rideType) => {
-        // Preference: Use road distance if available from Google Maps
-        if (roadDistance > 0) {
-            const distKm = roadDistance / 1000;
-            const validStopsCount = currentStops.filter(s => s.coords).length;
-            return calculatePrice(distKm, rideType, validStopsCount);
-        }
-
-        if (start && end) {
-            const dist = calculateTotalDistance(start, end, currentStops);
-            const validStopsCount = currentStops.filter(s => s.coords).length;
-            return calculatePrice(dist, rideType, validStopsCount);
+            setOldPrice(parseFloat(oldCalculated.toFixed(2)));
         } else {
-            return VEHICLE_RATES[rideType].base;
+            setOldPrice(0); // No stops, so no "old price" to compare
         }
-    };
 
-    // Update Price when coords, road distance, or ride type changes
-    React.useEffect(() => {
-        const newPrice = recalculatePrice(pickupCoords, dropoffCoords, stops, selectedRide);
+    }, [pickupCoords, dropoffCoords, selectedRide, stops, serviceType, roadDistance]);
 
-        if (stops.length > 0 && pickupCoords && dropoffCoords) {
-            // Recalculate old price (no stops) using best available distance
-            const baseDist = roadDistance > 0 ? (roadDistance / 1000) : getDistanceFromLatLonInKm(pickupCoords.lat, pickupCoords.lng, dropoffCoords.lat, dropoffCoords.lng);
-            const priceNoStops = calculatePrice(baseDist, selectedRide, 0);
-            setOldPrice(priceNoStops);
-        }
-        setPrice(newPrice);
-    }, [pickupCoords, dropoffCoords, selectedRide, stops, roadDistance]);
 
     // Check if we should show the "Confirm Stop" modal
     React.useEffect(() => {
-        // Simple logic: if we have valid stops and we are not yet confirming, show it?
-        // Or user explicitly clicked "Add Stop".
-        // Let's assume user fills the stop and we triggers this.
-        // For simplicity, let's check if the last added stop has coords now
         const allStopsValid = stops.length > 0 && stops.every(s => s.coords);
         if (allStopsValid && stops.length > 0 && !showStopConfirm) {
             setShowStopConfirm(true);
         }
-    }, [stops]);
+    }, [stops, showStopConfirm]);
 
-    const handleRequest = () => {
-        if (!dropoff) {
-            alert("Por favor selecciona un destino");
+    const handleRequestRide = async () => {
+        if (!pickup || !dropoff) {
+            alert('Por favor selecciona origen y destino');
             return;
         }
+
+        if (serviceType === 'delivery') {
+            // Start delivery flow: Show prohibited items first
+            setShowProhibitedModal(true);
+        } else {
+            // Normal ride flow
+            navigate('/confirm', {
+                state: {
+                    pickup, dropoff, price, selectedRide, pickupCoords, dropoffCoords,
+                    serviceType: 'ride'
+                }
+            });
+        }
+    };
+
+    const handleDeliveryConfirm = (data) => {
+        setShowDeliveryForm(false);
+        setDeliveryData(data);
+
+        // Final Navigate for Delivery
         navigate('/confirm', {
             state: {
-                selectedRide,
-                price: price, // Use calculated price
                 pickup,
                 dropoff,
+                price,
+                selectedRide,
                 pickupCoords,
                 dropoffCoords,
+                serviceType: 'delivery',
+                deliveryData: data,
                 stops // Pass stops to confirm page
             }
         });
@@ -237,14 +281,21 @@ const RequestRidePage = () => {
 
             {/* HEADER - Transparent */}
             <header className="absolute top-0 left-0 right-0 z-20 px-6 py-4 flex items-center justify-between">
-                {/* Menu Button */}
-                <button className="w-10 h-10 rounded-full bg-[#1A1F2E]/80 backdrop-blur-md flex items-center justify-center border border-white/10 shadow-lg active:scale-95 transition-transform">
-                    <span className="material-symbols-outlined text-white">menu</span>
-                </button>
-
-                {/* LOGO */}
-                <div className="h-8 flex items-center justify-center">
-                    <img src={Logo} alt="HIGO" className="h-full w-auto drop-shadow-lg" />
+                {/* Header / Back Button / Service Title */}
+                <div className="flex items-center gap-4 relative z-10">
+                    {/* Back logic: If selecting service, back to null? Or back to home? */}
+                    {/* If in main flow, back to service selection if needed */}
+                    <button
+                        onClick={() => serviceType ? setServiceType(null) : navigate('/')}
+                        className="w-10 h-10 rounded-full bg-[#1A1F2E]/80 backdrop-blur-md flex items-center justify-center border border-white/10 shadow-lg active:scale-95 transition-transform"
+                    >
+                        <span className="material-symbols-outlined text-white">arrow_back</span>
+                    </button>
+                    <div className="flex flex-col">
+                        <h1 className="text-xl font-bold text-white">
+                            {serviceType === 'delivery' ? 'Higo Envíos' : serviceType === 'ride' ? 'Solicitar Viaje' : 'Hola, Manuel'}
+                        </h1>
+                    </div>
                 </div>
 
                 {/* Profile Pill */}
@@ -355,7 +406,7 @@ const RequestRidePage = () => {
                                         className={`flex-1 flex flex-col items-center justify-center p-3 rounded-xl border transition-all ${selectedRide === type ? 'bg-blue-600 border-blue-500 shadow-lg shadow-blue-500/20' : 'bg-[#0F1014] border-white/5 hover:bg-[#1E293B]'}`}
                                     >
                                         <span className="material-symbols-outlined text-xl mb-1">{type === 'moto' ? 'two_wheeler' : type === 'van' ? 'airport_shuttle' : 'local_taxi'}</span>
-                                        <span className="text-[10px] font-bold uppercase">{type === 'van' ? 'Camioneta' : type}</span>
+                                        <span className="text-[10px] font-bold uppercase">{type === 'van' ? 'Camioneta' : type === 'standard' ? 'Carro' : type}</span>
                                     </button>
                                 ))}
                             </div>
@@ -427,4 +478,30 @@ const RequestRidePage = () => {
     );
 };
 
-export default RequestRidePage;
+{/* MODALS */ }
+
+{/* Prohibited Items Modal */ }
+<ProhibitedItemsModal
+    isOpen={showProhibitedModal}
+    onClose={() => setShowProhibitedModal(false)}
+    onConfirm={() => {
+        setShowProhibitedModal(false);
+        setShowDeliveryForm(true);
+    }}
+/>
+
+{/* Delivery Form Steps */ }
+{
+    showDeliveryForm && (
+        <DeliveryFormSteps
+            onSubmit={handleDeliveryConfirm}
+            onCancel={() => setShowDeliveryForm(false)}
+        />
+    )
+}
+            
+            </>
+            )}
+        </div >
+    );
+};

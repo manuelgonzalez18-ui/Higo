@@ -34,7 +34,7 @@ const ConfirmTripPage = () => {
             image: MotoIcon
         },
         standard: {
-            title: 'Higo Estándar',
+            title: 'Higo Carro',
             icon: 'local_taxi',
             seats: '4 asientos',
             image: StandardIcon
@@ -46,8 +46,35 @@ const ConfirmTripPage = () => {
             image: VanIcon
         }
     };
+    // Safe destructure with defaults
+    const {
+        pickup, dropoff, price, selectedRide,
+        pickupCoords, dropoffCoords, serviceType, deliveryData
+    } = location.state || {};
 
-    const currentVehicle = VEHICLE_INFO[selectedRide] || VEHICLE_INFO['standard'];
+    // Fallback if accessed directly (should guard ideally)
+    if (!pickup) return <div className="p-10 text-white">No trip data found. Go back.</div>;
+
+    console.log('ConfirmTripPage State:', { selectedRide, price, pickup, dropoff, serviceType, deliveryData });
+
+    const [loading, setLoading] = useState(false);
+    const [passengerPhone, setPassengerPhone] = useState(''); // New state for phone
+    const [paymentMethod, setPaymentMethod] = useState('cash'); // Default to cash
+
+    // Dynamic Vehicle Info with Weight Limits for Delivery
+    const getVehicleInfo = () => {
+        const base = VEHICLE_INFO[selectedRide] || VEHICLE_INFO['standard'];
+        if (serviceType === 'delivery') {
+            return {
+                ...base,
+                seats: selectedRide === 'moto' ? 'Max 4kg' : selectedRide === 'standard' ? 'Max 40kg' : 'Max 100kg',
+                icon: 'action_key' // Or keep vehicle icon
+            };
+        }
+        return base;
+    };
+
+    const currentVehicle = getVehicleInfo();
 
     const handleConfirm = async () => {
         setLoading(true);
@@ -75,7 +102,12 @@ const ConfirmTripPage = () => {
                     pickup_lat: pickupCoords?.lat || null,
                     pickup_lng: pickupCoords?.lng || null,
                     dropoff_lat: dropoffCoords?.lat || null,
-                    dropoff_lng: dropoffCoords?.lng || null
+                    dropoff_lng: dropoffCoords?.lng || null,
+
+                    // New Delivery Fields
+                    service_type: serviceType || 'ride',
+                    delivery_info: deliveryData || null,
+                    payer: deliveryData?.payer || 'sender'
                 }])
                 .select(); // Return inserted data
 
@@ -115,7 +147,7 @@ const ConfirmTripPage = () => {
                     <button onClick={() => navigate(-1)} className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white/20 transition-all">
                         <span className="material-symbols-outlined text-white">arrow_back</span>
                     </button>
-                    <h1 className="text-lg font-bold">Confirmar Viaje</h1>
+                    <h1 className="text-lg font-bold">{serviceType === 'delivery' ? 'Confirmar Envío' : 'Confirmar Viaje'}</h1>
                     <div className="w-10"></div>
                 </div>
 
@@ -162,12 +194,17 @@ const ConfirmTripPage = () => {
                             <p className="text-blue-500 text-xs font-bold uppercase mb-0.5">Mejor Precio</p>
                             <h3 className="font-bold text-lg">{currentVehicle.title}</h3>
                             <p className="text-xs text-gray-400 flex items-center gap-1">
-                                <span className="material-symbols-outlined text-[10px]">person</span> {currentVehicle.seats} • 5 min lejos
+                                <span className="material-symbols-outlined text-[10px]">{serviceType === 'delivery' ? 'weight' : 'person'}</span> {currentVehicle.seats} • 5 min lejos
                             </p>
                         </div>
                     </div>
                     <div className="text-right">
                         <p className="text-white font-black text-3xl">${price.toFixed(2)}</p>
+                        {serviceType === 'delivery' && (
+                            <p className="text-[10px] text-gray-500 mt-1">
+                                {deliveryData?.payer === 'receiver' ? 'Paga Destinatario' : 'Paga Remitente'}
+                            </p>
+                        )}
                     </div>
                 </div>
 

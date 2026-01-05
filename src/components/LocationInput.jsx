@@ -17,16 +17,22 @@ const LocationInput = ({
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [isTyping, setIsTyping] = useState(false);
     const wrapperRef = useRef(null);
+    const inputRef = useRef(null);
+
+    // Sync state with defaultValue if it changes from outside
+    useEffect(() => {
+        setValue(defaultValue);
+    }, [defaultValue]);
 
     // Debounce search
     useEffect(() => {
         const timer = setTimeout(async () => {
-            if (isTyping && value.length > 3) {
+            if (isTyping && value.length > 2) { // Reduced from 3 to 2
                 const results = await searchPlaces(value);
                 setSuggestions(results);
                 setShowSuggestions(true);
             }
-        }, 1000); // 1 second debounce to avoid too many API calls
+        }, 500); // Reduced from 1000 to 500ms debounce
 
         return () => clearTimeout(timer);
     }, [value, isTyping]);
@@ -72,12 +78,16 @@ const LocationInput = ({
             </div>
 
             <input
+                ref={inputRef}
                 className="w-full pl-14 pr-10 py-3 bg-gray-50 dark:bg-[#152323] border-0 rounded-lg text-gray-800 dark:text-white placeholder:text-gray-400 focus:ring-2 focus:ring-blue-600 font-medium shadow-sm transition-all focus:outline-none"
                 placeholder={placeholder}
                 type="text"
                 value={value}
                 onChange={handleChange}
-                onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true) }}
+                onFocus={(e) => {
+                    e.target.select(); // Better UX for "Ubicación Actual"
+                    if (suggestions.length > 0) setShowSuggestions(true);
+                }}
             />
 
             {onRemove && (

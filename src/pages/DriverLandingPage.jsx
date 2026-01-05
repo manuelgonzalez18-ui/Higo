@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
-import Logo from '../assets/logo.jpg';
+
 
 const DriverLandingPage = () => {
     const navigate = useNavigate();
@@ -64,7 +64,7 @@ const DriverLandingPage = () => {
             {/* Nav */}
             <nav className="p-6 flex justify-between items-center max-w-7xl mx-auto relative z-10">
                 <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-                    <img src={Logo} alt="Higo Logo" className="h-10 w-auto rounded-lg shadow-lg" />
+                    {/* Logo removed temporarily */}
                 </div>
                 <button
                     onClick={() => navigate('/auth')}
@@ -160,7 +160,7 @@ const DriverLandingPage = () => {
                                     >
                                         <option value="" disabled>Seleccionar tipo</option>
                                         <option value="moto">Moto</option>
-                                        <option value="standard">Carro (Standard)</option>
+                                        <option value="standard">Carro</option>
                                         <option value="van">Camioneta / Van</option>
                                     </select>
                                 </div>

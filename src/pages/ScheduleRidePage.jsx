@@ -121,7 +121,7 @@ const ScheduleRidePage = () => {
                                         <div className="grid grid-cols-2 gap-3">
                                             <button className="flex flex-col items-center justify-center p-4 rounded-2xl border-2 border-blue-500 bg-blue-500/10 transition-all relative overflow-hidden group">
                                                 <span className="material-symbols-outlined text-blue-400 mb-1 text-2xl group-hover:scale-110 transition-transform">local_taxi</span>
-                                                <span className="text-xs font-bold text-white">Standard</span>
+                                                <span className="text-xs font-bold text-white">Carro</span>
                                                 <div className="absolute inset-0 bg-blue-500/5 group-hover:bg-blue-500/10 transition-colors"></div>
                                             </button>
                                             <button className="flex flex-col items-center justify-center p-4 rounded-2xl border border-white/5 bg-[#0F1014] hover:bg-white/5 transition-all group">
@@ -196,7 +196,7 @@ const ScheduleRidePage = () => {
                                             <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Total Estimado</p>
                                             <h2 className="text-3xl font-black text-white">$12.50</h2>
                                         </div>
-                                        <span className="bg-blue-500/20 text-blue-300 px-3 py-1 rounded-lg text-xs font-bold border border-blue-500/30">Standard</span>
+                                        <span className="bg-blue-500/20 text-blue-300 px-3 py-1 rounded-lg text-xs font-bold border border-blue-500/30">Carro</span>
                                     </div>
 
                                     <div className="space-y-4">
