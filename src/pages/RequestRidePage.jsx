@@ -417,7 +417,7 @@ const RequestRidePage = () => {
 
                                     {/* CTA BUTTON */}
                                     <button
-                                        onClick={handleRequest}
+                                        onClick={handleRequestRide}
                                         className="w-full py-4 bg-blue-600 hover:bg-blue-700 rounded-xl font-bold text-white text-lg shadow-lg shadow-blue-600/25 flex items-center justify-center gap-2 relative overflow-hidden group active:scale-[0.98] transition-all"
                                     >
                                         <span className="relative z-10">Pedir Higo</span>
