@@ -47,7 +47,7 @@ const DeliveryFormSteps = ({ onSubmit, onCancel }) => {
                     <div className="flex flex-col gap-6">
                         <div className="bg-[#1A1F2E] p-4 rounded-2xl border border-white/5">
                             <h3 className="text-emerald-400 text-sm font-bold uppercase mb-4 flex items-center gap-2">
-                                <span className="material-symbols-outlined text-lg">call_made</span> Quien Envía (Tú)
+                                <span className="material-symbols-outlined text-lg">call_made</span> Quien Envía
                             </h3>
                             <input
                                 placeholder="Nombre y Apellido"
@@ -117,7 +117,7 @@ const DeliveryFormSteps = ({ onSubmit, onCancel }) => {
                                 onClick={() => handleChange('payer', 'sender')}
                                 className={`p-4 rounded-full font-bold text-lg border transition-all ${data.payer === 'sender' ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/30' : 'bg-transparent border-gray-600 text-gray-400 hover:border-white'}`}
                             >
-                                Yo (Pago al retirar)
+                                Remitente (Pago al retirar)
                             </button>
                             <button
                                 onClick={() => handleChange('payer', 'receiver')}
