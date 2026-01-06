@@ -8,7 +8,42 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { registerPlugin, Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 
-const BackgroundGeolocation = registerPlugin('BackgroundGeolocation');
+const BackgroundGeolocation = Capacitor.isNativePlatform() ? registerPlugin('BackgroundGeolocation') : null;
+
+class ErrorBoundary extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null, errorInfo: null };
+    }
+
+    static getDerivedStateFromError(error) {
+        return { hasError: true };
+    }
+
+    componentDidCatch(error, errorInfo) {
+        this.setState({ error, errorInfo });
+        console.error("DriverDashboard Crash:", error, errorInfo);
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div style={{ padding: 20, background: '#0F172A', color: 'white', height: '100vh', overflow: 'auto' }}>
+                    <h1 style={{ color: '#EF4444', fontSize: '24px', fontWeight: 'bold' }}>⚠️ Crash Detected</h1>
+                    <p style={{ marginTop: 10, fontSize: '18px' }}>{this.state.error && this.state.error.toString()}</p>
+                    <pre style={{ marginTop: 10, fontSize: '12px', background: '#000', padding: 10, borderRadius: 5, overflowX: 'auto' }}>
+                        {this.state.errorInfo && this.state.errorInfo.componentStack}
+                    </pre>
+                    <button onClick={() => window.location.reload()} style={{ marginTop: 20, padding: '10px 20px', background: '#3B82F6', color: 'white', borderRadius: 8, border: 'none' }}>
+                        Reload Page
+                    </button>
+                </div>
+            );
+        }
+
+        return this.props.children;
+    }
+}
 
 const DriverDashboard = () => {
     const navigate = useNavigate();
@@ -991,4 +1026,11 @@ const DriverDashboard = () => {
     );
 };
 
-export default DriverDashboard;
+// Wrap export with Error Boundary
+const SafeDriverDashboard = (props) => (
+    <ErrorBoundary>
+        <DriverDashboard {...props} />
+    </ErrorBoundary>
+);
+
+export default SafeDriverDashboard;
