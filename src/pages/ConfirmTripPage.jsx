@@ -54,7 +54,7 @@ const ConfirmTripPage = () => {
             return {
                 ...base,
                 seats: selectedRide === 'moto' ? 'Max 4kg' : selectedRide === 'standard' ? 'Max 40kg' : 'Max 100kg',
-                icon: 'action_key' // Or keep vehicle icon
+                // icon: 'action_key' // Removing override to keep vehicle icon
             };
         }
         return base;
@@ -173,8 +173,12 @@ const ConfirmTripPage = () => {
                 {/* Car Selection Card */}
                 <div className="bg-[#1A1F2E] p-4 rounded-3xl border border-white/5 flex items-center justify-between shadow-lg">
                     <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
-                            <span className="material-symbols-outlined text-white text-2xl">{currentVehicle.icon}</span>
+                        <div className="w-16 h-16 flex items-center justify-center">
+                            <img
+                                src={currentVehicle.image}
+                                alt={currentVehicle.title}
+                                className="w-full h-full object-contain drop-shadow-lg"
+                            />
                         </div>
                         <div>
                             <p className="text-blue-500 text-xs font-bold uppercase mb-0.5">Mejor Precio</p>

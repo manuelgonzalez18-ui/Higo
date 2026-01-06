@@ -66,6 +66,16 @@ const DriverRequestCard = ({ request, onAccept, onDecline, isVisible }) => {
                     </div>
                 </div>
 
+                {/* Instructions / Mandado Details */}
+                {(request.instructions || request.delivery_instructions) && (
+                    <div className="mb-4 bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-xl">
+                        <p className="text-xs text-yellow-500 font-bold uppercase mb-1">📝 Instrucciones / Detalles</p>
+                        <p className="text-sm text-gray-200 leading-snug">
+                            {request.instructions || request.delivery_instructions}
+                        </p>
+                    </div>
+                )}
+
                 {/* Price */}
                 <div className="mb-6">
                     <p className="text-xs text-gray-400 font-semibold tracking-wider uppercase mb-1">TARIFA ESTIMADA</p>

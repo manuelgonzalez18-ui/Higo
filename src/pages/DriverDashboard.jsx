@@ -53,6 +53,7 @@ const DriverDashboard = () => {
     const [loading, setLoading] = useState(true);
     const [profile, setProfile] = useState(null);
     const [showPaymentQR, setShowPaymentQR] = useState(false);
+    const [showTripDetails, setShowTripDetails] = useState(false); // Floating Info State
     const lastLocationRef = React.useRef(null);
 
     // Navigation State
@@ -99,13 +100,13 @@ const DriverDashboard = () => {
                 const perm = await LocalNotifications.requestPermissions();
                 if (perm.display !== 'granted') console.warn('Notification permission denied');
 
-                // 1. Create Channel (v10 - Force Fresh Config)
+                // 1. Create Channel (v12 - Force Fresh Config)
                 await LocalNotifications.createChannel({
-                    id: 'higo_rides_v11',
+                    id: 'higo_rides_v12',
                     name: 'New Ride Requests (High Priority)',
                     importance: 5,
                     visibility: 1,
-                    sound: 'alert_sound',
+                    sound: 'alert_sound.wav', // Try with extension for raw resource match if previous failed
                     vibration: true
                 });
 
@@ -436,7 +437,7 @@ const DriverDashboard = () => {
                         body: `$${ride.price} - ${ride.dropoff}${distText}`,
                         id: new Date().getTime(),
                         schedule: { at: new Date(Date.now() + 50) }, // Almost immediate
-                        channelId: 'higo_rides_v11',
+                        channelId: 'higo_rides_v12',
                         // smallIcon removed to use system default
                         actionTypeId: 'RIDE_REQUEST_ACTIONS', // Attach Action Button
                         extra: { rideId: ride.id },
@@ -451,8 +452,32 @@ const DriverDashboard = () => {
         }
     }, [LocalNotifications]); // Actually LocalNotifications is imported
 
-    const processRequests = useCallback((newRides, replace = false) => {
+    const processRequests = useCallback((incomingRides, replace = false) => {
         if (!profile) return;
+
+        // Parse Instructions for Higo Mandado
+        const newRides = incomingRides.map(ride => {
+            // Ensure delivery_info is parsed if string
+            let dInfo = ride.delivery_info;
+            if (typeof dInfo === 'string') {
+                try { dInfo = JSON.parse(dInfo); } catch (e) { console.error("Error parsing delivery_info", e); }
+            }
+
+            // Helper for legacy view (if needed), but main Modal uses dInfo directly
+            let deliveryInstructions = null;
+            if (dInfo && typeof dInfo === 'object') {
+                deliveryInstructions = dInfo.destInstructions || dInfo.instructions || dInfo.description;
+            } else if (ride.delivery_instructions) {
+                deliveryInstructions = ride.delivery_instructions;
+            }
+
+            return {
+                ...ride,
+                delivery_info: dInfo, // Explicitly ensure parsed object is passed
+                instructions: deliveryInstructions,
+                delivery_instructions: deliveryInstructions
+            };
+        });
 
         // Normalize Driver Vehicle (Handle 'Carro' from DB)
         let driverVehicleType = profile.vehicle_type ? profile.vehicle_type.toLowerCase() : 'standard';
@@ -724,13 +749,57 @@ const DriverDashboard = () => {
 
     const handleCompleteStep = async () => {
         if (navStep === 1) {
-            setNavStep(2);
-            speak(`Arrived at pickup. Start trip to ${activeRide.dropoff}`);
-            await supabase.from('rides').update({ status: 'in_progress' }).eq('id', activeRide.id);
+            // ARRIVED AT PICKUP
+
+            // Check if Sender Pays (Higo Mandado)
+            const isSenderPayer = activeRide?.delivery_info?.payer === 'sender' || activeRide?.payer === 'sender';
+
+            if (isSenderPayer) {
+                // Determine if we need to show QR NOW (at Pickup)
+                speak("Llegada al origen. El remitente debe pagar ahora.");
+                setShowPaymentQR(true);
+                // We pause state advance until QR is closed/confirmed
+            } else {
+                // Standard Flow (Pay at End) or Receiver Pays
+                setNavStep(2);
+                speak(`Recogida exitosa. Iniciando viaje a ${activeRide.dropoff}`);
+                await supabase.from('rides').update({ status: 'in_progress' }).eq('id', activeRide.id);
+            }
+
         } else if (navStep === 2) {
+            // ARRIVED AT DROPOFF (Terminating)
             await supabase.from('rides').update({ status: 'completed' }).eq('id', activeRide.id);
-            speak(`Trip completed. Please show payment QR to passenger.`);
-            setShowPaymentQR(true);
+
+            const isSenderPayer = activeRide?.delivery_info?.payer === 'sender' || activeRide?.payer === 'sender';
+
+            if (isSenderPayer) {
+                // Already paid at start, just finish
+                speak("Viaje finalizado. Gracias.");
+                closeRide();
+            } else {
+                // Receiver Pays or Standard Passenger
+                speak(`Viaje completado. Muestre el código QR para el pago.`);
+                setShowPaymentQR(true);
+            }
+        }
+    };
+
+    // Handler for closing QR and advancing state
+    const handleQRClosed = async () => {
+        setShowPaymentQR(false);
+
+        // If we were at Step 1 (Sender Paid), move to Step 2
+        if (navStep === 1) {
+            setNavStep(2);
+            speak(`Pago confirmado. Iniciando viaje al destino.`);
+            await supabase.from('rides').update({ status: 'in_progress' }).eq('id', activeRide.id);
+        } else {
+            // If we were at Step 2 (Receiver Paid), finish
+            setActiveRide(null);
+            setNavStep(0);
+            setRequests([]);
+            stopLoopingRequestAlert();
+            window.location.reload();
         }
     };
 
@@ -814,7 +883,7 @@ const DriverDashboard = () => {
                     <div className="flex-1 flex flex-col justify-between p-4 pt-10 relative pointer-events-none">
 
                         {/* Top: Direction Pill */}
-                        <div className="bg-[#0F172A] rounded-full p-4 pl-6 pr-6 shadow-2xl border border-white/10 flex items-center justify-between mx-auto w-full max-w-sm pointer-events-auto animate-in slide-in-from-top-4">
+                        <div className="bg-[#0F172A] rounded-full p-4 pl-6 pr-6 shadow-2xl border border-white/10 flex items-center justify-between mx-auto w-full max-w-sm pointer-events-auto animate-in slide-in-from-top-4 relative z-20">
                             <div className="flex items-center gap-4">
                                 <div className="w-10 h-10 bg-[#252A3A] rounded-xl flex items-center justify-center">
                                     <span className="material-symbols-outlined text-white text-xl">turn_right</span>
@@ -830,6 +899,14 @@ const DriverDashboard = () => {
                                 </div>
                             </div>
                         </div>
+
+                        {/* FLOATING TRIP DETAILS BUTTON */}
+                        <button
+                            onClick={() => setShowTripDetails(true)}
+                            className="absolute top-28 right-4 w-12 h-12 bg-white text-blue-600 rounded-full shadow-xl flex items-center justify-center border-4 border-[#0F172A] pointer-events-auto z-20 animate-bounce-in active:scale-90 transition-transform"
+                        >
+                            <span className="material-symbols-outlined text-2xl">info</span>
+                        </button>
 
                         {/* Bottom: Passenger Card & Action */}
                         <div className="bg-[#0F172A] rounded-[32px] p-5 shadow-2xl border border-white/10 pointer-events-auto animate-in slide-in-from-bottom-10 pointer-events-auto mt-auto">
@@ -916,6 +993,28 @@ const DriverDashboard = () => {
                                     <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">TARIFA ESTIMADA</p>
                                     <h1 className="text-4xl font-extrabold text-white">${parseFloat(req.price).toFixed(2)}</h1>
                                 </div>
+
+                                {/* Delivery Badge - LARGE WHITE TEXT */}
+                                {(req.service_type === 'delivery' || req.delivery_info) && (
+                                    <div className="mb-4 bg-yellow-600 p-4 rounded-xl text-center shadow-lg animate-pulse">
+                                        <h1 className="text-2xl font-black text-white uppercase tracking-widest drop-shadow-md">
+                                            📦 HIGO MANDADO
+                                        </h1>
+                                        <p className="text-white/90 text-xs font-bold mt-1">
+                                            VER DETALLES EN BURBUJA (ℹ️)
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Delivery Instructions - Simplified */}
+                                {(req.instructions || req.delivery_instructions) && (
+                                    <div className="mb-6 bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-xl">
+                                        <p className="text-[10px] text-yellow-500 font-bold uppercase mb-1">📝 Detalles del Envío</p>
+                                        <p className="text-sm text-gray-200 leading-snug">
+                                            {req.instructions || req.delivery_instructions}
+                                        </p>
+                                    </div>
+                                )}
 
                                 <div className="space-y-6 relative pl-3 mb-8">
                                     {/* Timeline Line */}
@@ -1007,15 +1106,112 @@ const DriverDashboard = () => {
                             </p>
 
                             <button
-                                onClick={() => {
-                                    setShowPaymentQR(false);
-                                    setActiveRide(null);
-                                    setNavStep(0);
-                                    window.location.reload();
-                                }}
+                                onClick={handleQRClosed}
                                 className="w-full py-4 bg-white text-black rounded-[20px] font-bold text-lg hover:bg-gray-100 transition-colors shadow-lg active:scale-95"
                             >
-                                Cerrar y Listo
+                                {navStep === 1 ? 'Pago Recibido - Continuar' : 'Cerrar y Listo'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* FLOATING TRIP DETAILS MODAL */}
+                {showTripDetails && activeRide && (
+                    <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in duration-200 pointer-events-auto">
+                        <div className="bg-[#1A1F2E] w-full max-w-md rounded-[32px] p-0 shadow-2xl border border-white/10 relative overflow-hidden flex flex-col max-h-[80vh]">
+
+                            {/* Header */}
+                            <div className="p-6 bg-[#0F172A] border-b border-white/5 flex justify-between items-center">
+                                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-blue-500">assignment</span>
+                                    Detalles del Viaje
+                                </h2>
+                                <button
+                                    onClick={() => setShowTripDetails(false)}
+                                    className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+                                >
+                                    <span className="material-symbols-outlined text-white text-sm">close</span>
+                                </button>
+                            </div>
+
+                            {/* Scrollable Content */}
+                            <div className="p-6 overflow-y-auto custom-scrollbar space-y-6">
+
+                                {/* HIGO MANDADO SECTION */}
+                                {(activeRide.service_type === 'delivery' || activeRide.delivery_info) && (
+                                    <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-4">
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-500">
+                                                <span className="material-symbols-outlined">package_2</span>
+                                            </div>
+                                            <div>
+                                                <h3 className="text-yellow-500 font-bold text-sm uppercase tracking-wider">HIGO MANDADO</h3>
+                                                <p className="text-xs text-gray-400">
+                                                    Paga: <span className="text-white font-bold uppercase">{activeRide.delivery_info?.payer === 'sender' ? 'Remitente (Salida)' : 'Destinatario (Llegada)'}</span>
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            {/* PICKUP / SENDER */}
+                                            <div className="bg-yellow-500/5 p-3 rounded-xl border border-yellow-500/10">
+                                                <p className="text-[10px] text-yellow-500/70 font-bold uppercase mb-1">📍 QUIEN ENVÍA (REMITENTE)</p>
+                                                <p className="text-white font-bold text-sm">{activeRide.delivery_info?.senderName || "Usuario"}</p>
+                                                <p className="text-gray-400 text-xs mb-2">{activeRide.delivery_info?.senderPhone || activeRide.passenger_phone || "--"}</p>
+                                                <div className="text-xs text-gray-300 bg-black/20 p-2 rounded-lg">
+                                                    <span className="font-bold block mb-0.5 text-gray-500">Instrucciones de Retiro:</span>
+                                                    {activeRide.delivery_info?.originInstructions || "Llamar al llegar."}
+                                                </div>
+                                            </div>
+
+                                            {/* DROPOFF / RECEIVER */}
+                                            <div className="bg-yellow-500/5 p-3 rounded-xl border border-yellow-500/10">
+                                                <p className="text-[10px] text-yellow-500/70 font-bold uppercase mb-1">🏁 QUIEN RECIBE (DESTINATARIO)</p>
+                                                <p className="text-white font-bold text-sm">{activeRide.delivery_info?.receiverName || "--"}</p>
+                                                <p className="text-gray-400 text-xs mb-2">{activeRide.delivery_info?.receiverPhone || "--"}</p>
+                                                <div className="text-xs text-gray-300 bg-black/20 p-2 rounded-lg">
+                                                    <span className="font-bold block mb-0.5 text-gray-500">Instrucciones de Entrega:</span>
+                                                    {activeRide.delivery_info?.destInstructions || activeRide.instructions || "Entregar en puerta."}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* LOCATIONS */}
+                                <div className="space-y-6 relative pl-3">
+                                    <div className="absolute left-[5.5px] top-2 bottom-6 w-0.5 bg-slate-700 border-l border-dashed border-slate-600"></div>
+
+                                    <div>
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1 pl-5">ORIGEN</p>
+                                        <div className="flex items-start gap-3">
+                                            <div className="w-3 h-3 rounded-full border-2 border-gray-400 bg-[#1A1F2E] z-10 mt-1 shrink-0"></div>
+                                            <p className="text-white font-medium text-base leading-tight">{activeRide.pickup}</p>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1 pl-5">DESTINO</p>
+                                        <div className="flex items-start gap-3">
+                                            <div className="w-3 h-3 rounded-full bg-blue-500 z-10 mt-1 shrink-0"></div>
+                                            <p className="text-white font-medium text-base leading-tight">{activeRide.dropoff}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* FARE */}
+                                <div className="pt-4 border-t border-white/10 flex justify-between items-center">
+                                    <p className="text-xs text-gray-400 font-bold uppercase">Tarifa Total</p>
+                                    <p className="text-white font-black text-3xl">${activeRide.price}</p>
+                                </div>
+
+                            </div>
+
+                            <button
+                                onClick={() => setShowTripDetails(false)}
+                                className="m-6 mt-0 bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-bold shadow-lg active:scale-95 transition-all"
+                            >
+                                Entendido, Volver al Mapa
                             </button>
                         </div>
                     </div>

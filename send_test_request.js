@@ -38,7 +38,17 @@ const message = {
         pickupLocation: 'Plaza Altamira',
         pickupAddress: 'Av. Francisco de Miranda',
         dropoffLocation: 'CCCT',
-        dropoffAddress: 'Chuao'
+        dropoffAddress: 'Chuao',
+        delivery_info: {
+            description: "Paquete de documentos",
+            destInstructions: "Entregar en recepción a la Sra. Martinez.",
+            originInstructions: "Pasar buscando por la oficina 3B.",
+            senderName: "Juan Pérez (Remitente)",
+            senderPhone: "+58 412 123 4567",
+            receiverName: "Ana García (Destinatario)",
+            receiverPhone: "+58 414 987 6543",
+            payer: "sender" // Change to 'receiver' to test other flow
+        }
     },
     android: {
         priority: 'high',
