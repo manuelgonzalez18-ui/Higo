@@ -56,12 +56,14 @@ const DriverDashboard = () => {
             if (notificationSetupDone.current) return;
             notificationSetupDone.current = true; // Mark as done
 
-            // 0. Request Permissions FIRST
-            const perm = await LocalNotifications.requestPermissions();
-            if (perm.display !== 'granted') console.warn('Notification permission denied');
+
 
             // Native Only: Channels and Actions
             if (Capacitor.isNativePlatform()) {
+                // 0. Request Permissions FIRST (Native only)
+                const perm = await LocalNotifications.requestPermissions();
+                if (perm.display !== 'granted') console.warn('Notification permission denied');
+
                 // 1. Create Channel (v10 - Force Fresh Config)
                 await LocalNotifications.createChannel({
                     id: 'higo_rides_v11',
@@ -93,30 +95,38 @@ const DriverDashboard = () => {
         setupNotifications();
 
         // 4. Action Listener
-        const listener = LocalNotifications.addListener('localNotificationActionPerformed', async (notification) => {
-            console.log('🔔 Action Performed:', notification.actionId);
-            if (notification.actionId === 'ACCEPT' || notification.actionId === 'tap') {
-                const rideId = notification.notification.extra?.rideId;
-                if (rideId) {
-                    try {
-                        const { data: { user } } = await supabase.auth.getUser();
-                        if (user) {
-                            await supabase.from('rides')
-                                .update({ status: 'accepted', driver_id: user.id })
-                                .eq('id', rideId)
-                                .eq('status', 'requested');
-                            window.location.reload();
+        // 4. Action Listener
+        let listenerHandle;
+        const registerListener = async () => {
+            if (Capacitor.isNativePlatform()) {
+                listenerHandle = await LocalNotifications.addListener('localNotificationActionPerformed', async (notification) => {
+                    console.log('🔔 Action Performed:', notification.actionId);
+                    if (notification.actionId === 'ACCEPT' || notification.actionId === 'tap') {
+                        const rideId = notification.notification.extra?.rideId;
+                        if (rideId) {
+                            try {
+                                const { data: { user } } = await supabase.auth.getUser();
+                                if (user) {
+                                    await supabase.from('rides')
+                                        .update({ status: 'accepted', driver_id: user.id })
+                                        .eq('id', rideId)
+                                        .eq('status', 'requested');
+                                    window.location.reload();
+                                }
+                            } catch (e) { console.error("Accept Error:", e); }
                         }
-                    } catch (e) { console.error("Accept Error:", e); }
-                }
+                    }
+                });
             }
-        });
+        };
+
+        registerListener();
 
         // Initialize User Check
         checkUser();
 
         return () => {
-            listener.remove();
+            if (listenerHandle) listenerHandle.remove();
         };
     }, []);
 
