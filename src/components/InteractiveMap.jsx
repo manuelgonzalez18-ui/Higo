@@ -12,6 +12,13 @@ import DestinationPin from '../assets/destination_pin_checkered.png'; // Red Pin
 // Fallback Center
 const HIGUEROTE_CENTER = { lat: 10.4850, lng: -66.0950 };
 
+const isValidCoordinate = (coord) => {
+    return coord &&
+        typeof coord.lat === 'number' && !isNaN(coord.lat) &&
+        typeof coord.lng === 'number' && !isNaN(coord.lng);
+};
+
+
 const Directions = ({ origin, destination, onRouteData, routeColor }) => {
     const map = useMap();
     const routesLibrary = useMapsLibrary('routes');
@@ -278,29 +285,32 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                     className="w-full h-full"
                 >
                     {/* Render Real + Simulated Drivers (Only if NOT in Driver Navigation Mode) */}
-                    {!assignedDriver && !isDriver && [...drivers, ...mockDrivers].map(driver => (
-                        <AdvancedMarker
-                            key={driver.id}
-                            position={{ lat: driver.lat, lng: driver.lng }}
-                            title={`Higo Driver`}
-                        >
-                            <div
-                                style={{
-                                    transform: `rotate(${driver.heading}deg)`,
-                                    transition: 'transform 1s linear'
-                                }}
+                    {!assignedDriver && !isDriver && [...drivers, ...mockDrivers].map(driver => {
+                        if (!isValidCoordinate({ lat: driver.lat, lng: driver.lng })) return null;
+                        return (
+                            <AdvancedMarker
+                                key={driver.id}
+                                position={{ lat: driver.lat, lng: driver.lng }}
+                                title={`Higo Driver`}
                             >
-                                <img
-                                    src={getIconForType(driver.type)}
-                                    className="w-10 h-10 object-contain drop-shadow-xl"
-                                    alt="vehicle"
-                                />
-                            </div>
-                        </AdvancedMarker>
-                    ))}
+                                <div
+                                    style={{
+                                        transform: `rotate(${driver.heading}deg)`,
+                                        transition: 'transform 1s linear'
+                                    }}
+                                >
+                                    <img
+                                        src={getIconForType(driver.type)}
+                                        className="w-10 h-10 object-contain drop-shadow-xl"
+                                        alt="vehicle"
+                                    />
+                                </div>
+                            </AdvancedMarker>
+                        );
+                    })}
 
                     {/* Render ASSIGNED DRIVER */}
-                    {assignedDriver && (
+                    {assignedDriver && isValidCoordinate({ lat: assignedDriver.lat, lng: assignedDriver.lng }) && (
                         <AdvancedMarker
                             position={{ lat: assignedDriver.lat, lng: assignedDriver.lng }}
                             title={assignedDriver.name || "Tu Conductor"}
@@ -329,7 +339,7 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                     )}
 
                     {/* Custom Origin/Dest Markers for Route */}
-                    {origin && !showPin && !assignedDriver && !isDriver && (
+                    {origin && !showPin && !assignedDriver && !isDriver && isValidCoordinate(origin) && (
                         <AdvancedMarker position={origin}>
                             {/* Updated to use Passenger Pin Icon */}
                             <div className="relative -mt-10 flex items-center justify-center">
@@ -344,9 +354,9 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                     )}
 
                     {/* DRIVER SELF ICON (Refined for Dashboard) */}
-                    {isDriver && origin && (
+                    {isDriver && origin && (isValidCoordinate(routeInfo?.start_location) || isValidCoordinate(origin)) && (
                         <AdvancedMarker
-                            position={routeInfo?.start_location || origin}
+                            position={isValidCoordinate(routeInfo?.start_location) ? routeInfo.start_location : origin}
                             zIndex={100}
                         >
                             <div
@@ -364,7 +374,7 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                         </AdvancedMarker>
                     )}
 
-                    {destination && !showPin && (
+                    {destination && !showPin && isValidCoordinate(destination) && (
                         <AdvancedMarker position={destination}>
                             {/* Destination Pin: Dynamic based on Prop */}
                             <div className="relative -mt-10">
@@ -380,7 +390,7 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                     )}
 
                     {/* ETA Bubble Overlay (Attach to Destination) */}
-                    {routeInfo && destination && (
+                    {routeInfo && destination && isValidCoordinate(destination) && (
                         <AdvancedMarker position={destination} zIndex={50}>
                             <div className="mb-14 bg-[#1A1E29] text-white px-3 py-1.5 rounded-xl shadow-xl flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 border border-white/10">
                                 <div className="bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">
@@ -396,7 +406,7 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
 
 
                     {/* Directions Renderer */}
-                    {origin && destination && (
+                    {origin && destination && isValidCoordinate(origin) && isValidCoordinate(destination) && (
                         <Directions
                             origin={origin}
                             destination={destination}
