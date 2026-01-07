@@ -63,6 +63,7 @@ export const searchPlaces = async (query, userLocation) => {
                 { title: "Birongo", address: "Higuerote, Miranda", lat: 10.482504309904929, lng: -66.23813050633483 },
                 { title: "Bosque de Curiepe", address: "Higuerote, Miranda", lat: 10.46071080081163, lng: -66.17747378136937 },
                 { title: "Brisas del Cocal", address: "Higuerote, Miranda", lat: 10.485371658181556, lng: -66.10726964277275 },
+                { title: "Buche Urbanizacion", address: "Higuerote, Miranda", lat: 10.547088443855559, lng: -66.09523336382708 },
                 { title: query + " (Demo)", address: "Higuerote, VE", lat: 10.4806, lng: -66.0987 },
                 { title: "Playa Los Totumos", address: "Higuerote", lat: 10.5123, lng: -66.0712 },
                 { title: "Puerto Encantado", address: "Higuerote", lat: 10.4732, lng: -66.1245 },
@@ -84,6 +85,7 @@ export const searchPlaces = async (query, userLocation) => {
             { title: "Birongo", address: "Higuerote, Miranda", lat: 10.482504309904929, lng: -66.23813050633483 },
             { title: "Bosque de Curiepe", address: "Higuerote, Miranda", lat: 10.46071080081163, lng: -66.17747378136937 },
             { title: "Brisas del Cocal", address: "Higuerote, Miranda", lat: 10.485371658181556, lng: -66.10726964277275 },
+            { title: "Buche Urbanizacion", address: "Higuerote, Miranda", lat: 10.547088443855559, lng: -66.09523336382708 },
             { title: "Playa Los Totumos", address: "Higuerote, Miranda", lat: 10.5123, lng: -66.0712 },
             { title: "Centro Comercial Flamingo", address: "Higuerote, Miranda", lat: 10.4850, lng: -66.0950 },
             { title: "Club Puerto Azul", address: "Naiguatá", lat: 10.6012, lng: -66.7321 }
