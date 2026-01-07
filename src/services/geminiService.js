@@ -65,8 +65,15 @@ export const searchPlaces = async (query, userLocation) => {
                 { title: "Brisas del Cocal", address: "Higuerote, Miranda", lat: 10.485371658181556, lng: -66.10726964277275 },
                 { title: "Buche Urbanizacion", address: "Higuerote, Miranda", lat: 10.547088443855559, lng: -66.09523336382708 },
                 { title: "Cabo Codera", address: "Higuerote, Miranda", lat: 10.475673126024594, lng: -66.09953026275525 },
+                { title: "C.C Cabo Mall", address: "Higuerote, Miranda", lat: 10.470893934731668, lng: -66.10183696237596 },
+                { title: "Calle Larga", address: "Higuerote, Miranda", lat: 10.477202873689913, lng: -66.10422949262944 },
+                { title: "Camaronera", address: "Higuerote, Miranda", lat: 10.54827675686517, lng: -66.1378337782917 },
+                { title: "Caño Madrid", address: "Higuerote, Miranda", lat: 10.43731332967169, lng: -66.05738433869561 },
+                { title: "Carenero", address: "Higuerote, Miranda", lat: 10.530882839293874, lng: -66.11379162734633 },
+                { title: "Urb Campomar", address: "Higuerote, Miranda", lat: 10.423195351936672, lng: -66.12350615494626 },
                 { title: query + " (Demo)", address: "Higuerote, VE", lat: 10.4806, lng: -66.0987 },
                 { title: "Playa Los Totumos", address: "Higuerote", lat: 10.5123, lng: -66.0712 },
+                { title: "Centro Comercial Flamingo", address: "Higuerote, Miranda", lat: 10.467939872322962, lng: -66.10413829765304 },
                 { title: "Puerto Encantado", address: "Higuerote", lat: 10.4732, lng: -66.1245 },
                 { title: "Club Puerto Azul", address: "Naiguatá (Demo)", lat: 10.6012, lng: -66.7321 }
             ];
@@ -88,8 +95,14 @@ export const searchPlaces = async (query, userLocation) => {
             { title: "Brisas del Cocal", address: "Higuerote, Miranda", lat: 10.485371658181556, lng: -66.10726964277275 },
             { title: "Buche Urbanizacion", address: "Higuerote, Miranda", lat: 10.547088443855559, lng: -66.09523336382708 },
             { title: "Cabo Codera", address: "Higuerote, Miranda", lat: 10.475673126024594, lng: -66.09953026275525 },
+            { title: "C.C Cabo Mall", address: "Higuerote, Miranda", lat: 10.470893934731668, lng: -66.10183696237596 },
+            { title: "Calle Larga", address: "Higuerote, Miranda", lat: 10.477202873689913, lng: -66.10422949262944 },
+            { title: "Camaronera", address: "Higuerote, Miranda", lat: 10.54827675686517, lng: -66.1378337782917 },
+            { title: "Caño Madrid", address: "Higuerote, Miranda", lat: 10.43731332967169, lng: -66.05738433869561 },
+            { title: "Carenero", address: "Higuerote, Miranda", lat: 10.530882839293874, lng: -66.11379162734633 },
+            { title: "Urb Campomar", address: "Higuerote, Miranda", lat: 10.423195351936672, lng: -66.12350615494626 },
             { title: "Playa Los Totumos", address: "Higuerote, Miranda", lat: 10.5123, lng: -66.0712 },
-            { title: "Centro Comercial Flamingo", address: "Higuerote, Miranda", lat: 10.4850, lng: -66.0950 },
+            { title: "Centro Comercial Flamingo", address: "Higuerote, Miranda", lat: 10.467939872322962, lng: -66.10413829765304 },
             { title: "Club Puerto Azul", address: "Naiguatá", lat: 10.6012, lng: -66.7321 }
         ];
     }
