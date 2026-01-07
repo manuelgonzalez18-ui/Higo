@@ -546,8 +546,8 @@ const DriverDashboard = () => {
                     ride.pickup_lat,
                     ride.pickup_lng
                 );
-                console.log(`📏 Distance: ${dist.toFixed(2)}km (Limit: 5km)`);
-                return dist <= 5; // Strict 5km limit per requirements
+                console.log(`📏 Distance: ${dist.toFixed(2)}km (Limit: 10km)`);
+                return dist <= 10; // Strict 10km limit per requirements
             } else {
                 console.log("⚠️ Driver location unknown, showing ride as fail-safe");
                 return true;
@@ -611,7 +611,7 @@ const DriverDashboard = () => {
                                 const { data } = await supabase.rpc('get_nearby_rides', {
                                     driver_lat: latitude,
                                     driver_lng: longitude,
-                                    radius_km: 5.0,
+                                    radius_km: 10.0,
                                     driver_vehicle_type: profile.vehicle_type || 'standard'
                                 });
 
@@ -688,7 +688,7 @@ const DriverDashboard = () => {
                             .rpc('get_nearby_rides', {
                                 driver_lat: latitude,
                                 driver_lng: longitude,
-                                radius_km: 5.0,
+                                radius_km: 10.0,
                                 driver_vehicle_type: profile.vehicle_type || 'standard'
                             });
 
