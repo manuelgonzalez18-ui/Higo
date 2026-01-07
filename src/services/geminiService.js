@@ -56,6 +56,7 @@ export const searchPlaces = async (query, userLocation) => {
             return [
                 { title: "Panaderia Bisau", address: "Higuerote, Miranda", lat: 10.48424, lng: -66.09871 },
                 { title: "Alamar", address: "Higuerote, Miranda", lat: 10.412485185404462, lng: -66.1378176707 },
+                { title: "Asocanales", address: "Higuerote, Miranda", lat: 10.498549543479797, lng: -66.1134562060818 },
                 { title: query + " (Demo)", address: "Higuerote, VE", lat: 10.4806, lng: -66.0987 },
                 { title: "Playa Los Totumos", address: "Higuerote", lat: 10.5123, lng: -66.0712 },
                 { title: "Puerto Encantado", address: "Higuerote", lat: 10.4732, lng: -66.1245 },
@@ -70,6 +71,7 @@ export const searchPlaces = async (query, userLocation) => {
         return [
             { title: "Panaderia Bisau", address: "Higuerote, Miranda", lat: 10.48424, lng: -66.09871 },
             { title: "Alamar", address: "Higuerote, Miranda", lat: 10.412485185404462, lng: -66.1378176707 },
+            { title: "Asocanales", address: "Higuerote, Miranda", lat: 10.498549543479797, lng: -66.1134562060818 },
             { title: "Playa Los Totumos", address: "Higuerote, Miranda", lat: 10.5123, lng: -66.0712 },
             { title: "Centro Comercial Flamingo", address: "Higuerote, Miranda", lat: 10.4850, lng: -66.0950 },
             { title: "Club Puerto Azul", address: "Naiguatá", lat: 10.6012, lng: -66.7321 }
