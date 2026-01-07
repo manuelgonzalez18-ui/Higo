@@ -86,7 +86,7 @@ const Directions = ({ origin, destination, onRouteData, routeColor }) => {
     return null;
 };
 
-const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = false, markersProp, center, origin, destination, assignedDriver, destinationIconType = 'flag', onRouteData, className, routeColor = "#8A2BE2", isDriver = false, vehicleType = 'standard' }) => {
+const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = false, markersProp, center, origin, heading = 0, destination, assignedDriver, destinationIconType = 'flag', onRouteData, className, routeColor = "#8A2BE2", isDriver = false, vehicleType = 'standard' }) => {
     const [apiKey] = useState(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '');
     const map = useMap();
 
@@ -361,8 +361,8 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                         >
                             <div
                                 style={{
-                                    transform: `rotate(${routeInfo?.next_step?.heading || (drivers.find(d => d.lat === origin.lat)?.heading || 0)}deg)`,
-                                    transition: 'all 0.5s ease-in-out'
+                                    transform: `rotate(${heading || routeInfo?.next_step?.heading || (drivers.find(d => d.lat === origin.lat)?.heading || 0)}deg)`,
+                                    transition: 'transform 0.5s linear' // Linear is smoother for continuous updates
                                 }}
                             >
                                 <img

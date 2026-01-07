@@ -5,6 +5,7 @@ import InteractiveMap from '../components/InteractiveMap';
 import { generateSpeech, playAudioBuffer } from '../services/geminiService';
 import { startLoopingRequestAlert, stopLoopingRequestAlert } from '../services/notificationService';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import { registerPlugin, Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 
@@ -60,14 +61,31 @@ const DriverDashboard = () => {
     const [navStep, setNavStep] = useState(0); // 0: Idle, 1: To Pickup, 2: To Dropoff
     const [instruction, setInstruction] = useState("Waiting for rides...");
     const [currentLoc, setCurrentLoc] = useState(null);
+    const [heading, setHeading] = useState(0); // Vehicle Bearing
     const [navInfo, setNavInfo] = useState(null);
     const lastInstruction = React.useRef("");
 
     // --- HELPER FUNCTIONS ---
+    // --- HELPER FUNCTIONS ---
     const speak = useCallback(async (text) => {
         setInstruction(text);
-        const buffer = await generateSpeech(text);
-        if (buffer) playAudioBuffer(buffer);
+
+        try {
+            await TextToSpeech.speak({
+                text: text,
+                lang: 'es-ES',
+                rate: 1.0,
+                pitch: 1.0,
+                volume: 1.0,
+                category: 'ambient',
+            });
+        } catch (e) {
+            console.error("TTS Error, falling back to Web Speech:", e);
+            // Fallback to Web Speech API if native fails
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'es-ES';
+            window.speechSynthesis.speak(utterance);
+        }
     }, []);
 
     const handleRouteData = useCallback((data) => {
@@ -402,6 +420,20 @@ const DriverDashboard = () => {
         return R * c;
     };
 
+    const calculateBearing = (startLat, startLng, destLat, destLng) => {
+        const startLatRad = deg2rad(startLat);
+        const startLngRad = deg2rad(startLng);
+        const destLatRad = deg2rad(destLat);
+        const destLngRad = deg2rad(destLng);
+
+        const y = Math.sin(destLngRad - startLngRad) * Math.cos(destLatRad);
+        const x = Math.cos(startLatRad) * Math.sin(destLatRad) -
+            Math.sin(startLatRad) * Math.cos(destLatRad) * Math.cos(destLngRad - startLngRad);
+        const brng = Math.atan2(y, x);
+        const brngDeg = (brng * 180 / Math.PI + 360) % 360; // Normalize to 0-360
+        return brngDeg;
+    };
+
     // --- HOISTED LOGIC FOR PROCESSING REQUESTS ---
 
     const notifyNewRequest = useCallback(async (ride) => {
@@ -612,15 +644,28 @@ const DriverDashboard = () => {
                     backgroundTitle: "Buscando Viajes...",
                     requestPermissions: true,
                     stale: false,
-                    distanceFilter: 10
+                    distanceFilter: 2 // Ultra-responsive check (2 meters)
                 },
                 async (location, error) => {
                     if (error) {
                         return;
                     }
 
-                    const { latitude, longitude } = location;
+                    const { latitude, longitude, bearing: gpsBearing } = location;
                     console.log("📍 BG Location Update:", latitude, longitude);
+
+                    // Calculate Heading
+                    let newHeading = gpsBearing;
+                    if (!newHeading && lastLocationRef.current) {
+                        newHeading = calculateBearing(
+                            lastLocationRef.current.latitude,
+                            lastLocationRef.current.longitude,
+                            latitude,
+                            longitude
+                        );
+                    }
+                    if (newHeading) setHeading(newHeading);
+
                     lastLocationRef.current = { latitude, longitude };
 
                     // Update Profile Logic
@@ -631,6 +676,7 @@ const DriverDashboard = () => {
                         await supabase.from('profiles').update({
                             curr_lat: latitude,
                             curr_lng: longitude,
+                            heading: newHeading || 0,
                             last_location_update: new Date()
                         }).eq('id', profile.id);
 
