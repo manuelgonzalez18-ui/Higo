@@ -794,11 +794,16 @@ const DriverDashboard = () => {
     };
 
     const handleCompleteStep = async () => {
+        if (!activeRide) return;
+
+        // Determine Service Type
+        const isDelivery = activeRide.service_type === 'delivery' || activeRide.delivery_info;
+
         if (navStep === 1) {
             // ARRIVED AT PICKUP
 
-            // Check if Sender Pays (Higo Mandado)
-            const isSenderPayer = activeRide?.delivery_info?.payer === 'sender' || activeRide?.payer === 'sender';
+            // Only show QR at pickup if it is a DELIVERY and SENDER is paying
+            const isSenderPayer = isDelivery && (activeRide.delivery_info?.payer === 'sender' || activeRide.payer === 'sender');
 
             if (isSenderPayer) {
                 // Determine if we need to show QR NOW (at Pickup)
@@ -808,7 +813,12 @@ const DriverDashboard = () => {
             } else {
                 // Standard Flow (Pay at End) or Receiver Pays
                 setNavStep(2);
-                speak(`Recogida exitosa. Iniciando viaje a ${activeRide.dropoff}`);
+                if (isDelivery) {
+                    speak(`Paquete recogido. Iniciando ruta de entrega.`);
+                } else {
+                    speak(`Recogida exitosa. Iniciando viaje a ${activeRide.dropoff}`);
+                }
+
                 await supabase.from('rides').update({ status: 'in_progress' }).eq('id', activeRide.id);
             }
 
@@ -816,14 +826,14 @@ const DriverDashboard = () => {
             // ARRIVED AT DROPOFF (Terminating)
             await supabase.from('rides').update({ status: 'completed' }).eq('id', activeRide.id);
 
-            const isSenderPayer = activeRide?.delivery_info?.payer === 'sender' || activeRide?.payer === 'sender';
+            const isSenderPayer = isDelivery && (activeRide.delivery_info?.payer === 'sender' || activeRide.payer === 'sender');
 
             if (isSenderPayer) {
                 // Already paid at start, just finish
-                speak("Viaje finalizado. Gracias.");
+                speak("Entrega finalizada. Gracias.");
                 closeRide();
             } else {
-                // Receiver Pays or Standard Passenger
+                // Receiver Pays or Standard Passenger (Always Pay at End)
                 speak(`Viaje completado. Muestre el código QR para el pago.`);
                 setShowPaymentQR(true);
             }
