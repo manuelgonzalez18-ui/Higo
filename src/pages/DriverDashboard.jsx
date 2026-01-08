@@ -644,31 +644,45 @@ const DriverDashboard = () => {
                     backgroundTitle: "Buscando Viajes...",
                     requestPermissions: true,
                     stale: false,
-                    distanceFilter: 2 // Ultra-responsive check (2 meters)
+                    distanceFilter: 5 // Changed from 2 to 5 for balance between precision and jitter/battery
                 },
                 async (location, error) => {
                     if (error) {
                         return;
                     }
 
-                    const { latitude, longitude, bearing: gpsBearing } = location;
-                    console.log("📍 BG Location Update:", latitude, longitude);
+                    const { latitude, longitude, bearing: gpsBearing, speed } = location;
+                    console.log("📍 BG Location Update:", latitude, longitude, "Bear:", gpsBearing, "Speed:", speed);
 
-                    // Calculate Heading
-                    let newHeading = gpsBearing;
-                    if (!newHeading && lastLocationRef.current) {
-                        newHeading = calculateBearing(
-                            lastLocationRef.current.latitude,
-                            lastLocationRef.current.longitude,
-                            latitude,
-                            longitude
+                    // Improved Heading Logic
+                    // 1. Prefer GPS Heading if moving fast enough (GPS bearing is unreliable at low speeds)
+                    let newHeading = heading; // Default to current state
+
+                    if (speed > 1 && gpsBearing) {
+                        newHeading = gpsBearing;
+                    } else if (lastLocationRef.current) {
+                        // 2. Fallback: Calculate from Delta if distance is significant
+                        const dist = getDistanceFromLatLonInKm(
+                            lastLocationRef.current.latitude, lastLocationRef.current.longitude,
+                            latitude, longitude
                         );
-                    }
-                    if (newHeading) setHeading(newHeading);
 
+                        // Only visual rotate if moved > 5 meters to avoid jittery spinning
+                        if (dist > 0.005) {
+                            newHeading = calculateBearing(
+                                lastLocationRef.current.latitude,
+                                lastLocationRef.current.longitude,
+                                latitude,
+                                longitude
+                            );
+                        }
+                    }
+
+                    // Smooth update
+                    setHeading(newHeading);
                     lastLocationRef.current = { latitude, longitude };
 
-                    // Update Profile Logic
+                    // Update Profile Logic with throttle maybe?
                     if (profile?.id) {
                         // Force re-render for map route update
                         setCurrentLoc({ lat: latitude, lng: longitude });
@@ -680,10 +694,7 @@ const DriverDashboard = () => {
                             last_location_update: new Date()
                         }).eq('id', profile.id);
 
-                        // --- BACKGROUND POLLING FOR RIDES ---
-                        // Critical: Check for rides every time we move, in case socket acts up
-                        // --- BACKGROUND POLLING FOR RIDES (RPC - 5km Radius) ---
-                        // Use PostGIS RPC for efficient server-side filtering
+                        // --- BACKGROUND POLLING FOR RIDES (RPC - 10km Radius) ---
                         const { data } = await supabase
                             .rpc('get_nearby_rides', {
                                 driver_lat: latitude,
@@ -709,7 +720,7 @@ const DriverDashboard = () => {
         return () => {
             if (watcherId) BackgroundGeolocation.removeWatcher({ id: watcherId });
         };
-    }, [isOnline, profile, processRequests]);
+    }, [isOnline, profile, processRequests, heading]);
 
 
     // --- REALTIME SUBSCRIPTION ---

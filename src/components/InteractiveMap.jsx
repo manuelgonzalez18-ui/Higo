@@ -361,7 +361,9 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                         >
                             <div
                                 style={{
-                                    transform: `rotate(${heading || routeInfo?.next_step?.heading || (drivers.find(d => d.lat === origin.lat)?.heading || 0)}deg)`,
+                                    // Prioritize implicit Heading prop from parent (which comes from GPS) over route instructions
+                                    // Route instructions are often "future" headings, but we want "current" vehicle bearing
+                                    transform: `rotate(${heading || routeInfo?.next_step?.heading || 0}deg)`,
                                     transition: 'transform 0.5s linear' // Linear is smoother for continuous updates
                                 }}
                             >
