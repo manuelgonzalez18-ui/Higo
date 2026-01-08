@@ -979,7 +979,14 @@ const DriverDashboard = () => {
                                         <span className="material-symbols-outlined text-white text-[20px]">call</span>
                                     </a>
                                     <button
-                                        onClick={() => window.dispatchEvent(new CustomEvent('open-chat', { detail: { rideId: activeRide.id, title: 'Chat con Pasajero' } }))}
+                                        onClick={() => {
+                                            if (activeRide && activeRide.id) {
+                                                window.dispatchEvent(new CustomEvent('open-chat', { detail: { rideId: activeRide.id, title: 'Chat con Pasajero' } }));
+                                            } else {
+                                                console.error("Cannot open chat: Missing activeRide ID", activeRide);
+                                                alert("Error al abrir el chat: No se encontró el ID del viaje.");
+                                            }
+                                        }}
                                         className="w-11 h-11 bg-[#252A3A] rounded-full flex items-center justify-center border border-white/5 hover:bg-[#2C3345] hover:text-blue-400 transition-colors"
                                     >
                                         <span className="material-symbols-outlined text-white text-[20px]">chat_bubble</span>

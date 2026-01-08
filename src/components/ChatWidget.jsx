@@ -152,7 +152,12 @@ const ChatWidget = () => {
 
         if (!inputValue.trim() || !rideId || !currentUserId) {
             console.error("Missing data for chat:", { inputValue, rideId, userId: currentUserId });
-            alert("Error: Faltan datos para enviar el mensaje (ID de viaje o usuario). Intenta recargar.");
+
+            let missing = [];
+            if (!rideId) missing.push("ID de viaje");
+            if (!currentUserId) missing.push("ID de usuario");
+
+            alert(`Error: Faltan datos para enviar: ${missing.join(', ')}. Intenta recargar la página.`);
             return;
         }
 
