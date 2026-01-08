@@ -1151,15 +1151,57 @@ const DriverDashboard = () => {
                                 {profile?.payment_qr_url ? (
                                     <img src={profile.payment_qr_url} alt="Payment QR" className="w-full h-full object-contain" />
                                 ) : (
-                                    <div className="text-center text-gray-400">
+                                    <div className="text-center text-gray-400 relative">
                                         <span className="material-symbols-outlined text-4xl mb-2 text-black">qr_code_scanner</span>
                                         <p className="text-black text-xs font-bold">No QR Configurado</p>
-                                        <button
-                                            onClick={() => alert("Función de carga de QR en construcción. Por favor contacta a soporte.")}
-                                            className="mt-2 text-[10px] bg-blue-100 text-blue-600 px-3 py-1 rounded-full font-bold"
-                                        >
-                                            Cargar QR
-                                        </button>
+
+                                        <label className="mt-2 inline-block">
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                className="hidden"
+                                                onChange={async (e) => {
+                                                    const file = e.target.files[0];
+                                                    if (!file) return;
+
+                                                    try {
+                                                        const fileExt = file.name.split('.').pop();
+                                                        const fileName = `${profile.id}/payment_qr.${fileExt}`;
+                                                        const filePath = `${fileName}`;
+
+                                                        // 1. Upload
+                                                        const { error: uploadError } = await supabase.storage
+                                                            .from('avatars') // Trying 'avatars' bucket first
+                                                            .upload(filePath, file, { upsert: true });
+
+                                                        if (uploadError) throw uploadError;
+
+                                                        // 2. Get Public URL
+                                                        const { data: { publicUrl } } = supabase.storage
+                                                            .from('avatars')
+                                                            .getPublicUrl(filePath);
+
+                                                        // 3. Update Profile
+                                                        const { error: updateError } = await supabase
+                                                            .from('profiles')
+                                                            .update({ payment_qr_url: publicUrl })
+                                                            .eq('id', profile.id);
+
+                                                        if (updateError) throw updateError;
+
+                                                        alert("QR Cargado Exitosamente!");
+                                                        window.location.reload();
+
+                                                    } catch (error) {
+                                                        console.error("Error uploading QR:", error);
+                                                        alert("Error al cargar QR: " + error.message);
+                                                    }
+                                                }}
+                                            />
+                                            <span className="text-[10px] bg-blue-100 text-blue-600 px-3 py-1 rounded-full font-bold cursor-pointer hover:bg-blue-200 transition-colors">
+                                                Cargar QR
+                                            </span>
+                                        </label>
                                     </div>
                                 )}
                             </div>
