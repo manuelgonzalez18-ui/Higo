@@ -928,9 +928,14 @@ const DriverDashboard = () => {
                             </span>
                         </div>
                     )}
-                    <button onClick={handleLogout} className="w-10 h-10 bg-[#0F172A]/90 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 shadow-lg hover:bg-red-500/20 transition-colors ml-auto">
-                        <span className="material-symbols-outlined text-white">logout</span>
-                    </button>
+                    <div className="flex gap-2 ml-auto">
+                        <button onClick={() => setShowPaymentQR(true)} className="w-10 h-10 bg-[#0F172A]/90 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 shadow-lg hover:bg-blue-500/20 transition-colors">
+                            <span className="material-symbols-outlined text-white">qr_code_2</span>
+                        </button>
+                        <button onClick={handleLogout} className="w-10 h-10 bg-[#0F172A]/90 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 shadow-lg hover:bg-red-500/20 transition-colors">
+                            <span className="material-symbols-outlined text-white">logout</span>
+                        </button>
+                    </div>
                 </div>
 
 
@@ -1151,64 +1156,63 @@ const DriverDashboard = () => {
                                 {profile?.payment_qr_url ? (
                                     <img src={profile.payment_qr_url} alt="Payment QR" className="w-full h-full object-contain" />
                                 ) : (
-                                    <div className="text-center text-gray-400 relative">
-                                        <span className="material-symbols-outlined text-4xl mb-2 text-black">qr_code_scanner</span>
-                                        <p className="text-black text-xs font-bold">No QR Configurado</p>
-
-                                        <label className="mt-2 inline-block">
-                                            <input
-                                                type="file"
-                                                accept="image/*"
-                                                className="hidden"
-                                                onChange={async (e) => {
-                                                    const file = e.target.files[0];
-                                                    if (!file) return;
-
-                                                    try {
-                                                        const fileExt = file.name.split('.').pop();
-                                                        const fileName = `${profile.id}/payment_qr.${fileExt}`;
-                                                        const filePath = `${fileName}`;
-
-                                                        // 1. Upload
-                                                        const { error: uploadError } = await supabase.storage
-                                                            .from('avatars') // Trying 'avatars' bucket first
-                                                            .upload(filePath, file, { upsert: true });
-
-                                                        if (uploadError) throw uploadError;
-
-                                                        // 2. Get Public URL
-                                                        const { data: { publicUrl } } = supabase.storage
-                                                            .from('avatars')
-                                                            .getPublicUrl(filePath);
-
-                                                        // 3. Update Profile
-                                                        const { error: updateError } = await supabase
-                                                            .from('profiles')
-                                                            .update({ payment_qr_url: publicUrl })
-                                                            .eq('id', profile.id);
-
-                                                        if (updateError) throw updateError;
-
-                                                        alert("QR Cargado Exitosamente!");
-                                                        window.location.reload();
-
-                                                    } catch (error) {
-                                                        console.error("Error uploading QR:", error);
-                                                        alert("Error al cargar QR: " + error.message);
-                                                    }
-                                                }}
-                                            />
-                                            <span className="text-[10px] bg-blue-100 text-blue-600 px-3 py-1 rounded-full font-bold cursor-pointer hover:bg-blue-200 transition-colors">
-                                                Cargar QR
-                                            </span>
-                                        </label>
-                                    </div>
+                                    // SHOW TEST QR IF AVAILABLE by default (simulated load)
+                                    <img src="/test_qr.png" alt="Test QR" className="w-full h-full object-contain" />
                                 )}
                             </div>
 
                             <p className="text-4xl font-black text-white mb-8 tracking-tighter">
                                 ${activeRide?.price?.toFixed(2)}
                             </p>
+
+                            {/* UPLOAD BUTTON ALWAYS VISIBLE */}
+                            <label className="block mb-6">
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={async (e) => {
+                                        const file = e.target.files[0];
+                                        if (!file) return;
+
+                                        try {
+                                            const fileExt = file.name.split('.').pop();
+                                            const fileName = `${profile.id}/payment_qr.${fileExt}`;
+                                            const filePath = `${fileName}`;
+
+                                            // 1. Upload
+                                            const { error: uploadError } = await supabase.storage
+                                                .from('avatars') // Trying 'avatars' bucket first
+                                                .upload(filePath, file, { upsert: true });
+
+                                            if (uploadError) throw uploadError;
+
+                                            // 2. Get Public URL
+                                            const { data: { publicUrl } } = supabase.storage
+                                                .from('avatars')
+                                                .getPublicUrl(filePath);
+
+                                            // 3. Update Profile
+                                            const { error: updateError } = await supabase
+                                                .from('profiles')
+                                                .update({ payment_qr_url: publicUrl })
+                                                .eq('id', profile.id);
+
+                                            if (updateError) throw updateError;
+
+                                            alert("QR Cargado Exitosamente!");
+                                            window.location.reload();
+
+                                        } catch (error) {
+                                            console.error("Error uploading QR:", error);
+                                            alert("Error al cargar QR: " + error.message);
+                                        }
+                                    }}
+                                />
+                                <span className="inline-block text-xs bg-gray-700 text-gray-300 px-4 py-2 rounded-full font-bold cursor-pointer hover:bg-gray-600 transition-colors">
+                                    Cambiar Imagen QR
+                                </span>
+                            </label>
 
                             <button
                                 onClick={handleQRClosed}
