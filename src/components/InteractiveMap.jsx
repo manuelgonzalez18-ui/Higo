@@ -361,10 +361,10 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                         >
                             <div
                                 style={{
-                                    // Prioritize implicit Heading prop from parent (which comes from GPS) over route instructions
-                                    // Route instructions are often "future" headings, but we want "current" vehicle bearing
-                                    transform: `rotate(${heading || routeInfo?.next_step?.heading || 0}deg)`,
-                                    transition: 'transform 0.5s linear' // Linear is smoother for continuous updates
+                                    // "SENSE TO THE ROUTE": Prioritize the instructions heading coming from Google Maps Directions
+                                    // This aligns the car with the path. Only fallback to GPS heading if off-route.
+                                    transform: `rotate(${routeInfo?.next_step?.heading || heading || 0}deg)`,
+                                    transition: 'transform 0.5s linear'
                                 }}
                             >
                                 <img
