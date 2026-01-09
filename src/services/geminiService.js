@@ -163,6 +163,22 @@ const MOCK_LOCATIONS = [
     { title: "Catia", address: "Distrito Capital", lat: 10.51661076625772, lng: -66.94571593824786 },
     { title: "La Yaguara", address: "Distrito Capital", lat: 10.483177684793526, lng: -66.95248349082316 },
     { title: "Los Teques", address: "Miranda", lat: 10.348965964889615, lng: -67.03411267590872 },
+    // Batch 10
+    { title: "Cumana", address: "Sucre", lat: 10.431117316856744, lng: -64.18217813721513 },
+    { title: "Cupira", address: "Miranda", lat: 10.161173403919324, lng: -65.69816723474297 },
+    { title: "El Guapo", address: "Miranda", lat: 10.146663007884356, lng: -65.97172030531057 },
+    { title: "Guapeton", address: "Miranda", lat: 10.152077613960039, lng: -65.89916680234563 },
+    { title: "El Tigre Oriente", address: "Anzoátegui", lat: 8.883980175467736, lng: -64.23749092992242 },
+    { title: "Güiria", address: "Sucre", lat: 10.574558527042987, lng: -62.29977646816163 },
+    { title: "Maturin Monagas", address: "Monagas", lat: 9.745351971277808, lng: -63.177347550677226 },
+    { title: "Puerto La Cruz", address: "Anzoátegui", lat: 10.204323443963357, lng: -64.63460986872707 },
+    { title: "Barquisimeto", address: "Lara", lat: 10.06905190243356, lng: -69.34530186885053 },
+    { title: "Chichiriviche", address: "Falcón", lat: 10.930825135717576, lng: -68.2771418736968 },
+    { title: "Coro", address: "Falcón", lat: 11.39585166427313, lng: -69.67943585449473 },
+    { title: "La Victoria", address: "Aragua", lat: 10.219110573897945, lng: -67.33264244522525 },
+    { title: "Magdaleno", address: "Aragua", lat: 10.098339419178766, lng: -67.61462703301649 },
+    { title: "Maracaibo", address: "Zulia", lat: 10.634513985864011, lng: -71.65448095792671 },
+    { title: "Maracay", address: "Aragua", lat: 10.244369482589198, lng: -67.59380676956442 },
 ];
 
 // 1. Maps Grounding Service
