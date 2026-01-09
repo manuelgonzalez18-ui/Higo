@@ -179,6 +179,12 @@ const MOCK_LOCATIONS = [
     { title: "Magdaleno", address: "Aragua", lat: 10.098339419178766, lng: -67.61462703301649 },
     { title: "Maracaibo", address: "Zulia", lat: 10.634513985864011, lng: -71.65448095792671 },
     { title: "Maracay", address: "Aragua", lat: 10.244369482589198, lng: -67.59380676956442 },
+    // Batch 11
+    { title: "Barcelona", address: "Anzoátegui", lat: 10.135021127575763, lng: -64.68626787096842 },
+    { title: "Boca de Uchire", address: "Anzoátegui", lat: 10.13212992449421, lng: -65.41980783422997 },
+    { title: "Carupano", address: "Sucre", lat: 10.64230944656117, lng: -63.25598162257759 },
+    { title: "Clarines", address: "Anzoátegui", lat: 9.940335278168114, lng: -65.16431145914734 },
+    { title: "Puerto Cabello", address: "Carabobo", lat: 10.468607286715846, lng: -68.02923358846535 },
 ];
 
 // 1. Maps Grounding Service
