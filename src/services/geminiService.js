@@ -185,6 +185,19 @@ const MOCK_LOCATIONS = [
     { title: "Carupano", address: "Sucre", lat: 10.64230944656117, lng: -63.25598162257759 },
     { title: "Clarines", address: "Anzoátegui", lat: 9.940335278168114, lng: -65.16431145914734 },
     { title: "Puerto Cabello", address: "Carabobo", lat: 10.468607286715846, lng: -68.02923358846535 },
+    // Batch 12
+    { title: "Punto Fijo", address: "Falcón", lat: 11.709736042418722, lng: -70.18137200155114 },
+    { title: "San Carlos", address: "Cojedes", lat: 9.663955756396168, lng: -68.58442151119475 },
+    { title: "San Juan de los Morros", address: "Guárico", lat: 9.912458996428985, lng: -67.3548496281819 },
+    { title: "Tucacas", address: "Falcón", lat: 10.790273377587667, lng: -68.32335863548283 },
+    { title: "Valencia", address: "Carabobo", lat: 10.16957249316951, lng: -68.00178331020784 },
+    { title: "San Felipe", address: "Yaracuy", lat: 10.34005765570472, lng: -68.7431089930932 },
+    { title: "Bocono", address: "Trujillo", lat: 9.25406240131883, lng: -70.2490338681755 },
+    { title: "Merida", address: "Merida", lat: 8.570577700596587, lng: -71.18115119045595 },
+    { title: "San Cristobal", address: "Táchira", lat: 7.7623922023133085, lng: -72.22155252648194 },
+    { title: "Valera", address: "Trujillo", lat: 9.314987620561668, lng: -70.60765180995233 },
+    { title: "Ciudad Bolivar", address: "Bolívar", lat: 8.095054114468255, lng: -63.5519180353494 },
+    { title: "El Cayao", address: "Bolívar", lat: 8.085614410048219, lng: -63.5545682787963 },
 ];
 
 // 1. Maps Grounding Service
