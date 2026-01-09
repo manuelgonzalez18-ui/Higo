@@ -55,6 +55,7 @@ const DriverDashboard = () => {
     const [profile, setProfile] = useState(null);
     const [showPaymentQR, setShowPaymentQR] = useState(false);
     const [showTripDetails, setShowTripDetails] = useState(false); // Floating Info State
+    const [isCardMinimized, setIsCardMinimized] = useState(false); // New: Card Minimized State
     const lastLocationRef = React.useRef(null);
 
     // Navigation State
@@ -982,62 +983,72 @@ const DriverDashboard = () => {
 
                         {/* Bottom: Passenger Card & Action */}
                         <div className="bg-[#0F172A] rounded-[32px] p-5 shadow-2xl border border-white/10 pointer-events-auto animate-in slide-in-from-bottom-10 pointer-events-auto mt-auto">
-                            <div className="w-10 h-1.5 bg-gray-600/30 rounded-full mx-auto mb-5"></div>
-
-                            <div className="flex items-center gap-3 mb-5">
-                                <div className="relative flex-shrink-0">
-                                    <div className="w-14 h-14 rounded-full bg-gray-700 bg-center bg-cover border-2 border-white/10 shadow-lg" style={{ backgroundImage: 'url(https://picsum.photos/200)' }}></div>
-                                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-white text-black px-1.5 py-0.5 rounded-full text-[10px] font-bold border border-gray-200 shadow-sm flex items-center gap-0.5">
-                                        <span>4.9</span> <span className="text-yellow-600">★</span>
-                                    </div>
-                                </div>
-
-                                <div className="flex-1 min-w-0 pr-2">
-                                    <h2 className="font-bold text-xl text-white truncate leading-tight">Sarah M.</h2>
-                                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                                        <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded font-medium border border-blue-500/10">Estándar</span>
-                                        <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-medium border border-emerald-500/10">Efectivo</span>
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-2 flex-shrink-0">
-                                    <a href={`tel:${activeRide.passenger_phone || ''}`} className="w-11 h-11 bg-[#252A3A] rounded-full flex items-center justify-center border border-white/5 hover:bg-[#2C3345] hover:text-green-400 transition-colors">
-                                        <span className="material-symbols-outlined text-white text-[20px]">call</span>
-                                    </a>
-                                    <button
-                                        onClick={() => {
-                                            if (activeRide && activeRide.id) {
-                                                window.dispatchEvent(new CustomEvent('open-chat', { detail: { rideId: activeRide.id, title: 'Chat con Pasajero' } }));
-                                            } else {
-                                                console.error("Cannot open chat: Missing activeRide ID", activeRide);
-                                                alert("Error al abrir el chat: No se encontró el ID del viaje.");
-                                            }
-                                        }}
-                                        className="w-11 h-11 bg-[#252A3A] rounded-full flex items-center justify-center border border-white/5 hover:bg-[#2C3345] hover:text-blue-400 transition-colors"
-                                    >
-                                        <span className="material-symbols-outlined text-white text-[20px]">chat_bubble</span>
-                                    </button>
-                                </div>
+                            {/* Handle Bar / Minimize Toggle */}
+                            <div
+                                onClick={() => setIsCardMinimized(!isCardMinimized)}
+                                className="w-full flex justify-center pb-4 cursor-pointer active:opacity-70 touch-none"
+                            >
+                                <div className={`w-12 h-1.5 bg-gray-600/50 rounded-full transition-colors ${isCardMinimized ? 'bg-blue-500' : ''}`}></div>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-2 mb-5 bg-[#0F1014]/50 p-3 rounded-2xl border border-white/5">
-                                <div>
-                                    <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-0.5">TIEMPO</p>
-                                    <p className="text-white font-bold text-base">4 <span className="text-xs font-normal text-gray-400">min</span></p>
-                                </div>
-                                <div className="border-l border-white/5 pl-3">
-                                    <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-0.5">DISTANCIA</p>
-                                    <p className="text-white font-bold text-base">1.2 <span className="text-xs font-normal text-gray-400">km</span></p>
-                                </div>
-                                <div className="border-l border-white/5 pl-3">
-                                    <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-0.5">LLEGADA</p>
-                                    <p className="text-white font-bold text-base">10:42</p>
-                                </div>
-                            </div>
+                            {!isCardMinimized && (
+                                <>
+                                    <div className="flex items-center gap-3 mb-5 animate-in fade-in slide-in-from-bottom-4">
+                                        <div className="relative flex-shrink-0">
+                                            <div className="w-14 h-14 rounded-full bg-gray-700 bg-center bg-cover border-2 border-white/10 shadow-lg" style={{ backgroundImage: 'url(https://picsum.photos/200)' }}></div>
+                                            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-white text-black px-1.5 py-0.5 rounded-full text-[10px] font-bold border border-gray-200 shadow-sm flex items-center gap-0.5">
+                                                <span>4.9</span> <span className="text-yellow-600">★</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex-1 min-w-0 pr-2">
+                                            <h2 className="font-bold text-xl text-white truncate leading-tight">Sarah M.</h2>
+                                            <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                                <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded font-medium border border-blue-500/10">Estándar</span>
+                                                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-medium border border-emerald-500/10">Efectivo</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex gap-2 flex-shrink-0">
+                                            <a href={`tel:${activeRide.passenger_phone || ''}`} className="w-11 h-11 bg-[#252A3A] rounded-full flex items-center justify-center border border-white/5 hover:bg-[#2C3345] hover:text-green-400 transition-colors">
+                                                <span className="material-symbols-outlined text-white text-[20px]">call</span>
+                                            </a>
+                                            <button
+                                                onClick={() => {
+                                                    if (activeRide && activeRide.id) {
+                                                        window.dispatchEvent(new CustomEvent('open-chat', { detail: { rideId: activeRide.id, title: 'Chat con Pasajero' } }));
+                                                    } else {
+                                                        console.error("Cannot open chat: Missing activeRide ID", activeRide);
+                                                        alert("Error al abrir el chat: No se encontró el ID del viaje.");
+                                                    }
+                                                }}
+                                                className="w-11 h-11 bg-[#252A3A] rounded-full flex items-center justify-center border border-white/5 hover:bg-[#2C3345] hover:text-blue-400 transition-colors"
+                                            >
+                                                <span className="material-symbols-outlined text-white text-[20px]">chat_bubble</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-2 mb-5 bg-[#0F1014]/50 p-3 rounded-2xl border border-white/5 animate-in fade-in slide-in-from-bottom-2">
+                                        <div>
+                                            <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-0.5">TIEMPO</p>
+                                            <p className="text-white font-bold text-base">4 <span className="text-xs font-normal text-gray-400">min</span></p>
+                                        </div>
+                                        <div className="border-l border-white/5 pl-3">
+                                            <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-0.5">DISTANCIA</p>
+                                            <p className="text-white font-bold text-base">1.2 <span className="text-xs font-normal text-gray-400">km</span></p>
+                                        </div>
+                                        <div className="border-l border-white/5 pl-3">
+                                            <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-0.5">LLEGADA</p>
+                                            <p className="text-white font-bold text-base">10:42</p>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
 
                             <button
                                 onClick={handleCompleteStep}
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-[20px] font-bold text-lg shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 active:scale-95 transition-all"
+                                className={`w-full bg-blue-600 hover:bg-blue-700 text-white rounded-[20px] font-bold text-lg shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 active:scale-95 transition-all ${isCardMinimized ? 'py-3 text-base' : 'py-4'}`}
                             >
                                 <span>{navStep === 1 ? "He Llegado" : "Terminar Viaje"}</span>
                                 <span className="material-symbols-outlined">arrow_forward</span>
