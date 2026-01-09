@@ -202,6 +202,7 @@ const MOCK_LOCATIONS = [
 
 // 1. Maps Grounding Service
 export const searchPlaces = async (query, userLocation) => {
+    console.log("🔍 Searching places for:", query);
     // Helper to filter mock suggestions
     const getFilteredSuggestions = () => {
         if (!query) return [];
@@ -212,7 +213,15 @@ export const searchPlaces = async (query, userLocation) => {
         );
     };
 
+    // 1. Prioritize Local Mocks (Fast & Accurate for known destinations)
+    const localSuggestions = getFilteredSuggestions();
+    if (localSuggestions.length > 0) {
+        console.log("✅ Found local suggestions:", localSuggestions.length);
+        return localSuggestions;
+    }
+
     try {
+        console.log("🤖 Local not found, asking Gemini...");
         // Note: This model name "gemini-2.5-flash" comes from the snippet. 
         // Ensure this model is available to your API Key.
         // Falling back to 2.0-flash as it is more stable.
