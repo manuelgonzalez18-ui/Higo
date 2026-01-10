@@ -4,9 +4,7 @@ import InteractiveMap from '../components/InteractiveMap';
 
 import { supabase } from '../services/supabase';
 
-import MotoIcon from '../assets/moto_yellow_cartoon.png';
-import StandardIcon from '../assets/car_yellow_cartoon.png';
-import VanIcon from '../assets/van_yellow_cartoon.png';
+import { supabase } from '../services/supabase';
 
 const ConfirmTripPage = () => {
     const navigate = useNavigate();
@@ -16,20 +14,17 @@ const ConfirmTripPage = () => {
         moto: {
             title: 'Higo Moto',
             icon: 'two_wheeler',
-            seats: '1 asiento',
-            image: MotoIcon
+            seats: '1 asiento'
         },
         standard: {
             title: 'Higo Carro',
             icon: 'local_taxi',
-            seats: '4 asientos',
-            image: StandardIcon
+            seats: '4 asientos'
         },
         van: {
             title: 'Higo Camioneta',
             icon: 'airport_shuttle',
-            seats: '6+ asientos',
-            image: VanIcon
+            seats: '6+ asientos'
         }
     };
     // Safe destructure with defaults
@@ -174,11 +169,11 @@ const ConfirmTripPage = () => {
                 <div className="bg-[#1A1F2E] p-4 rounded-3xl border border-white/5 flex items-center justify-between shadow-lg">
                     <div className="flex items-center gap-4">
                         <div className="w-16 h-16 flex items-center justify-center">
-                            <img
-                                src={currentVehicle.image}
-                                alt={currentVehicle.title}
-                                className="w-full h-full object-contain drop-shadow-lg"
-                            />
+                            <div className="w-full h-full rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-600/20">
+                                <span className="material-symbols-outlined text-3xl text-white">
+                                    {currentVehicle.icon}
+                                </span>
+                            </div>
                         </div>
                         <div>
                             <p className="text-blue-500 text-xs font-bold uppercase mb-0.5">Mejor Precio</p>
