@@ -44,12 +44,43 @@ const LocationInput = ({
         if (onChange) onChange(newVal);
     };
 
-    const handleSelect = (place) => {
+    const handleSelect = async (place) => {
         setValue(place.title);
         setShowSuggestions(false);
         setIsTyping(false);
+
+        // If it's a Google Maps prediction (has place_id but no lat/lng), fetch details
+        let finalPlace = place;
+        if (place.isGoogleMaps && place.place_id && !place.lat && window.google && window.google.maps) {
+            try {
+                const placesService = new window.google.maps.places.PlacesService(document.createElement('div'));
+                const detailsPromise = new Promise((resolve) => {
+                    placesService.getDetails({
+                        placeId: place.place_id,
+                        fields: ['geometry']
+                    }, (result, status) => {
+                        if (status === window.google.maps.places.PlacesServiceStatus.OK && result.geometry) {
+                            resolve({
+                                lat: result.geometry.location.lat(),
+                                lng: result.geometry.location.lng()
+                            });
+                        } else {
+                            resolve(null);
+                        }
+                    });
+                });
+
+                const coords = await detailsPromise;
+                if (coords) {
+                    finalPlace = { ...place, ...coords };
+                }
+            } catch (e) {
+                console.error("Error fetching place details:", e);
+            }
+        }
+
         // Pass full place object including coords (if available from Gemini/Google)
-        if (onChange) onChange(place.title, place);
+        if (onChange) onChange(finalPlace.title, finalPlace);
     };
 
     // Close on click outside

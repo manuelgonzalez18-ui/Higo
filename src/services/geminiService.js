@@ -216,57 +216,95 @@ export const searchPlaces = async (query, userLocation) => {
     // 1. Get Local Suggestions
     const localSuggestions = getFilteredSuggestions();
 
-    // 2. Get AI/Google Maps Suggestions (in parallel or sequence)
+    // 2. Get AI/Google Maps Suggestions (Attempt Gemini first, then Places API fallback)
     let aiSuggestions = [];
-    try {
-        console.log("🤖 Asking Gemini for Google Maps results...");
-        const response = await ai.models.generateContent({
-            model: "gemini-2.0-flash",
-            // Broader prompt: Venezuela > Higuerote priority
-            contents: `Find places matching "${query}" in Venezuela, prioritizing Higuerote and Miranda state. Return the result as a list of places.`,
-            config: {
-                tools: [{ googleMaps: {} }],
-                toolConfig: userLocation ? {
-                    retrievalConfig: {
-                        latLng: {
-                            latitude: userLocation.lat,
-                            longitude: userLocation.lng
-                        }
+
+    // METHOD A: Google Places Autocomplete Service (Standard, Reliable)
+    if (window.google && window.google.maps && window.google.maps.places) {
+        try {
+            console.log("🗺️ Using standard Google Places Autocomplete Service...");
+            const service = new window.google.maps.places.AutocompleteService();
+
+            // Create a promise to handle the callback-based API
+            const placesPromise = new Promise((resolve) => {
+                service.getPlacePredictions({
+                    input: query,
+                    componentRestrictions: { country: 've' }, // Restrict to Venezuela
+                    // optional: location: userLocation ? new window.google.maps.LatLng(userLocation.lat, userLocation.lng) : null,
+                    // optional: radius: 50000 
+                }, (predictions, status) => {
+                    if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
+                        resolve(predictions.map(p => ({
+                            title: p.structured_formatting.main_text,
+                            address: p.structured_formatting.secondary_text,
+                            place_id: p.place_id,
+                            isGoogleMaps: true
+                        })));
+                    } else {
+                        resolve([]);
                     }
-                } : undefined,
-            },
-        });
-
-        const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-        if (chunks) {
-            chunks.forEach((chunk) => {
-                if (chunk.web?.uri && chunk.web?.title) {
-                    // Note: Grounding chunks often don't have lat/lng directly. 
-                    // This mock offset should ideally be replaced by real geocoding if possible.
-                    // For now, keeping the mock near higuerote or using user location as base if available.
-                    const baseLat = userLocation?.lat || 10.486;
-                    const baseLng = userLocation?.lng || -66.094;
-                    const randomOffset = () => (Math.random() - 0.5) * 0.05;
-
-                    aiSuggestions.push({
-                        title: chunk.web.title,
-                        address: "Google Maps Result",
-                        uri: chunk.web.uri,
-                        lat: baseLat + randomOffset(),
-                        lng: baseLng + randomOffset(),
-                        isGoogleMaps: true
-                    });
-                }
+                });
             });
+
+            const placesResults = await placesPromise;
+            if (placesResults.length > 0) {
+                console.log(`🗺️ Found ${placesResults.length} standard Places results.`);
+                aiSuggestions = [...aiSuggestions, ...placesResults];
+            }
+        } catch (e) {
+            console.error("Standard Places API error:", e);
         }
-    } catch (error) {
-        console.error("Maps search error:", error);
+    }
+
+    // METHOD B: Gemini Grounding (Enrichment / Semantic Search) - Only if standard failed or for variety
+    if (aiSuggestions.length === 0) {
+        try {
+            console.log("🤖 Asking Gemini for Google Maps results (Backup)...");
+            const response = await ai.models.generateContent({
+                model: "gemini-2.0-flash-exp",
+                // Broader prompt: Venezuela > Higuerote priority
+                contents: `Find places matching "${query}" in Venezuela, prioritizing Higuerote and Miranda state. Return the result as a list of places.`,
+                config: {
+                    tools: [{ googleMaps: {} }],
+                    toolConfig: userLocation ? {
+                        retrievalConfig: {
+                            latLng: {
+                                latitude: userLocation.lat,
+                                longitude: userLocation.lng
+                            }
+                        }
+                    } : undefined,
+                },
+            });
+
+            const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+            if (chunks) {
+                chunks.forEach((chunk) => {
+                    if (chunk.web?.uri && chunk.web?.title) {
+                        const baseLat = userLocation?.lat || 10.486;
+                        const baseLng = userLocation?.lng || -66.094;
+                        const randomOffset = () => (Math.random() - 0.5) * 0.05;
+
+                        aiSuggestions.push({
+                            title: chunk.web.title,
+                            address: "Google Maps Result",
+                            uri: chunk.web.uri,
+                            lat: baseLat + randomOffset(),
+                            lng: baseLng + randomOffset(),
+                            isGoogleMaps: true
+                        });
+                    }
+                });
+            }
+        } catch (error) {
+            console.error("Maps search error:", error);
+        }
     }
 
     // 3. Merge Results (Deduplicate by title if needed, but simple merge is requested)
-    // Local results first, then AI results
+    // Local results first, then AI/Places results
     const combined = [...localSuggestions, ...aiSuggestions];
-    console.log(`✅ Search complete. Local: ${localSuggestions.length}, AI: ${aiSuggestions.length}`);
+    console.log(`✅ Search complete. Local: ${localSuggestions.length}, External: ${aiSuggestions.length}`);
 
     return combined;
 } catch (error) {
