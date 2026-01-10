@@ -4,7 +4,7 @@ import InteractiveMap from '../components/InteractiveMap';
 
 import { supabase } from '../services/supabase';
 
-import { supabase } from '../services/supabase';
+
 
 const ConfirmTripPage = () => {
     const navigate = useNavigate();
