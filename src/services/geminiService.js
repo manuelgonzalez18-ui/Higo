@@ -213,21 +213,17 @@ export const searchPlaces = async (query, userLocation) => {
         );
     };
 
-    // 1. Prioritize Local Mocks (Fast & Accurate for known destinations)
+    // 1. Get Local Suggestions
     const localSuggestions = getFilteredSuggestions();
-    if (localSuggestions.length > 0) {
-        console.log("✅ Found local suggestions:", localSuggestions.length);
-        return localSuggestions;
-    }
 
+    // 2. Get AI/Google Maps Suggestions (in parallel or sequence)
+    let aiSuggestions = [];
     try {
-        console.log("🤖 Local not found, asking Gemini...");
-        // Note: This model name "gemini-2.5-flash" comes from the snippet. 
-        // Ensure this model is available to your API Key.
-        // Falling back to 2.0-flash as it is more stable.
+        console.log("🤖 Asking Gemini for Google Maps results...");
         const response = await ai.models.generateContent({
             model: "gemini-2.0-flash",
-            contents: `Find 3 places matching "${query}" in Higuerote, Venezuela. Return the result as a list of places.`,
+            // Broader prompt: Venezuela > Higuerote priority
+            contents: `Find places matching "${query}" in Venezuela, prioritizing Higuerote and Miranda state. Return the result as a list of places.`,
             config: {
                 tools: [{ googleMaps: {} }],
                 toolConfig: userLocation ? {
@@ -242,39 +238,42 @@ export const searchPlaces = async (query, userLocation) => {
         });
 
         const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-        const suggestions = [];
-
         if (chunks) {
             chunks.forEach((chunk) => {
                 if (chunk.web?.uri && chunk.web?.title) {
-                    // Mock coordinates near Higuerote for demo purposes since Grounding doesn't typically return lat/lng directly in this chunk format
-                    // In a real app, you would use Geocoding API or Places API Details
-                    const baseLat = 10.486;
-                    const baseLng = -66.094;
-                    const randomOffset = () => (Math.random() - 0.5) * 0.02; // Roughly 2km variance
+                    // Note: Grounding chunks often don't have lat/lng directly. 
+                    // This mock offset should ideally be replaced by real geocoding if possible.
+                    // For now, keeping the mock near higuerote or using user location as base if available.
+                    const baseLat = userLocation?.lat || 10.486;
+                    const baseLng = userLocation?.lng || -66.094;
+                    const randomOffset = () => (Math.random() - 0.5) * 0.05;
 
-                    suggestions.push({
+                    aiSuggestions.push({
                         title: chunk.web.title,
-                        address: "Ver en Mapa",
+                        address: "Google Maps Result",
                         uri: chunk.web.uri,
                         lat: baseLat + randomOffset(),
-                        lng: baseLng + randomOffset()
+                        lng: baseLng + randomOffset(),
+                        isGoogleMaps: true
                     });
                 }
             });
         }
-
-        // Return filtered mock results if AI fails to return valid chunks
-        if (suggestions.length === 0) {
-            return getFilteredSuggestions();
-        }
-
-        return suggestions;
     } catch (error) {
         console.error("Maps search error:", error);
-        // Return filtered mock data for demo purposes since we likely don't have a valid GenAI key configured yet
-        return getFilteredSuggestions();
     }
+
+    // 3. Merge Results (Deduplicate by title if needed, but simple merge is requested)
+    // Local results first, then AI results
+    const combined = [...localSuggestions, ...aiSuggestions];
+    console.log(`✅ Search complete. Local: ${localSuggestions.length}, AI: ${aiSuggestions.length}`);
+
+    return combined;
+} catch (error) {
+    console.error("Maps search error:", error);
+    // Return filtered mock data for demo purposes since we likely don't have a valid GenAI key configured yet
+    return getFilteredSuggestions();
+}
 };
 
 // 2. Chat Service
