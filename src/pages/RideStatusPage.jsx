@@ -250,10 +250,15 @@ const RideStatusPage = () => {
 
             {/* Map Grid Background -> Real Map */}
             {/* PASSENGER DEBUG */}
-            <div className="absolute top-20 left-2 bg-black/70 text-[10px] text-green-400 p-2 rounded z-50 pointer-events-none font-mono max-w-[200px]">
-                Drv: {driver?.curr_lat ? `${Number(driver.curr_lat).toFixed(5)}, ${Number(driver.curr_lng).toFixed(5)}` : 'NULL'}<br />
-                ID: {ride?.driver_id ? ride.driver_id.slice(0, 4) : '????'} | Ago: {secondsAgo}s<br />
-                Status: {ride?.status} | Poll: {pollingStatus}
+            {/* PASSENGER DEBUG OVERLAY */}
+            <div className="absolute top-20 left-4 bg-black/80 text-green-400 p-2 rounded text-[10px] font-mono z-50 pointer-events-none border border-green-500/30">
+                <div>CHAUFFEUR: {driver ? 'FOUND' : 'MISSING (Check RLS)'}</div>
+                <div>ID: {ride?.driver_id?.substring(0, 5)} | STATUS: {ride?.status}</div>
+                <div>
+                    POS: {driver?.curr_lat ? `${Number(driver.curr_lat).toFixed(5)}, ${Number(driver.curr_lng).toFixed(5)}` : 'NULL (No Data)'}
+                </div>
+                <div>HEADING: {driver?.heading || 0}°</div>
+                <div>AGO: {secondsAgo}s | POLL: {pollingStatus}</div>
             </div>
             <div className="absolute inset-0 z-0">
                 <InteractiveMap
