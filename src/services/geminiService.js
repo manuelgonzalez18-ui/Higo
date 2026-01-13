@@ -301,17 +301,11 @@ export const searchPlaces = async (query, userLocation) => {
         }
     }
 
-    // 3. Merge Results (Deduplicate by title if needed, but simple merge is requested)
-    // Local results first, then AI/Places results
+    // 3. Merge Results
     const combined = [...localSuggestions, ...aiSuggestions];
     console.log(`✅ Search complete. Local: ${localSuggestions.length}, External: ${aiSuggestions.length}`);
 
     return combined;
-} catch (error) {
-    console.error("Maps search error:", error);
-    // Return filtered mock data for demo purposes since we likely don't have a valid GenAI key configured yet
-    return getFilteredSuggestions();
-}
 };
 
 // 2. Chat Service

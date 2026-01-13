@@ -8,6 +8,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import { registerPlugin, Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
+import { calculateBearing, getDistanceFromLatLonInKm } from '../utils/geoUtils';
 
 const BackgroundGeolocation = Capacitor.isNativePlatform() ? registerPlugin('BackgroundGeolocation') : null;
 
@@ -57,6 +58,9 @@ const DriverDashboard = () => {
     const [showTripDetails, setShowTripDetails] = useState(false); // Floating Info State
     const [isCardMinimized, setIsCardMinimized] = useState(false); // New: Card Minimized State
     const lastLocationRef = React.useRef(null);
+    const profileRef = React.useRef(null);
+    const headingRef = React.useRef(0);
+    const lastSentTimeRef = React.useRef(0);
 
     // Navigation State
     const [navStep, setNavStep] = useState(0); // 0: Idle, 1: To Pickup, 2: To Dropoff
@@ -65,6 +69,15 @@ const DriverDashboard = () => {
     const [heading, setHeading] = useState(0); // Vehicle Bearing
     const [navInfo, setNavInfo] = useState(null);
     const lastInstruction = React.useRef("");
+
+    // SYNC REFS FOR BG WATCHER
+    useEffect(() => {
+        profileRef.current = profile;
+    }, [profile]);
+
+    useEffect(() => {
+        headingRef.current = heading;
+    }, [heading]);
 
     // --- HELPER FUNCTIONS ---
     // --- HELPER FUNCTIONS ---
@@ -645,31 +658,39 @@ const DriverDashboard = () => {
                     backgroundTitle: "Buscando Viajes...",
                     requestPermissions: true,
                     stale: false,
-                    distanceFilter: 5 // Changed from 2 to 5 for balance between precision and jitter/battery
+                    distanceFilter: 2 // High precision for smoother car icon movement
                 },
                 async (location, error) => {
                     if (error) {
+                        if (error.code === "NOT_AUTHORIZED") {
+                            if (window.confirm("Esta app necesita tu ubicación para enviar viajes. ¿Abrir configuración?")) {
+                                BackgroundGeolocation.openSettings();
+                            }
+                        }
                         return;
                     }
 
+                    if (!location) return;
+
                     const { latitude, longitude, bearing: gpsBearing, speed } = location;
-                    console.log("📍 BG Location Update:", latitude, longitude, "Bear:", gpsBearing, "Speed:", speed);
+                    // console.log("📍 BG Location Update:", latitude, longitude, speed);
 
-                    // Improved Heading Logic
-                    // 1. Prefer GPS Heading if moving fast enough (GPS bearing is unreliable at low speeds)
-                    let newHeading = heading; // Default to current state
+                    // Use Refs to get latest state without restarting watcher
+                    let currentHeading = headingRef.current || 0;
+                    let newHeading = currentHeading;
 
+                    // Improved Heading Logic (Hysteresis)
+                    // Thresholds: Speed > 1m/s (~3.6km/h) OR Distance > 10m
                     if (speed > 1 && gpsBearing) {
                         newHeading = gpsBearing;
                     } else if (lastLocationRef.current) {
-                        // 2. Fallback: Calculate from Delta if distance is significant
                         const dist = getDistanceFromLatLonInKm(
                             lastLocationRef.current.latitude, lastLocationRef.current.longitude,
                             latitude, longitude
                         );
 
-                        // Only visual rotate if moved > 5 meters to avoid jittery spinning
-                        if (dist > 0.005) {
+                        // Only visual rotate if moved > 8 meters
+                        if (dist > 0.008) {
                             newHeading = calculateBearing(
                                 lastLocationRef.current.latitude,
                                 lastLocationRef.current.longitude,
@@ -679,29 +700,38 @@ const DriverDashboard = () => {
                         }
                     }
 
-                    // Smooth update
                     setHeading(newHeading);
                     lastLocationRef.current = { latitude, longitude };
 
-                    // Update Profile Logic with throttle maybe?
-                    if (profile?.id) {
+                    // Update Profile Logic
+                    const currentProfile = profileRef.current;
+                    if (currentProfile?.id) {
                         // Force re-render for map route update
                         setCurrentLoc({ lat: latitude, lng: longitude });
 
-                        await supabase.from('profiles').update({
-                            curr_lat: latitude,
-                            curr_lng: longitude,
-                            heading: newHeading || 0,
-                            last_location_update: new Date()
-                        }).eq('id', profile.id);
+                        try {
+                            // Optimistic update - fire and forget (or await but don't block)
+                            await supabase.from('profiles').update({
+                                curr_lat: latitude,
+                                curr_lng: longitude,
+                                heading: newHeading || 0
+                            }).eq('id', currentProfile.id);
 
-                        // --- BACKGROUND POLLING FOR RIDES (RPC - 10km Radius) ---
+                            lastSentTimeRef.current = Date.now(); // Confirm update success
+
+
+                        } catch (err) {
+                            console.error("❌ LOCATION SYNC EXCEPTION:", err);
+                        }
+
+                        // --- BACKGROUND POLLING FOR RIDES ---
+                        // Only poll if we have a valid profile
                         const { data } = await supabase
                             .rpc('get_nearby_rides', {
                                 driver_lat: latitude,
                                 driver_lng: longitude,
                                 radius_km: 10.0,
-                                driver_vehicle_type: profile.vehicle_type || 'standard'
+                                driver_vehicle_type: currentProfile.vehicle_type || 'standard'
                             });
 
                         if (data && data.length > 0) {
@@ -721,7 +751,10 @@ const DriverDashboard = () => {
         return () => {
             if (watcherId) BackgroundGeolocation.removeWatcher({ id: watcherId });
         };
-    }, [isOnline, profile, processRequests, heading]);
+        // Removed 'heading' and 'profile' from dependencies. Added 'isOnline'.
+        // 'processRequests' is likely stable or should be ref'd if not.
+        // Assuming processRequests is stable from parent or useCallback.
+    }, [isOnline, processRequests]); // removed profile/heading dependencies to stop restarting watcher
 
 
     // --- REALTIME SUBSCRIPTION ---
@@ -914,12 +947,22 @@ const DriverDashboard = () => {
                                 ? { lat: activeRide.dropoff_lat, lng: activeRide.dropoff_lng }
                                 : null)
                     }
-                    assignedDriver={null}
+                    assignedDriver={
+                        (currentLoc || lastLocationRef.current) && profile ? {
+                            lat: lastLocationRef.current?.latitude || currentLoc?.lat,
+                            lng: lastLocationRef.current?.longitude || currentLoc?.lng,
+                            heading: headingRef.current || heading,
+                            type: profile.vehicle_type || 'standard',
+                            name: "Tu Vehículo",
+                            plate: profile.license_plate
+                        } : null
+                    }
                     destinationIconType={navStep === 1 ? 'passenger' : 'flag'}
                     onRouteData={handleRouteData}
                     routeColor={navStep === 1 ? "#22C55E" : "#8A2BE2"} // Green to Pickup, Violet to Dropoff
                     isDriver={true}
                     vehicleType={profile?.vehicle_type || 'standard'}
+                    enableSimulation={false}
                 />
                 <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/60 to-transparent pointer-events-none"></div>
             </div>
@@ -956,6 +999,14 @@ const DriverDashboard = () => {
                     <div className="flex-1 flex flex-col justify-between p-4 pt-10 relative pointer-events-none">
 
                         {/* Top: Direction Pill */}
+                        {/* DEBUG OVERLAY */}
+                        <div className="absolute top-2 left-2 right-2 bg-black/50 text-[10px] text-green-400 p-1 rounded z-50 pointer-events-none font-mono">
+                            GPS: {currentLoc ? `${currentLoc.lat.toFixed(5)}, ${currentLoc.lng.toFixed(5)}` : 'Wait...'} |
+                            Hdg: {heading} | Ref: {profileRef.current ? 'OK' : 'NULL'} |
+                            ID: {profileRef.current?.id ? profileRef.current.id.slice(0, 4) : '????'} |
+                            Sent: {lastSentTimeRef.current ? `${((Date.now() - lastSentTimeRef.current) / 1000).toFixed(1)}s ago` : 'No'}
+                        </div>
+
                         <div className="bg-[#0F172A] rounded-full p-4 pl-6 pr-6 shadow-2xl border border-white/10 flex items-center justify-between mx-auto w-full max-w-sm pointer-events-auto animate-in slide-in-from-top-4 relative z-20">
                             <div className="flex items-center gap-4">
                                 <div className="w-10 h-10 bg-[#252A3A] rounded-xl flex items-center justify-center">

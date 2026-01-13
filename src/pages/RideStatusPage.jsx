@@ -106,7 +106,7 @@ const RideStatusPage = () => {
         // Backup Polling every 5 seconds in case socket fails
         const interval = setInterval(() => {
             fetchRide();
-        }, 5000);
+        }, 2000); // Aggressive 2s Polling
 
         return () => {
             supabase.removeChannel(channel);
@@ -134,16 +134,68 @@ const RideStatusPage = () => {
         return () => supabase.removeChannel(channel);
     }, [ride?.driver_id]);
 
+    // --- FRESHNESS TIMER LOGIC ---
+    const [lastPacketTime, setLastPacketTime] = useState(Date.now());
+    const [secondsAgo, setSecondsAgo] = useState(0);
+
+
+    const [pollingStatus, setPollingStatus] = useState("Init"); // Debug Polling
+
+    useEffect(() => {
+        if (driver?.curr_lat) {
+            setLastPacketTime(Date.now());
+            setSecondsAgo(0);
+        }
+    }, [driver?.curr_lat, driver?.curr_lng]);
+
+    // 2. Tick every second to update UI
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setSecondsAgo(Math.floor((Date.now() - lastPacketTime) / 1000));
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [lastPacketTime]);
+
     const fetchRide = async () => {
         const { data, error } = await supabase.from('rides').select('*').eq('id', id).single();
         if (data) {
-            setRide(data);
+            setRide(prev => {
+                return data;
+            });
             if (data.driver_id) {
-                const { data: driverData } = await supabase.from('profiles').select('*').eq('id', data.driver_id).single();
-                if (driverData) setDriver(driverData);
+                // Fetch driver specifically to bypass Realtime lag if needed
+                const { data: driverData, error: driverError } = await supabase.from('profiles').select('*').eq('id', data.driver_id).single();
+
+                if (driverData) {
+                    // console.log("📍 Polling Driver Loc:", driverData.curr_lat, driverData.curr_lng);
+                    setDriver(driverData);
+                    setPollingStatus("OK");
+                } else {
+                    setPollingStatus(driverError ? `ERR: ${driverError.code}` : "NULL");
+                }
+            } else {
+                setPollingStatus("NoDriver");
             }
+        } else {
+            setPollingStatus("RideNull");
         }
     };
+
+    // Robust Polling for Driver Location (Every 3 seconds)
+    // This runs alongside Realtime to ensure freshness even if socket hangs
+    useEffect(() => {
+        if (!ride?.driver_id) return;
+
+        const locInterval = setInterval(async () => {
+            const { data: driverData } = await supabase.from('profiles').select('*').eq('id', ride.driver_id).single();
+            if (driverData) {
+                // Only update if changed (optional, but React state dedupes mostly)
+                setDriver(prev => ({ ...prev, ...driverData }));
+            }
+        }, 3000);
+
+        return () => clearInterval(locInterval);
+    }, [ride?.driver_id]);
 
     const submitRating = async () => {
         const { error } = await supabase
@@ -197,6 +249,12 @@ const RideStatusPage = () => {
         <div className="h-screen bg-[#0F1014] relative overflow-hidden font-sans text-white">
 
             {/* Map Grid Background -> Real Map */}
+            {/* PASSENGER DEBUG */}
+            <div className="absolute top-20 left-2 bg-black/70 text-[10px] text-green-400 p-2 rounded z-50 pointer-events-none font-mono max-w-[200px]">
+                Drv: {driver?.curr_lat ? `${Number(driver.curr_lat).toFixed(5)}, ${Number(driver.curr_lng).toFixed(5)}` : 'NULL'}<br />
+                ID: {ride?.driver_id ? ride.driver_id.slice(0, 4) : '????'} | Ago: {secondsAgo}s<br />
+                Status: {ride?.status} | Poll: {pollingStatus}
+            </div>
             <div className="absolute inset-0 z-0">
                 <InteractiveMap
                     className="w-full h-full"
@@ -219,15 +277,16 @@ const RideStatusPage = () => {
                                 ? { lat: Number(ride.pickup_lat), lng: Number(ride.pickup_lng) } // Route Driver -> Pickup
                                 : (ride?.dropoff_lat ? { lat: Number(ride.dropoff_lat), lng: Number(ride.dropoff_lng) } : null) // Route Driver -> Dropoff (In Progress)
                     }
-                    assignedDriver={driver ? {
-                        lat: !isNaN(Number(driver.curr_lat)) ? Number(driver.curr_lat) : Number(ride?.pickup_lat || 10.4850),
-                        lng: !isNaN(Number(driver.curr_lng)) ? Number(driver.curr_lng) : Number(ride?.pickup_lng || -66.0950),
+                    assignedDriver={driver && !isNaN(Number(driver.curr_lat)) ? {
+                        lat: Number(driver.curr_lat),
+                        lng: Number(driver.curr_lng),
                         type: driver.vehicle_type || 'standard',
                         heading: Number(driver.heading || 0),
                         name: driver.full_name,
                         plate: driver.license_plate
                     } : null}
                     routeColor="#3B82F6" // Blue for passenger tracking
+                    enableSimulation={false}
                 />
             </div>
             {/* Reduced opacity for map visibility */}
@@ -274,6 +333,11 @@ const RideStatusPage = () => {
                                 <p className="text-[9px] text-gray-400 uppercase font-bold text-center">PLACA</p>
                                 <p className="font-mono font-bold text-white tracking-widest leading-none mt-0.5">{driver.license_plate}</p>
                             </div>
+                            {/* GPS ACTIVE INDICATOR */}
+                            {/* GPS FRESHNESS TIMER */}
+                            <p className={`text-[9px] font-mono mt-1 ${secondsAgo < 10 ? 'text-green-500' : 'text-red-500 animate-pulse'}`}>
+                                Act: {secondsAgo}s
+                            </p>
                         </div>
                     </div>
                 ) : (

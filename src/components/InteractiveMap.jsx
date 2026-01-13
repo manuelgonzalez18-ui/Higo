@@ -86,9 +86,104 @@ const Directions = ({ origin, destination, onRouteData, routeColor }) => {
     return null;
 };
 
-const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = false, markersProp, center, origin, heading = 0, destination, assignedDriver, destinationIconType = 'flag', onRouteData, className, routeColor = "#8A2BE2", isDriver = false, vehicleType = 'standard' }) => {
+// Custom Hook for Smooth Position Interpolation
+const useSmoothPosition = (targetPos, speedFactor = 0.1) => {
+    const [currentPos, setCurrentPos] = useState(targetPos || { lat: 0, lng: 0 });
+    const requestRef = useRef();
+    const targetRef = useRef(targetPos);
+
+    // Sync target ref
+    useEffect(() => {
+        targetRef.current = targetPos;
+    }, [targetPos]);
+
+    const animate = useCallback(() => {
+        if (!targetRef.current) return;
+
+        setCurrentPos(prev => {
+            if (!prev) return targetRef.current;
+
+            const latDiff = targetRef.current.lat - prev.lat;
+            const lngDiff = targetRef.current.lng - prev.lng;
+
+            // If close enough, snap to target to save CPU
+            if (Math.abs(latDiff) < 0.000005 && Math.abs(lngDiff) < 0.000005) {
+                return targetRef.current;
+            }
+
+            // Lerp (Linear Interpolation) with Decay
+            return {
+                lat: prev.lat + latDiff * speedFactor,
+                lng: prev.lng + lngDiff * speedFactor
+            };
+        });
+
+        requestRef.current = requestAnimationFrame(animate);
+    }, [speedFactor]);
+
+    useEffect(() => {
+        if (targetPos) {
+            requestRef.current = requestAnimationFrame(animate);
+        }
+        return () => cancelAnimationFrame(requestRef.current);
+    }, [animate, targetPos]);
+
+    return currentPos;
+};
+
+// Custom Hook for Smooth Heading (Shortest Path)
+const useSmoothHeading = (targetHeading) => {
+    const [displayHeading, setDisplayHeading] = useState(targetHeading || 0);
+    const prevHeadingRef = useRef(targetHeading || 0);
+
+    useEffect(() => {
+        if (targetHeading === undefined || targetHeading === null) return;
+
+        let current = prevHeadingRef.current;
+        let target = targetHeading;
+
+        // Calculate shortest path
+        let delta = target - current;
+        // Normalize delta to [-180, 180]
+        while (delta <= -180) delta += 360;
+        while (delta > 180) delta -= 360;
+
+        const newHeading = current + delta;
+
+        setDisplayHeading(newHeading);
+        prevHeadingRef.current = newHeading;
+    }, [targetHeading]);
+
+    return displayHeading;
+};
+
+// Wrapper Component for Animated Vehicle
+const AnimatedVehicleMarker = ({ position, heading, icon, type, zIndex, children }) => {
+    // Smooth the position input
+    // Using 0.05 for slower, smoother drift (updates at 60fps)
+    const smoothPos = useSmoothPosition(position, 0.05);
+
+    // Also smooth the rotation?
+    // CSS transition handles rotation well enough usually, but let's stick to CSS for rotation provided by parent
+
+    if (!smoothPos) return null;
+
+    return (
+        <AdvancedMarker
+            position={smoothPos}
+            zIndex={zIndex || 50}
+        >
+            {children}
+        </AdvancedMarker>
+    );
+};
+
+const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = false, markersProp, center, origin, heading = 0, destination, assignedDriver, destinationIconType = 'flag', onRouteData, className, routeColor = "#8A2BE2", isDriver = false, vehicleType = 'standard', enableSimulation = true }) => {
     const [apiKey] = useState(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '');
     const map = useMap();
+
+    // ... (rest of component state) ...
+    // ... [omitted logic remains same until return] ...
 
     // Route Data for ETA Bubble
     const [routeInfo, setRouteInfo] = useState(null);
@@ -110,53 +205,21 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
         }
     }, [map, center, showPin]);
 
-    // Mock Drivers State for Simulation (Requested to be restored)
-    const [mockDrivers, setMockDrivers] = useState([]);
+    // Mock Drivers State for Simulation (REMOVED)
+    // const [mockDrivers, setMockDrivers] = useState([]);
 
+    // Simulation Effects REMOVED to prevent "Ghost Cars"
+    /*
     // Initialize Simulated Drivers on mount
     useEffect(() => {
-        if (assignedDriver) {
-            setMockDrivers([]);
-            return;
-        }
-
-        // Generate 3-5 random drivers around the center
-        const newDrivers = Array.from({ length: 4 }).map((_, i) => ({
-            id: `sim-${i}`,
-            lat: (center?.lat || HIGUEROTE_CENTER.lat) + (Math.random() - 0.5) * 0.015,
-            lng: (center?.lng || HIGUEROTE_CENTER.lng) + (Math.random() - 0.5) * 0.015,
-            type: Math.random() > 0.6 ? 'moto' : 'standard',
-            heading: Math.floor(Math.random() * 360),
-            name: 'Higo Driver'
-        }));
-        setMockDrivers(newDrivers);
-    }, [center, assignedDriver]);
+        // ... removed
+    }, [center, assignedDriver, enableSimulation]);
 
     // Animation Loop for Simulated Drivers
     useEffect(() => {
-        if (assignedDriver) return;
-
-        const interval = setInterval(() => {
-            setMockDrivers(prev => prev.map(d => {
-                const moveLat = (Math.random() - 0.5) * 0.0001;
-                const moveLng = (Math.random() - 0.5) * 0.0001;
-                const newLat = d.lat + moveLat;
-                const newLng = d.lng + moveLng;
-
-                // Calculate heading
-                const angle = Math.atan2(moveLng, moveLat) * 180 / Math.PI;
-
-                return {
-                    ...d,
-                    lat: newLat,
-                    lng: newLng,
-                    heading: angle
-                };
-            }));
-        }, 3000);
-
-        return () => clearInterval(interval);
+        // ... removed
     }, [assignedDriver]);
+    */
 
     // Initialize Real Drivers (Real-time from Supabase)
     useEffect(() => {
@@ -242,7 +305,7 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
     if (!apiKey) return <div className="text-white p-4">Loading Map... (Key Missing)</div>;
 
     return (
-        <APIProvider apiKey={apiKey}>
+        <APIProvider apiKey={apiKey} libraries={['places', 'geometry']}>
             <div className={className || "w-full h-full relative"}>
                 <Map
                     defaultCenter={HIGUEROTE_CENTER}
@@ -285,18 +348,18 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                     className="w-full h-full"
                 >
                     {/* Render Real + Simulated Drivers (Only if NOT in Driver Navigation Mode) */}
-                    {!assignedDriver && !isDriver && [...drivers, ...mockDrivers].map(driver => {
+                    {!assignedDriver && !isDriver && drivers.map(driver => {
                         if (!isValidCoordinate({ lat: driver.lat, lng: driver.lng })) return null;
                         return (
-                            <AdvancedMarker
+                            <AnimatedVehicleMarker
                                 key={driver.id}
                                 position={{ lat: driver.lat, lng: driver.lng }}
-                                title={`Higo Driver`}
+                                zIndex={50}
                             >
                                 <div
                                     style={{
-                                        transform: `rotate(${driver.heading}deg)`,
-                                        transition: 'transform 1s linear'
+                                        transform: `rotate(${useSmoothHeading(driver.heading)}deg)`,
+                                        transition: 'transform 0.5s linear' // Keep rotation native CSS
                                     }}
                                 >
                                     <img
@@ -305,15 +368,14 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                                         alt="vehicle"
                                     />
                                 </div>
-                            </AdvancedMarker>
+                            </AnimatedVehicleMarker>
                         );
                     })}
 
-                    {/* Render ASSIGNED DRIVER */}
-                    {assignedDriver && isValidCoordinate({ lat: assignedDriver.lat, lng: assignedDriver.lng }) && (
-                        <AdvancedMarker
+                    {/* Render ASSIGNED DRIVER with Smooth Animation - HIDE IF DRIVER (Use Self-Icon) */}
+                    {assignedDriver && !isDriver && isValidCoordinate({ lat: assignedDriver.lat, lng: assignedDriver.lng }) && (
+                        <AnimatedVehicleMarker
                             position={{ lat: assignedDriver.lat, lng: assignedDriver.lng }}
-                            title={assignedDriver.name || "Tu Conductor"}
                             zIndex={100}
                         >
                             <div className="relative">
@@ -324,8 +386,8 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                                 </div>
                                 <div
                                     style={{
-                                        transform: `rotate(${assignedDriver.heading || 0}deg)`,
-                                        transition: 'all 1s ease-in-out'
+                                        transform: `rotate(${useSmoothHeading(assignedDriver.heading || 0)}deg)`,
+                                        transition: 'transform 0.5s linear'
                                     }}
                                 >
                                     <img
@@ -335,10 +397,10 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                                     />
                                 </div>
                             </div>
-                        </AdvancedMarker>
+                        </AnimatedVehicleMarker>
                     )}
 
-                    {/* Custom Origin/Dest Markers for Route */}
+                    {/* Custom Origin/Dest Markers for Route (No animation needed, static) */}
                     {origin && !showPin && !assignedDriver && !isDriver && isValidCoordinate(origin) && (
                         <AdvancedMarker position={origin}>
                             {/* Updated to use Passenger Pin Icon */}
@@ -353,17 +415,17 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                         </AdvancedMarker>
                     )}
 
-                    {/* DRIVER SELF ICON (Refined for Dashboard) */}
+                    {/* DRIVER SELF ICON (Refined for Dashboard) with Smooth Animation */}
                     {isDriver && origin && (isValidCoordinate(routeInfo?.start_location) || isValidCoordinate(origin)) && (
-                        <AdvancedMarker
+                        <AnimatedVehicleMarker
                             position={isValidCoordinate(routeInfo?.start_location) ? routeInfo.start_location : origin}
                             zIndex={100}
                         >
                             <div
                                 style={{
-                                    // "SENSE TO THE ROUTE": Prioritize the instructions heading coming from Google Maps Directions
-                                    // This aligns the car with the path. Only fallback to GPS heading if off-route.
-                                    transform: `rotate(${routeInfo?.next_step?.heading || heading || 0}deg)`,
+                                    // "SENSE TO THE ROUTE": Prioritize REAL GPS Heading (now smoothed)
+                                    // Fallback to route alignment only if GPS heading is missing (0)
+                                    transform: `rotate(${useSmoothHeading(heading || routeInfo?.next_step?.heading || 0)}deg)`,
                                     transition: 'transform 0.5s linear'
                                 }}
                             >
@@ -373,7 +435,7 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                                     alt="My Vehicle"
                                 />
                             </div>
-                        </AdvancedMarker>
+                        </AnimatedVehicleMarker>
                     )}
 
                     {destination && !showPin && isValidCoordinate(destination) && (
