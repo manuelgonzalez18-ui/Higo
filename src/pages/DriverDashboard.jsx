@@ -963,6 +963,7 @@ const DriverDashboard = () => {
                     isDriver={true}
                     vehicleType={profile?.vehicle_type || 'standard'}
                     enableSimulation={false}
+                    heading={heading} // Fix: Pass heading top-level for Driver Self-View
                 />
                 <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/60 to-transparent pointer-events-none"></div>
             </div>
