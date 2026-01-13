@@ -436,20 +436,11 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                             position={isValidCoordinate(routeInfo?.start_location) ? routeInfo.start_location : origin}
                             zIndex={100}
                         >
-                            <div
-                                style={{
-                                    // "SENSE TO THE ROUTE": Prioritize REAL GPS Heading (now smoothed)
-                                    // Fallback to route alignment only if GPS heading is missing (0)
-                                    transform: `rotate(${useSmoothHeading(heading || routeInfo?.next_step?.heading || 0)}deg)`,
-                                    transition: 'transform 0.5s linear'
-                                }}
-                            >
-                                <img
-                                    src={getIconForType(vehicleType)}
-                                    className="w-16 h-16 object-contain drop-shadow-2xl"
-                                    alt="My Vehicle"
-                                />
-                            </div>
+                            <VehicleIcon
+                                heading={heading || routeInfo?.next_step?.heading || 0}
+                                type={vehicleType}
+                                className="w-16 h-16 object-contain drop-shadow-2xl"
+                            />
                         </AnimatedVehicleMarker>
                     )}
 
