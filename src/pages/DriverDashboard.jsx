@@ -710,18 +710,23 @@ const DriverDashboard = () => {
                         setCurrentLoc({ lat: latitude, lng: longitude });
 
                         try {
-                            // Optimistic update - fire and forget (or await but don't block)
-                            await supabase.from('profiles').update({
+                            // Optimistic update
+                            const { error: updateError } = await supabase.from('profiles').update({
                                 curr_lat: latitude,
                                 curr_lng: longitude,
                                 heading: newHeading || 0
                             }).eq('id', currentProfile.id);
 
-                            lastSentTimeRef.current = Date.now(); // Confirm update success
-
+                            if (updateError) {
+                                console.error("❌ LOCATION SYNC ERROR:", updateError);
+                                lastSentTimeRef.current = `ERR: ${updateError.code || 'Unknown'}`;
+                            } else {
+                                lastSentTimeRef.current = Date.now(); // Confirm update success
+                            }
 
                         } catch (err) {
                             console.error("❌ LOCATION SYNC EXCEPTION:", err);
+                            lastSentTimeRef.current = "EXC";
                         }
 
                         // --- BACKGROUND POLLING FOR RIDES ---
@@ -1002,11 +1007,10 @@ const DriverDashboard = () => {
                         {/* Top: Direction Pill */}
                         {/* DEBUG OVERLAY */}
                         <div className="absolute top-2 left-2 right-2 bg-black/50 text-[10px] text-green-400 p-1 rounded z-50 pointer-events-none font-mono">
-                            GPS: {currentLoc ? `${currentLoc.lat.toFixed(5)}, ${currentLoc.lng.toFixed(5)}` : 'Wait...'} |
-                            Hdg: {heading} | Ref: {profileRef.current ? 'OK' : 'NULL'} |
-                            ID: {profileRef.current?.id ? profileRef.current.id.slice(0, 4) : '????'} |
-                            Sent: {lastSentTimeRef.current ? `${((Date.now() - lastSentTimeRef.current) / 1000).toFixed(1)}s ago` : 'No'}
-                        </div>
+                            <div className="bg-black/60 text-green-400 p-1 text-[10px] font-mono pointer-events-none">
+                                GPS: {currentLoc?.lat?.toFixed(5)}, {currentLoc?.lng?.toFixed(5)} | Hdg: {headingRef.current} | Ref: {profileRef.current ? "OK" : "NULL"} <br />
+                                ID: {profile?.id?.substring(0, 4)} | Sent: {typeof lastSentTimeRef.current === 'number' ? `${((Date.now() - lastSentTimeRef.current) / 1000).toFixed(1)}s ago` : lastSentTimeRef.current}
+                            </div>        </div>
 
                         <div className="bg-[#0F172A] rounded-full p-4 pl-6 pr-6 shadow-2xl border border-white/10 flex items-center justify-between mx-auto w-full max-w-sm pointer-events-auto animate-in slide-in-from-top-4 relative z-20">
                             <div className="flex items-center gap-4">
