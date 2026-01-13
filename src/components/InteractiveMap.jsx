@@ -178,34 +178,8 @@ const AnimatedVehicleMarker = ({ position, heading, icon, type, zIndex, children
     );
 };
 
-// NEW: Component to handle heading smoothing internally (Fix for Hook Error #310)
-const VehicleIcon = ({ heading, type, className }) => {
-    const smoothHeading = useSmoothHeading(heading || 0);
-
-    const getIconForType = (type) => {
-        // Use updated top-down assets
-        switch (type) {
-            case 'moto': return MotoIcon; // Now moto_top_view.png
-            case 'van': return VanIcon;   // Now van_top_view.png
-            default: return StandardIcon; // car_top_view.png
-        }
-    };
-
-    return (
-        <div
-            style={{
-                transform: `rotate(${smoothHeading}deg)`,
-                transition: 'transform 0.5s linear' // Keep rotation native CSS
-            }}
-        >
-            <img
-                src={getIconForType(type)}
-                className={className || "w-10 h-10 object-contain drop-shadow-xl"}
-                alt="vehicle"
-            />
-        </div>
-    );
-};
+// VehicleIcon Component REMOVED to simplify hook logic.
+// Using inline CSS transitions instead.
 
 const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = false, markersProp, center, origin, heading = 0, destination, assignedDriver, destinationIconType = 'flag', onRouteData, className, routeColor = "#8A2BE2", isDriver = false, vehicleType = 'standard', enableSimulation = true }) => {
     const [apiKey] = useState(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '');
@@ -385,11 +359,18 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                                 position={{ lat: driver.lat, lng: driver.lng }}
                                 zIndex={50}
                             >
-                                <VehicleIcon
-                                    heading={driver.heading}
-                                    type={driver.type}
-                                    className="w-10 h-10 object-contain drop-shadow-xl"
-                                />
+                                <div
+                                    style={{
+                                        transform: `rotate(${driver.heading}deg)`,
+                                        transition: 'transform 0.5s linear'
+                                    }}
+                                >
+                                    <img
+                                        src={getIconForType(driver.type)}
+                                        className="w-10 h-10 object-contain drop-shadow-xl"
+                                        alt="vehicle"
+                                    />
+                                </div>
                             </AnimatedVehicleMarker>
                         );
                     })}
@@ -406,11 +387,18 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                                     <span>{assignedDriver.plate || "HIGO"}</span>
                                     {routeInfo && <span className="text-green-400 text-[9px]">{routeInfo.duration.text}</span>}
                                 </div>
-                                <VehicleIcon
-                                    heading={assignedDriver.heading}
-                                    type={assignedDriver.type || 'standard'}
-                                    className="w-16 h-16 object-contain drop-shadow-2xl"
-                                />
+                                <div
+                                    style={{
+                                        transform: `rotate(${assignedDriver.heading}deg)`,
+                                        transition: 'transform 0.5s linear'
+                                    }}
+                                >
+                                    <img
+                                        src={getIconForType(assignedDriver.type || 'standard')}
+                                        className="w-16 h-16 object-contain drop-shadow-2xl"
+                                        alt="My Driver"
+                                    />
+                                </div>
                             </div>
                         </AnimatedVehicleMarker>
                     )}
@@ -436,11 +424,18 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                             position={isValidCoordinate(routeInfo?.start_location) ? routeInfo.start_location : origin}
                             zIndex={100}
                         >
-                            <VehicleIcon
-                                heading={heading || routeInfo?.next_step?.heading || 0}
-                                type={vehicleType}
-                                className="w-16 h-16 object-contain drop-shadow-2xl"
-                            />
+                            <div
+                                style={{
+                                    transform: `rotate(${heading || routeInfo?.next_step?.heading || 0}deg)`,
+                                    transition: 'transform 0.5s linear'
+                                }}
+                            >
+                                <img
+                                    src={getIconForType(vehicleType)}
+                                    className="w-16 h-16 object-contain drop-shadow-2xl"
+                                    alt="My Vehicle"
+                                />
+                            </div>
                         </AnimatedVehicleMarker>
                     )}
 
