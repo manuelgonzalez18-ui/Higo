@@ -100,20 +100,30 @@ const ChatWidget = () => {
                     vibrateIntense();
                     playAlertSound();
 
-                    // Native Notification for backup
-                    LocalNotifications.schedule({
-                        notifications: [{
-                            title: 'Nuevo Mensaje',
-                            body: payload.new.text || 'Tienes un nuevo mensaje',
-                            id: new Date().getTime(),
-                            schedule: { at: new Date() },
-                            sound: 'alert_sound',
-                            channelId: 'higo_rides_v11', // Reuse high priority channel
-                            extra: { rideId: rideId }
-                        }]
-                    });
+                    // Notify if message is NOT from me
+                    if (payload.new.sender_id !== userId) {
+                        if (!isOpen) {
+                            setUnreadCount(prev => prev + 1);
+                        }
 
+                        // Intense Vibration and Sound using Service
+                        vibrateIntense();
+                        playAlertSound();
 
+                        // Native Notification for backup
+                        const msgText = payload.new.content || 'Tienes un nuevo mensaje';
+                        LocalNotifications.schedule({
+                            notifications: [{
+                                title: 'Nuevo Mensaje',
+                                body: msgText,
+                                id: new Date().getTime(),
+                                schedule: { at: new Date() },
+                                sound: 'alert_sound',
+                                channelId: 'higo_rides_v11',
+                                extra: { rideId: rideId }
+                            }]
+                        });
+                    }
                 }
             })
             .subscribe();
@@ -168,7 +178,7 @@ const ChatWidget = () => {
             .from('ride_messages')
             .insert({
                 ride_id: rideId,
-                sender_id: userId,
+                sender_id: currentUserId,
                 content: content
             });
 

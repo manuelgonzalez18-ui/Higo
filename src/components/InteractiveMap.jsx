@@ -18,6 +18,38 @@ const isValidCoordinate = (coord) => {
         typeof coord.lng === 'number' && !isNaN(coord.lng);
 };
 
+// Helper component to handle smooth rotation and asset offset (-90deg for car_top_view)
+const VehicleIconWithHeading = ({ heading, type, isLarge }) => {
+    const smoothHeading = useSmoothHeading(heading);
+
+    // Most car assets face EAST (90deg) by default. GPS is NORTH (0deg).
+    // We subtract 90 to align the asset with the map.
+    const rotationOffset = -90;
+
+    return (
+        <div
+            style={{
+                transform: `rotate(${smoothHeading + rotationOffset}deg)`,
+                transition: 'transform 0.3s ease-out'
+            }}
+        >
+            <img
+                src={getIconForType(type)}
+                className={`${isLarge ? 'w-16 h-16' : 'w-10 h-10'} object-contain drop-shadow-2xl`}
+                alt="vehicle"
+            />
+        </div>
+    );
+};
+
+const getIconForType = (type) => {
+    switch (type) {
+        case 'moto': return MotoIcon;
+        case 'van': return VanIcon;
+        default: return StandardIcon;
+    }
+};
+
 
 const Directions = ({ origin, destination, onRouteData, routeColor }) => {
     const map = useMap();
@@ -32,6 +64,7 @@ const Directions = ({ origin, destination, onRouteData, routeColor }) => {
         setDirectionsRenderer(new routesLibrary.DirectionsRenderer({
             map,
             suppressMarkers: true, // We will use custom markers
+            preserveViewport: true, // IMPORTANT: Don't jump zoom on every GPS update
             polylineOptions: {
                 strokeColor: routeColor || '#22c55e', // Default or Custom
                 strokeOpacity: 1.0,
@@ -58,6 +91,8 @@ const Directions = ({ origin, destination, onRouteData, routeColor }) => {
 
             // Extract ETA data from the first leg
             const leg = response.routes[0]?.legs[0];
+            const overviewPath = response.routes[0]?.overview_path || [];
+
             if (leg && onRouteData) {
                 const nextStep = leg.steps?.[0];
                 let nextHeading = 0;
@@ -72,6 +107,7 @@ const Directions = ({ origin, destination, onRouteData, routeColor }) => {
                     distance: leg.distance,
                     end_location: leg.end_location,
                     start_location: leg.start_location,
+                    overviewPath: overviewPath.map(p => ({ lat: p.lat(), lng: p.lng() })),
                     next_step: nextStep ? {
                         instruction: nextStep.instructions,
                         distance: nextStep.distance,
@@ -131,6 +167,58 @@ const useSmoothPosition = (targetPos, speedFactor = 0.1) => {
     return currentPos;
 };
 
+// Helper to snap a coordinate to a polyline path
+const snapToPolyline = (point, path, thresholdMeters = 30) => {
+    if (!path || path.length < 2) return point;
+
+    let minDistance = Infinity;
+    let snappedPoint = point;
+
+    for (let i = 0; i < path.length - 1; i++) {
+        const p1 = path[i];
+        const p2 = path[i + 1];
+
+        // Closest point on segment
+        const closest = getClosestPointOnSegment(point, p1, p2);
+        const dist = getDistanceInMeters(point, closest);
+
+        if (dist < minDistance) {
+            minDistance = dist;
+            snappedPoint = closest;
+        }
+    }
+
+    // Only snap if within threshold (e.g. 30 meters)
+    return minDistance < thresholdMeters ? snappedPoint : point;
+};
+
+const getClosestPointOnSegment = (p, p1, p2) => {
+    const x = p.lat, y = p.lng;
+    const x1 = p1.lat, y1 = p1.lng;
+    const x2 = p2.lat, y2 = p2.lng;
+
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+
+    if (dx === 0 && dy === 0) return p1;
+
+    let t = ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy);
+    t = Math.max(0, Math.min(1, t));
+
+    return { lat: x1 + t * dx, lng: y1 + t * dy };
+};
+
+const getDistanceInMeters = (p1, p2) => {
+    const R = 6371000; // Earth radius in meters
+    const dLat = (p2.lat - p1.lat) * Math.PI / 180;
+    const dLng = (p2.lng - p1.lng) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+};
+
 // Custom Hook for Smooth Heading (Shortest Path)
 const useSmoothHeading = (targetHeading) => {
     const [displayHeading, setDisplayHeading] = useState(targetHeading || 0);
@@ -160,8 +248,8 @@ const useSmoothHeading = (targetHeading) => {
 // Wrapper Component for Animated Vehicle
 const AnimatedVehicleMarker = ({ position, heading, icon, type, zIndex, children }) => {
     // Smooth the position input
-    // Using 0.05 for slower, smoother drift (updates at 60fps)
-    const smoothPos = useSmoothPosition(position, 0.05);
+    // Balanced factor (0.12) to stay faithful to GPS without excessive lag
+    const smoothPos = useSmoothPosition(position, 0.12);
 
     // Also smooth the rotation?
     // CSS transition handles rotation well enough usually, but let's stick to CSS for rotation provided by parent
@@ -184,6 +272,8 @@ const AnimatedVehicleMarker = ({ position, heading, icon, type, zIndex, children
 const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = false, markersProp, center, origin, heading = 0, destination, assignedDriver, destinationIconType = 'flag', onRouteData, className, routeColor = "#8A2BE2", isDriver = false, vehicleType = 'standard', enableSimulation = true }) => {
     const [apiKey] = useState(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '');
     const map = useMap();
+    const [isFollowing, setIsFollowing] = useState(true);
+    const lastInteractionTime = useRef(0);
 
     // ... (rest of component state) ...
     // ... [omitted logic remains same until return] ...
@@ -207,6 +297,23 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
             map.panTo(center);
         }
     }, [map, center, showPin]);
+
+    // AUTO-FOLLOW LOGIC: Pan to driver/vehicle position
+    useEffect(() => {
+        if (!map || !isFollowing) return;
+
+        let target = null;
+        if (isDriver && origin && isValidCoordinate(origin)) {
+            target = origin;
+        } else if (assignedDriver && isValidCoordinate(assignedDriver)) {
+            // assignedDriver might be an object with lat/lng or just lat/lng depending on caller
+            target = { lat: assignedDriver.lat, lng: assignedDriver.lng };
+        }
+
+        if (target && isValidCoordinate(target)) {
+            map.panTo(target);
+        }
+    }, [map, isFollowing, origin, assignedDriver, isDriver]);
 
     // Mock Drivers State for Simulation (REMOVED)
     // const [mockDrivers, setMockDrivers] = useState([]);
@@ -232,11 +339,13 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
         }
 
         const fetchOnlineDrivers = async () => {
+            const ninetySecondsAgo = new Date(Date.now() - 90000).toISOString();
             const { data, error } = await supabase
                 .from('profiles')
-                .select('id, vehicle_type, vehicle_brand, vehicle_model, vehicle_color, curr_lat, curr_lng, heading, status')
+                .select('id, vehicle_type, vehicle_brand, vehicle_model, vehicle_color, curr_lat, curr_lng, heading, status, updated_at')
                 .eq('role', 'driver')
-                .eq('status', 'online');
+                .eq('status', 'online')
+                .gt('updated_at', ninetySecondsAgo);
 
             if (data) {
                 const mapped = data
@@ -247,7 +356,8 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                         lng: d.curr_lng,
                         type: (d.vehicle_type || 'standard').toLowerCase(), // Normalize
                         heading: d.heading || 0,
-                        name: d.vehicle_model || 'Higo Driver'
+                        name: d.vehicle_model || 'Higo Driver',
+                        lastUpdate: d.updated_at
                     }));
                 setDrivers(mapped);
             }
@@ -275,7 +385,8 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                             lng: newDriver.curr_lng,
                             type: (newDriver.vehicle_type || 'standard').toLowerCase(),
                             heading: newDriver.heading || 0,
-                            name: newDriver.vehicle_model || 'Higo Driver'
+                            name: newDriver.vehicle_model || 'Higo Driver',
+                            lastUpdate: newDriver.updated_at
                         };
 
                         const exists = prev.find(d => d.id === newDriver.id);
@@ -291,19 +402,21 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
             })
             .subscribe();
 
+        // 3. Periodic Cleanup of "Ghost Cars" (Stale Local State)
+        const cleanupInterval = setInterval(() => {
+            const now = Date.now();
+            setDrivers(prev => prev.filter(d => {
+                const age = now - new Date(d.lastUpdate || 0).getTime();
+                return age < 90000; // 90 seconds max
+            }));
+        }, 30000); // Check every 30 seconds
+
         return () => {
             supabase.removeChannel(channel);
+            clearInterval(cleanupInterval);
         };
     }, [assignedDriver]);
 
-    const getIconForType = (type) => {
-        // Use updated top-down assets
-        switch (type) {
-            case 'moto': return MotoIcon; // Now moto_top_view.png
-            case 'van': return VanIcon;   // Now van_top_view.png
-            default: return StandardIcon; // car_top_view.png
-        }
-    };
 
     if (!apiKey) return <div className="text-white p-4">Loading Map... (Key Missing)</div>;
 
@@ -317,7 +430,7 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                     mapId="DEMO_MAP_ID"
                     options={{
                         disableDefaultUI: true,
-                        zoomControl: false,
+                        zoomControl: true,
                         streetViewControl: false,
                         mapTypeControl: false,
                         fullscreenControl: false,
@@ -348,6 +461,10 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                             },
                         ]
                     }}
+                    onDragstart={() => {
+                        console.log("🖐️ User interaction detected, pausing follow");
+                        setIsFollowing(false);
+                    }}
                     className="w-full h-full"
                 >
                     {/* Render Real + Simulated Drivers (Only if NOT in Driver Navigation Mode) */}
@@ -359,18 +476,10 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                                 position={{ lat: driver.lat, lng: driver.lng }}
                                 zIndex={50}
                             >
-                                <div
-                                    style={{
-                                        transform: `rotate(${driver.heading}deg)`,
-                                        transition: 'transform 0.5s linear'
-                                    }}
-                                >
-                                    <img
-                                        src={getIconForType(driver.type)}
-                                        className="w-10 h-10 object-contain drop-shadow-xl"
-                                        alt="vehicle"
-                                    />
-                                </div>
+                                <VehicleIconWithHeading
+                                    heading={driver.heading}
+                                    type={driver.type}
+                                />
                             </AnimatedVehicleMarker>
                         );
                     })}
@@ -378,7 +487,7 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                     {/* Render ASSIGNED DRIVER with Smooth Animation - HIDE IF DRIVER (Use Self-Icon) */}
                     {assignedDriver && !isDriver && isValidCoordinate({ lat: assignedDriver.lat, lng: assignedDriver.lng }) && (
                         <AnimatedVehicleMarker
-                            position={{ lat: assignedDriver.lat, lng: assignedDriver.lng }}
+                            position={snapToPolyline({ lat: assignedDriver.lat, lng: assignedDriver.lng }, routeInfo?.overviewPath)}
                             zIndex={100}
                         >
                             <div className="relative">
@@ -387,18 +496,11 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                                     <span>{assignedDriver.plate || "HIGO"}</span>
                                     {routeInfo && <span className="text-green-400 text-[9px]">{routeInfo.duration.text}</span>}
                                 </div>
-                                <div
-                                    style={{
-                                        transform: `rotate(${assignedDriver.heading}deg)`,
-                                        transition: 'transform 0.5s linear'
-                                    }}
-                                >
-                                    <img
-                                        src={getIconForType(assignedDriver.type || 'standard')}
-                                        className="w-16 h-16 object-contain drop-shadow-2xl"
-                                        alt="My Driver"
-                                    />
-                                </div>
+                                <VehicleIconWithHeading
+                                    heading={assignedDriver.heading}
+                                    type={assignedDriver.type || 'standard'}
+                                    isLarge
+                                />
                             </div>
                         </AnimatedVehicleMarker>
                     )}
@@ -419,23 +521,16 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                     )}
 
                     {/* DRIVER SELF ICON (Refined for Dashboard) with Smooth Animation */}
-                    {isDriver && origin && (isValidCoordinate(routeInfo?.start_location) || isValidCoordinate(origin)) && (
+                    {isDriver && origin && isValidCoordinate(origin) && (
                         <AnimatedVehicleMarker
-                            position={isValidCoordinate(routeInfo?.start_location) ? routeInfo.start_location : origin}
+                            position={snapToPolyline(origin, routeInfo?.overviewPath)}
                             zIndex={100}
                         >
-                            <div
-                                style={{
-                                    transform: `rotate(${heading || routeInfo?.next_step?.heading || 0}deg)`,
-                                    transition: 'transform 0.5s linear'
-                                }}
-                            >
-                                <img
-                                    src={getIconForType(vehicleType)}
-                                    className="w-16 h-16 object-contain drop-shadow-2xl"
-                                    alt="My Vehicle"
-                                />
-                            </div>
+                            <VehicleIconWithHeading
+                                heading={heading || routeInfo?.next_step?.heading || 0}
+                                type={vehicleType}
+                                isLarge
+                            />
                         </AnimatedVehicleMarker>
                     )}
 
@@ -479,6 +574,21 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                             routeColor={routeColor}
                         />
                     )}
+
+                    {/* Auto-Follow Recenter Button Overlay */}
+                    {!isFollowing && (origin || assignedDriver) && (
+                        <div className="absolute bottom-24 right-4 z-[1000]">
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsFollowing(true);
+                                }}
+                                className="bg-blue-600 text-white p-3 rounded-full shadow-2xl active:scale-95 transition-all flex items-center justify-center border-2 border-white/20"
+                            >
+                                <span className="text-xl">🎯</span>
+                            </button>
+                        </div>
+                    )}
                 </Map>
 
                 {/* Pin for Selection (Center) */}
@@ -489,7 +599,7 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                     </div>
                 )}
             </div>
-        </APIProvider>
+        </APIProvider >
     );
 };
 
