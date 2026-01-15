@@ -29,8 +29,12 @@ const VehicleIconWithHeading = ({ heading, type, isLarge }) => {
     return (
         <div
             style={{
-                transform: `rotate(${smoothHeading + rotationOffset}deg)`,
-                transition: 'transform 0.3s ease-out'
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: `translate(-50%, -50%) rotate(${smoothHeading + rotationOffset}deg)`,
+                transition: 'transform 0.3s ease-out',
+                pointerEvents: 'none'
             }}
         >
             <img
@@ -261,7 +265,9 @@ const AnimatedVehicleMarker = ({ position, heading, icon, type, zIndex, children
             position={smoothPos}
             zIndex={zIndex || 50}
         >
-            {children}
+            <div style={{ position: 'relative', width: 0, height: 0 }}>
+                {children}
+            </div>
         </AdvancedMarker>
     );
 };
@@ -274,6 +280,14 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
     const map = useMap();
     const [isFollowing, setIsFollowing] = useState(true);
     const lastInteractionTime = useRef(0);
+
+    // Reset following when ride or destination changes (Force centered view)
+    useEffect(() => {
+        if (destination) {
+            console.log("🎯 New destination detected, resetting follow");
+            setIsFollowing(true);
+        }
+    }, [destination?.lat, destination?.lng]);
 
     // ... (rest of component state) ...
     // ... [omitted logic remains same until return] ...
