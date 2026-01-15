@@ -935,7 +935,23 @@ const DriverDashboard = () => {
         }, 150);
     };
 
-    const handleLogout = async () => {
+    // Sync currentLoc and heading from profile on load
+    useEffect(() => {
+        if (profile && !currentLoc) {
+            setCurrentLoc({ lat: Number(profile.curr_lat), lng: Number(profile.curr_lng) });
+            if (profile.heading) setHeading(profile.heading);
+        }
+    }, [profile, currentLoc]);
+
+    // --- RE-CENTER LOGIC: Ensure follow is active when trip starts ---
+    useEffect(() => {
+        if (activeRide) {
+            // Force re-enable follow when a ride state changes to ensure driver is centered
+            // but don't do it repetitively to not override user drags
+        }
+    }, [activeRide, navStep]);
+
+    const handleAction = async () => {
         if (activeRide) {
             alert("Completa el viaje actual antes de salir.");
             return;
@@ -1019,13 +1035,13 @@ const DriverDashboard = () => {
                 {activeRide && !showPaymentQR && (
                     <div className="flex-1 flex flex-col justify-between p-4 pt-10 relative pointer-events-none">
 
-                        {/* Top: Direction Pill */}
                         {/* DEBUG OVERLAY */}
                         <div className="absolute top-2 left-2 right-2 bg-black/50 text-[10px] text-green-400 p-1 rounded z-50 pointer-events-none font-mono">
                             <div className="bg-black/60 text-green-400 p-1 text-[10px] font-mono pointer-events-none">
-                                GPS: {currentLoc?.lat?.toFixed(5)}, {currentLoc?.lng?.toFixed(5)} | Hdg: {headingRef.current} | Ref: {profileRef.current ? "OK" : "NULL"} <br />
+                                GPS: {(currentLoc?.lat || profile?.curr_lat)?.toFixed(5)}, {(currentLoc?.lng || profile?.curr_lng)?.toFixed(5)} | Hdg: {heading || headingRef.current} | Ref: {profile ? "OK" : "NULL"} <br />
                                 ID: {profile?.id?.substring(0, 4)} | Sent: {typeof lastSentTimeRef.current === 'number' ? `${((Date.now() - lastSentTimeRef.current) / 1000).toFixed(1)}s ago` : lastSentTimeRef.current}
-                            </div>        </div>
+                            </div>
+                        </div>
 
                         <div className="bg-[#0F172A] rounded-full p-4 pl-6 pr-6 shadow-2xl border border-white/10 flex items-center justify-between mx-auto w-full max-w-sm pointer-events-auto animate-in slide-in-from-top-4 relative z-20">
                             <div className="flex items-center gap-4">

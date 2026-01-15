@@ -168,7 +168,7 @@ const useSmoothPosition = (targetPos, speedFactor = 0.1) => {
 };
 
 // Helper to snap a coordinate to a polyline path
-const snapToPolyline = (point, path, thresholdMeters = 30) => {
+const snapToPolyline = (point, path, thresholdMeters = 45) => {
     if (!path || path.length < 2) return point;
 
     let minDistance = Infinity;
@@ -577,7 +577,7 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
 
                     {/* Auto-Follow Recenter Button Overlay */}
                     {!isFollowing && (origin || assignedDriver) && (
-                        <div className="absolute bottom-24 right-4 z-[1000]">
+                        <div className="absolute bottom-80 right-4 z-[1000]">
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
