@@ -968,12 +968,16 @@ const DriverDashboard = () => {
             <div className="absolute inset-0 z-0">
                 <InteractiveMap
                     origin={
-                        activeRide && navStep === 1
-                            ? (lastLocationRef.current ? { lat: lastLocationRef.current.latitude, lng: lastLocationRef.current.longitude }
-                                : (profile?.curr_lat ? { lat: Number(profile.curr_lat), lng: Number(profile.curr_lng) } : null))
-                            : (activeRide && navStep === 2
+                        activeRide
+                            ? (navStep === 1
                                 ? (lastLocationRef.current ? { lat: lastLocationRef.current.latitude, lng: lastLocationRef.current.longitude }
-                                    : (profile?.curr_lat ? { lat: Number(profile.curr_lat), lng: Number(profile.curr_lng) } : { lat: activeRide.pickup_lat, lng: activeRide.pickup_lng }))
+                                    : (profile?.curr_lat ? { lat: Number(profile.curr_lat), lng: Number(profile.curr_lng) } : null))
+                                : (navStep === 2
+                                    ? (lastLocationRef.current ? { lat: lastLocationRef.current.latitude, lng: lastLocationRef.current.longitude }
+                                        : (profile?.curr_lat ? { lat: Number(profile.curr_lat), lng: Number(profile.curr_lng) } : { lat: activeRide.pickup_lat, lng: activeRide.pickup_lng }))
+                                    : null))
+                            : (isOnline && (lastLocationRef.current || currentLoc)
+                                ? { lat: lastLocationRef.current?.latitude || currentLoc?.lat, lng: lastLocationRef.current?.longitude || currentLoc?.lng }
                                 : null)
                     }
                     destination={

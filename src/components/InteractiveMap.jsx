@@ -280,6 +280,7 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
     const map = useMap();
     const [isFollowing, setIsFollowing] = useState(true);
     const lastInteractionTime = useRef(0);
+    const prevOriginRef = useRef(null);
 
     // Reset following when ride or destination changes (Force centered view)
     useEffect(() => {
@@ -288,6 +289,15 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
             setIsFollowing(true);
         }
     }, [destination?.lat, destination?.lng]);
+
+    // Also reset when entering "Online" mode (origin first arrival)
+    useEffect(() => {
+        if (origin && !prevOriginRef.current && isValidCoordinate(origin)) {
+            console.log("🚗 Driver went online, enabling auto-follow");
+            setIsFollowing(true);
+        }
+        prevOriginRef.current = origin;
+    }, [origin?.lat, origin?.lng]);
 
     // ... (rest of component state) ...
     // ... [omitted logic remains same until return] ...
