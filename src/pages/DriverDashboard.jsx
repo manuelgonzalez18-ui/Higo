@@ -951,7 +951,7 @@ const DriverDashboard = () => {
         }
     }, [activeRide, navStep]);
 
-    const handleAction = async () => {
+    const handleLogout = async () => {
         if (activeRide) {
             alert("Completa el viaje actual antes de salir.");
             return;
