@@ -597,8 +597,8 @@ const MapContent = ({
             )}
 
             {/* UI Controls using MapControl for better placement and event handling */}
-            <MapControl position={ControlPosition.RIGHT_TOP}>
-                <div className="flex flex-col gap-3 mr-3 mt-24">
+            <MapControl position={ControlPosition.RIGHT_CENTER}>
+                <div className="flex flex-col gap-3 mr-3">
                     {/* Compass (North Pointer) */}
                     <button
                         onClick={(e) => {
