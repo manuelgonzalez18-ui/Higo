@@ -284,51 +284,56 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
     const lastInteractionTime = useRef(0);
     const lastForceFollowTime = useRef(0);
     const prevOriginRef = useRef(null);
+    const prevNavStepRef = useRef(navStep);
+    const prevRideIdRef = useRef(activeRideId);
 
     // Reset following when ride or destination changes (Force centered view)
     useEffect(() => {
-        if (destination) {
-            console.log("🎯 [Map] New destination detected, resetting follow");
+        const isNavigationActive = !!(activeRideId || navStep > 0);
+        const navStateChanged = activeRideId !== prevRideIdRef.current || navStep !== prevNavStepRef.current;
+
+        if (destination || (isNavigationActive && navStateChanged)) {
+            console.log("🎯 [Map] Navigation trigger detected, forcing follow");
             setIsFollowing(true);
+            setMapTilt(45);
             lastForceFollowTime.current = Date.now();
         }
-    }, [destination?.lat, destination?.lng]);
+        prevNavStepRef.current = navStep;
+        prevRideIdRef.current = activeRideId;
+    }, [destination?.lat, destination?.lng, activeRideId, navStep]);
 
     // Also reset when entering "Online" mode (origin first arrival)
     useEffect(() => {
         if (origin && !prevOriginRef.current && isValidCoordinate(origin)) {
-            console.log("🚗 Driver went online, enabling auto-follow");
+            console.log("🚗 [Map] Driver went online, enabling auto-follow");
             setIsFollowing(true);
+            lastForceFollowTime.current = Date.now();
         }
         prevOriginRef.current = origin;
     }, [origin?.lat, origin?.lng]);
 
-    // Force follow on ride acceptance or step change
-    useEffect(() => {
-        if (activeRideId || navStep > 0) {
-            console.log("🚲 [Map] Ride/Step change detected (ID:", activeRideId, ", Step:", navStep, "), forcing follow resume");
-            setIsFollowing(true);
-            lastForceFollowTime.current = Date.now();
-            setMapTilt(45); // Auto-tilt when starting navigation
-        }
-    }, [activeRideId, navStep]);
-
-    // SYNC MAP ORIENTATION: Follow vehicle heading in 3D
+    // SYNC MAP POSITION & ORIENTATION: Follow vehicle in 3D
     useEffect(() => {
         if (!map || !isFollowing) return;
 
+        let target = null;
         let vHeading = 0;
-        if (isDriver) {
+
+        if (isDriver && origin && isValidCoordinate(origin)) {
+            target = origin;
             vHeading = heading;
-        } else if (assignedDriver) {
+        } else if (assignedDriver && isValidCoordinate(assignedDriver)) {
+            target = { lat: assignedDriver.lat, lng: assignedDriver.lng };
             vHeading = assignedDriver.heading;
         }
 
-        if (vHeading !== undefined) {
-            setMapHeading(vHeading);
-            // We keep tilt at whatever it was set to (e.g. 45) unless user panned away
+        if (target) {
+            map.panTo(target);
+            if (vHeading !== undefined) {
+                setMapHeading(vHeading);
+            }
         }
-    }, [map, isFollowing, isDriver, heading, assignedDriver?.heading]);
+    }, [map, isFollowing, isDriver, origin, heading, assignedDriver]);
 
     // ... (rest of component state) ...
     // ... [omitted logic remains same until return] ...
@@ -654,28 +659,26 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                                     e.stopPropagation();
                                     setMapTilt(prev => prev === 0 ? 45 : 0);
                                 }}
-                                className="bg-[#1A1E29] text-white p-3 rounded-full shadow-2xl border-2 border-white/10 flex items-center justify-center font-bold text-xs active:scale-95 transition-all"
+                                className="bg-[#1A1E29] text-white p-3 rounded-full shadow-2xl border-2 border-white/10 flex items-center justify-center font-bold text-xs active:scale-95 transition-all hover:bg-[#242f3e]"
                                 style={{ width: '48px', height: '48px' }}
                             >
                                 {mapTilt === 0 ? '3D' : '2D'}
                             </button>
                         )}
 
-                        {!isFollowing && (origin || assignedDriver) && (
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setIsFollowing(true);
-                                    setMapHeading(0); // Reset orientation on manual recenter
-                                    setMapTilt(0);    // Reset tilt on manual recenter
-                                    lastForceFollowTime.current = Date.now();
-                                }}
-                                className="bg-blue-600 text-white p-3 rounded-full shadow-2xl active:scale-95 transition-all flex items-center justify-center border-2 border-white/20"
-                                style={{ width: '48px', height: '48px' }}
-                            >
-                                <span className="text-xl">🎯</span>
-                            </button>
-                        )}
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setIsFollowing(true);
+                                setMapHeading(0);
+                                setMapTilt(0);
+                                lastForceFollowTime.current = Date.now();
+                            }}
+                            className={`${isFollowing ? 'bg-green-600' : 'bg-blue-600'} text-white p-3 rounded-full shadow-2xl active:scale-95 transition-all flex items-center justify-center border-2 border-white/20`}
+                            style={{ width: '48px', height: '48px' }}
+                        >
+                            <span className="text-xl">🎯</span>
+                        </button>
                     </div>
                 </Map>
 
