@@ -1090,10 +1090,13 @@ const DriverDashboard = () => {
                                         </div>
 
                                         <div className="flex-1 min-w-0 pr-2">
-                                            <h2 className="font-bold text-xl text-white truncate leading-tight">Sarah M.</h2>
+                                            <h2 className="font-bold text-xl text-white truncate leading-tight">
+                                                {activeRide.passenger_name || "Pasajero"}
+                                            </h2>
                                             <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                                                <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded font-medium border border-blue-500/10">Estándar</span>
-                                                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-medium border border-emerald-500/10">Efectivo</span>
+                                                <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded font-medium border border-blue-500/10 uppercase tracking-tighter">
+                                                    {activeRide.ride_type || activeRide.vehicle_type || 'Viaje'}
+                                                </span>
                                             </div>
                                         </div>
 
@@ -1120,15 +1123,24 @@ const DriverDashboard = () => {
                                     <div className="grid grid-cols-3 gap-2 mb-5 bg-[#0F1014]/50 p-3 rounded-2xl border border-white/5 animate-in fade-in slide-in-from-bottom-2">
                                         <div>
                                             <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-0.5">TIEMPO</p>
-                                            <p className="text-white font-bold text-base">4 <span className="text-xs font-normal text-gray-400">min</span></p>
+                                            <p className="text-white font-bold text-base truncate">
+                                                {navInfo?.duration?.text?.split(' ')[0] || "--"} <span className="text-xs font-normal text-gray-400">{navInfo?.duration?.text?.split(' ')[1] || "min"}</span>
+                                            </p>
                                         </div>
                                         <div className="border-l border-white/5 pl-3">
                                             <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-0.5">DISTANCIA</p>
-                                            <p className="text-white font-bold text-base">1.2 <span className="text-xs font-normal text-gray-400">km</span></p>
+                                            <p className="text-white font-bold text-base truncate">
+                                                {navInfo?.distance?.text?.split(' ')[0] || "--"} <span className="text-xs font-normal text-gray-400">{navInfo?.distance?.text?.split(' ')[1] || "km"}</span>
+                                            </p>
                                         </div>
                                         <div className="border-l border-white/5 pl-3">
                                             <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-0.5">LLEGADA</p>
-                                            <p className="text-white font-bold text-base">10:42</p>
+                                            <p className="text-white font-bold text-base">
+                                                {navInfo?.duration?.value
+                                                    ? new Date(Date.now() + navInfo.duration.value * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+                                                    : "--:--"
+                                                }
+                                            </p>
                                         </div>
                                     </div>
                                 </>
