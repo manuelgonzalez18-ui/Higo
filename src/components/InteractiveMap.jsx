@@ -284,6 +284,7 @@ const MapContent = ({
     const [isFollowing, setIsFollowing] = useState(true);
     const [mapHeading, setMapHeading] = useState(0);
     const [mapTilt, setMapTilt] = useState(0);
+    const [mapTypeId, setMapTypeId] = useState('roadmap'); // 'roadmap' or 'hybrid'
     const lastInteractionTime = useRef(0);
     const lastForceFollowTime = useRef(0);
     const prevOriginRef = useRef(null);
@@ -442,6 +443,7 @@ const MapContent = ({
             defaultZoom={15}
             heading={mapHeading}
             tilt={mapTilt}
+            mapTypeId={mapTypeId}
             onHeadingChange={(e) => setMapHeading(e.detail.heading)}
             onTiltChange={(e) => setMapTilt(e.detail.tilt)}
             mapId="DEMO_MAP_ID"
@@ -573,21 +575,51 @@ const MapContent = ({
                 />
             )}
 
-            {/* Controls */}
-            <div className="absolute bottom-80 right-4 z-[1000] flex flex-col gap-3">
-                {isFollowing && (isDriver || assignedDriver) && (
+            {/* Top Right Controls (Compass & Satellite) */}
+            <div className="absolute top-24 right-4 z-[1000] flex flex-col gap-3">
+                {/* Compass (North Pointer) */}
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setMapHeading(0);
+                    }}
+                    className="bg-white/95 text-black p-2 rounded-full shadow-lg border border-gray-200 flex items-center justify-center transition-all active:scale-90"
+                    style={{ width: '42px', height: '42px' }}
+                >
+                    <div style={{ transform: `rotate(${-mapHeading}deg)`, transition: 'transform 0.1s linear' }}>
+                        <span className="material-symbols-outlined text-2xl text-red-600 font-bold">navigation</span>
+                    </div>
+                </button>
+
+                {/* Satellite Toggle */}
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setMapTypeId(prev => prev === 'roadmap' ? 'hybrid' : 'roadmap');
+                    }}
+                    className={`p-2 rounded-full shadow-lg border flex items-center justify-center transition-all active:scale-90 ${mapTypeId === 'hybrid' ? 'bg-blue-600 text-white border-blue-400' : 'bg-white/95 text-black border-gray-200'}`}
+                    style={{ width: '42px', height: '42px' }}
+                >
+                    <span className="material-symbols-outlined text-2xl">{mapTypeId === 'hybrid' ? 'map' : 'layers'}</span>
+                </button>
+
+                {/* 3D/2D Toggle */}
+                {(isFollowing && (isDriver || assignedDriver)) && (
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
                             setMapTilt(prev => prev === 0 ? 45 : 0);
                         }}
-                        className="bg-[#1A1E29] text-white p-3 rounded-full shadow-2xl border-2 border-white/10 flex items-center justify-center font-bold text-xs active:scale-95 transition-all hover:bg-[#242f3e]"
-                        style={{ width: '48px', height: '48px' }}
+                        className="bg-white/95 text-black p-2 rounded-full shadow-lg border border-gray-200 flex items-center justify-center font-bold text-xs active:scale-90 transition-all"
+                        style={{ width: '42px', height: '42px' }}
                     >
                         {mapTilt === 0 ? '3D' : '2D'}
                     </button>
                 )}
+            </div>
 
+            {/* Bottom Left "Centrar" Button (Google Maps Style) */}
+            <div className="absolute bottom-64 left-4 z-[1000]">
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
@@ -596,10 +628,10 @@ const MapContent = ({
                         setMapTilt(0);
                         lastForceFollowTime.current = Date.now();
                     }}
-                    className={`${isFollowing ? 'bg-green-600' : 'bg-blue-600'} text-white p-3 rounded-full shadow-2xl active:scale-95 transition-all flex items-center justify-center border-2 border-white/20`}
-                    style={{ width: '48px', height: '48px' }}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-full shadow-2xl transition-all active:scale-95 border-2 ${isFollowing ? 'bg-green-600/95 text-white border-white/20' : 'bg-white text-blue-600 border-blue-500'}`}
                 >
-                    <span className="text-xl">🎯</span>
+                    <span className="material-symbols-outlined text-xl">near_me</span>
+                    <span className="font-bold text-sm tracking-wide">Centrar</span>
                 </button>
             </div>
         </Map>
