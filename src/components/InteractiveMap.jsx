@@ -280,13 +280,15 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
     const map = useMap();
     const [isFollowing, setIsFollowing] = useState(true);
     const lastInteractionTime = useRef(0);
+    const lastForceFollowTime = useRef(0);
     const prevOriginRef = useRef(null);
 
     // Reset following when ride or destination changes (Force centered view)
     useEffect(() => {
         if (destination) {
-            console.log("🎯 New destination detected, resetting follow");
+            console.log("🎯 [Map] New destination detected, resetting follow");
             setIsFollowing(true);
+            lastForceFollowTime.current = Date.now();
         }
     }, [destination?.lat, destination?.lng]);
 
@@ -302,8 +304,9 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
     // Force follow on ride acceptance or step change
     useEffect(() => {
         if (activeRideId || navStep > 0) {
-            console.log("🚲 Ride/Step change detected, forcing auto-follow resume");
+            console.log("🚲 [Map] Ride/Step change detected (ID:", activeRideId, ", Step:", navStep, "), forcing follow resume");
             setIsFollowing(true);
+            lastForceFollowTime.current = Date.now();
         }
     }, [activeRideId, navStep]);
 
@@ -494,8 +497,17 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                         ]
                     }}
                     onDragstart={() => {
-                        console.log("🖐️ User interaction detected, pausing follow");
+                        const now = Date.now();
+                        const timeSinceForce = now - lastForceFollowTime.current;
+
+                        if (timeSinceForce < 2000) {
+                            console.log("🚫 [Map] Ignoring drag event (Grace period active:", 2000 - timeSinceForce, "ms remaining)");
+                            return;
+                        }
+
+                        console.log("🖐️ [Map] User interaction detected, pausing follow");
                         setIsFollowing(false);
+                        lastInteractionTime.current = now;
                     }}
                     className="w-full h-full"
                 >
