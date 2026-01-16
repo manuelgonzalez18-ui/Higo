@@ -275,7 +275,7 @@ const AnimatedVehicleMarker = ({ position, heading, icon, type, zIndex, children
 // VehicleIcon Component REMOVED to simplify hook logic.
 // Using inline CSS transitions instead.
 
-const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = false, markersProp, center, origin, heading = 0, destination, assignedDriver, destinationIconType = 'flag', onRouteData, className, routeColor = "#8A2BE2", isDriver = false, vehicleType = 'standard', enableSimulation = true }) => {
+const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = false, markersProp, center, origin, heading = 0, destination, assignedDriver, destinationIconType = 'flag', onRouteData, className, routeColor = "#8A2BE2", isDriver = false, vehicleType = 'standard', enableSimulation = true, activeRideId = null, navStep = 0 }) => {
     const [apiKey] = useState(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '');
     const map = useMap();
     const [isFollowing, setIsFollowing] = useState(true);
@@ -298,6 +298,14 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
         }
         prevOriginRef.current = origin;
     }, [origin?.lat, origin?.lng]);
+
+    // Force follow on ride acceptance or step change
+    useEffect(() => {
+        if (activeRideId || navStep > 0) {
+            console.log("🚲 Ride/Step change detected, forcing auto-follow resume");
+            setIsFollowing(true);
+        }
+    }, [activeRideId, navStep]);
 
     // ... (rest of component state) ...
     // ... [omitted logic remains same until return] ...
