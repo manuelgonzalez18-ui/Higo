@@ -279,6 +279,8 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
     const [apiKey] = useState(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '');
     const map = useMap();
     const [isFollowing, setIsFollowing] = useState(true);
+    const [mapHeading, setMapHeading] = useState(0);
+    const [mapTilt, setMapTilt] = useState(0);
     const lastInteractionTime = useRef(0);
     const lastForceFollowTime = useRef(0);
     const prevOriginRef = useRef(null);
@@ -307,8 +309,26 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
             console.log("🚲 [Map] Ride/Step change detected (ID:", activeRideId, ", Step:", navStep, "), forcing follow resume");
             setIsFollowing(true);
             lastForceFollowTime.current = Date.now();
+            setMapTilt(45); // Auto-tilt when starting navigation
         }
     }, [activeRideId, navStep]);
+
+    // SYNC MAP ORIENTATION: Follow vehicle heading in 3D
+    useEffect(() => {
+        if (!map || !isFollowing) return;
+
+        let vHeading = 0;
+        if (isDriver) {
+            vHeading = heading;
+        } else if (assignedDriver) {
+            vHeading = assignedDriver.heading;
+        }
+
+        if (vHeading !== undefined) {
+            setMapHeading(vHeading);
+            // We keep tilt at whatever it was set to (e.g. 45) unless user panned away
+        }
+    }, [map, isFollowing, isDriver, heading, assignedDriver?.heading]);
 
     // ... (rest of component state) ...
     // ... [omitted logic remains same until return] ...
@@ -462,10 +482,16 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                     defaultCenter={HIGUEROTE_CENTER}
                     // Removed controlled 'center' prop to allow gestures
                     defaultZoom={15}
+                    heading={mapHeading}
+                    tilt={mapTilt}
+                    onHeadingChange={(e) => setMapHeading(e.detail.heading)}
+                    onTiltChange={(e) => setMapTilt(e.detail.tilt)}
                     mapId="DEMO_MAP_ID"
                     options={{
                         disableDefaultUI: true,
                         zoomControl: true,
+                        rotateControl: true,
+                        tiltControl: true,
                         streetViewControl: false,
                         mapTypeControl: false,
                         fullscreenControl: false,
@@ -619,20 +645,38 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                         />
                     )}
 
-                    {/* Auto-Follow Recenter Button Overlay */}
-                    {!isFollowing && (origin || assignedDriver) && (
-                        <div className="absolute bottom-80 right-4 z-[1000]">
+                    {/* Control Overlays */}
+                    <div className="absolute bottom-80 right-4 z-[1000] flex flex-col gap-3">
+                        {/* Perspective Toggle (Only if FOLLOWING) */}
+                        {isFollowing && (isDriver || assignedDriver) && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMapTilt(prev => prev === 0 ? 45 : 0);
+                                }}
+                                className="bg-[#1A1E29] text-white p-3 rounded-full shadow-2xl border-2 border-white/10 flex items-center justify-center font-bold text-xs active:scale-95 transition-all"
+                                style={{ width: '48px', height: '48px' }}
+                            >
+                                {mapTilt === 0 ? '3D' : '2D'}
+                            </button>
+                        )}
+
+                        {!isFollowing && (origin || assignedDriver) && (
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     setIsFollowing(true);
+                                    setMapHeading(0); // Reset orientation on manual recenter
+                                    setMapTilt(0);    // Reset tilt on manual recenter
+                                    lastForceFollowTime.current = Date.now();
                                 }}
                                 className="bg-blue-600 text-white p-3 rounded-full shadow-2xl active:scale-95 transition-all flex items-center justify-center border-2 border-white/20"
+                                style={{ width: '48px', height: '48px' }}
                             >
                                 <span className="text-xl">🎯</span>
                             </button>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </Map>
 
                 {/* Pin for Selection (Center) */}
