@@ -69,6 +69,8 @@ const DriverDashboard = () => {
     const [currentLoc, setCurrentLoc] = useState(null);
     const [heading, setHeading] = useState(0); // Vehicle Bearing
     const [navInfo, setNavInfo] = useState(null);
+    const [voiceEnabled, setVoiceEnabled] = useState(true); // Voice Guidance Toggle
+    const wakeLockRef = useRef(null);
     const lastInstruction = React.useRef("");
 
     // SYNC REFS FOR BG WATCHER
@@ -92,6 +94,7 @@ const DriverDashboard = () => {
     // --- HELPER FUNCTIONS ---
     // --- HELPER FUNCTIONS ---
     const speak = useCallback(async (text) => {
+        if (!voiceEnabled) return;
         setInstruction(text);
 
         try {
@@ -110,7 +113,7 @@ const DriverDashboard = () => {
             utterance.lang = 'es-ES';
             window.speechSynthesis.speak(utterance);
         }
-    }, []);
+    }, [voiceEnabled]);
 
     const handleRouteData = useCallback((data) => {
         setNavInfo(data);
@@ -207,6 +210,44 @@ const DriverDashboard = () => {
             if (listenerHandle) listenerHandle.remove();
         };
     }, []);
+
+    // Screen Wake Lock to keep display active during navigation
+    useEffect(() => {
+        const requestWakeLock = async () => {
+            if ('wakeLock' in navigator && (isOnline || activeRide)) {
+                try {
+                    // Release existing lock if any
+                    if (wakeLockRef.current) await wakeLockRef.current.release();
+                    wakeLockRef.current = await navigator.wakeLock.request('screen');
+                    console.log('🔒 Screen Wake Lock is active');
+
+                    // Re-request if visibility changes (standard practice)
+                    const handleVisibilityChange = async () => {
+                        if (wakeLockRef.current !== null && document.visibilityState === 'visible') {
+                            wakeLockRef.current = await navigator.wakeLock.request('screen');
+                        }
+                    };
+                    document.addEventListener('visibilitychange', handleVisibilityChange);
+                    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+                } catch (err) {
+                    console.warn('Wake Lock Error:', err);
+                }
+            } else if (wakeLockRef.current) {
+                wakeLockRef.current.release().then(() => {
+                    wakeLockRef.current = null;
+                    console.log('🔓 Screen Wake Lock released');
+                });
+            }
+        };
+
+        requestWakeLock();
+
+        return () => {
+            if (wakeLockRef.current) {
+                wakeLockRef.current.release();
+            }
+        };
+    }, [isOnline, activeRide]);
 
     // 5. Deep Link Listener for Background "Accept" Action
     useEffect(() => {
@@ -1022,6 +1063,13 @@ const DriverDashboard = () => {
                         </div>
                     )}
                     <div className="flex gap-2 ml-auto">
+                        <button
+                            onClick={() => setVoiceEnabled(!voiceEnabled)}
+                            className={`w-10 h-10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 shadow-lg transition-colors ${voiceEnabled ? 'bg-blue-600/90' : 'bg-[#0F172A]/90 text-gray-400'}`}
+                            title={voiceEnabled ? 'Desactivar Voz' : 'Activar Voz'}
+                        >
+                            <span className="material-symbols-outlined text-white">{voiceEnabled ? 'volume_up' : 'volume_off'}</span>
+                        </button>
                         <button onClick={() => setShowPaymentQR(true)} className="w-10 h-10 bg-[#0F172A]/90 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 shadow-lg hover:bg-blue-500/20 transition-colors">
                             <span className="material-symbols-outlined text-white">qr_code_2</span>
                         </button>
@@ -1036,13 +1084,6 @@ const DriverDashboard = () => {
                 {activeRide && !showPaymentQR && (
                     <div className="flex-1 flex flex-col justify-between p-4 pt-10 relative pointer-events-none">
 
-                        {/* DEBUG OVERLAY */}
-                        <div className="absolute top-2 left-2 right-2 bg-black/50 text-[10px] text-green-400 p-1 rounded z-50 pointer-events-none font-mono">
-                            <div className="bg-black/60 text-green-400 p-1 text-[10px] font-mono pointer-events-none">
-                                GPS: {(currentLoc?.lat || profile?.curr_lat)?.toFixed(5)}, {(currentLoc?.lng || profile?.curr_lng)?.toFixed(5)} | Hdg: {heading || headingRef.current} | Ref: {profile ? "OK" : "NULL"} <br />
-                                ID: {profile?.id?.substring(0, 4)} | Sent: {typeof lastSentTimeRef.current === 'number' ? `${((Date.now() - lastSentTimeRef.current) / 1000).toFixed(1)}s ago` : lastSentTimeRef.current}
-                            </div>
-                        </div>
 
                         <div className="bg-[#0F172A] rounded-full p-4 pl-6 pr-6 shadow-2xl border border-white/10 flex items-center justify-between mx-auto w-full max-w-sm pointer-events-auto animate-in slide-in-from-top-4 relative z-20">
                             <div className="flex items-center gap-4">

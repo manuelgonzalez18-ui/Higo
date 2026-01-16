@@ -300,7 +300,7 @@ const RequestRidePage = () => {
                     </button>
                     <div className="flex flex-col">
                         <h1 className="text-xl font-bold text-white">
-                            {serviceType === 'delivery' ? 'Higo Envíos' : serviceType === 'ride' ? 'Solicitar Viaje' : 'Hola, Manuel'}
+                            {serviceType === 'delivery' ? 'Higo Envíos' : 'Solicitar Viaje'}
                         </h1>
                     </div>
                 </div>

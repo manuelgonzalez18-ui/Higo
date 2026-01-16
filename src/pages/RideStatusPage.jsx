@@ -249,17 +249,6 @@ const RideStatusPage = () => {
         <div className="h-screen bg-[#0F1014] relative overflow-hidden font-sans text-white">
 
             {/* Map Grid Background -> Real Map */}
-            {/* PASSENGER DEBUG */}
-            {/* PASSENGER DEBUG OVERLAY */}
-            <div className="absolute top-20 left-4 bg-black/80 text-green-400 p-2 rounded text-[10px] font-mono z-50 pointer-events-none border border-green-500/30">
-                <div>CHAUFFEUR: {driver ? 'FOUND' : 'MISSING (Check RLS)'}</div>
-                <div>ID: {ride?.driver_id?.substring(0, 5)} | STATUS: {ride?.status}</div>
-                <div>
-                    POS: {driver?.curr_lat ? `${Number(driver.curr_lat).toFixed(5)}, ${Number(driver.curr_lng).toFixed(5)}` : 'NULL (No Data)'}
-                </div>
-                <div>HEADING: {driver?.heading || 0}°</div>
-                <div>AGO: {secondsAgo}s | POLL: {pollingStatus}</div>
-            </div>
             <div className="absolute inset-0 z-0">
                 <InteractiveMap
                     className="w-full h-full"

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { APIProvider, Map, AdvancedMarker, Pin, useMap, useMapsLibrary } from '@vis.gl/react-google-maps';
+import { APIProvider, Map, AdvancedMarker, Pin, useMap, useMapsLibrary, MapControl, ControlPosition } from '@vis.gl/react-google-maps';
 import { supabase } from '../services/supabase';
 
 // Import Realistic Icons
@@ -444,8 +444,27 @@ const MapContent = ({
             heading={mapHeading}
             tilt={mapTilt}
             mapTypeId={mapTypeId}
-            onHeadingChange={(e) => setMapHeading(e.detail.heading)}
-            onTiltChange={(e) => setMapTilt(e.detail.tilt)}
+            onHeadingChange={(e) => {
+                setMapHeading(e.detail.heading);
+                // If user rotates manually while following, pause follow
+                if (isFollowing && Math.abs(e.detail.heading - (heading || 0)) > 10) {
+                    const now = Date.now();
+                    if (now - lastForceFollowTime.current > 2000) {
+                        console.log("🔄 [MapContent] Manual rotation detected, pausing follow");
+                        setIsFollowing(false);
+                    }
+                }
+            }}
+            onTiltChange={(e) => {
+                setMapTilt(e.detail.tilt);
+                if (isFollowing && Math.abs(e.detail.tilt - (mapTilt || 0)) > 5) {
+                    const now = Date.now();
+                    if (now - lastForceFollowTime.current > 2000) {
+                        console.log("📐 [MapContent] Manual tilt detected, pausing follow");
+                        setIsFollowing(false);
+                    }
+                }
+            }}
             mapId="DEMO_MAP_ID"
             options={{
                 disableDefaultUI: true,
@@ -456,6 +475,8 @@ const MapContent = ({
                 mapTypeControl: false,
                 fullscreenControl: false,
                 gestureHandling: 'greedy',
+                // Allow two-finger rotation explicitly
+                isFractionalZoomEnabled: true,
                 styles: [
                     { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
                     { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
@@ -575,65 +596,70 @@ const MapContent = ({
                 />
             )}
 
-            {/* Top Right Controls (Compass & Satellite) */}
-            <div className="absolute top-24 right-4 z-[1000] flex flex-col gap-3">
-                {/* Compass (North Pointer) */}
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setMapHeading(0);
-                    }}
-                    className="bg-white/95 text-black p-2 rounded-full shadow-lg border border-gray-200 flex items-center justify-center transition-all active:scale-90"
-                    style={{ width: '42px', height: '42px' }}
-                >
-                    <div style={{ transform: `rotate(${-mapHeading}deg)`, transition: 'transform 0.1s linear' }}>
-                        <span className="material-symbols-outlined text-2xl text-red-600 font-bold">navigation</span>
-                    </div>
-                </button>
-
-                {/* Satellite Toggle */}
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setMapTypeId(prev => prev === 'roadmap' ? 'hybrid' : 'roadmap');
-                    }}
-                    className={`p-2 rounded-full shadow-lg border flex items-center justify-center transition-all active:scale-90 ${mapTypeId === 'hybrid' ? 'bg-blue-600 text-white border-blue-400' : 'bg-white/95 text-black border-gray-200'}`}
-                    style={{ width: '42px', height: '42px' }}
-                >
-                    <span className="material-symbols-outlined text-2xl">{mapTypeId === 'hybrid' ? 'map' : 'layers'}</span>
-                </button>
-
-                {/* 3D/2D Toggle */}
-                {(isFollowing && (isDriver || assignedDriver)) && (
+            {/* UI Controls using MapControl for better placement and event handling */}
+            <MapControl position={ControlPosition.RIGHT_TOP}>
+                <div className="flex flex-col gap-3 mr-3 mt-24">
+                    {/* Compass (North Pointer) */}
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
-                            setMapTilt(prev => prev === 0 ? 45 : 0);
+                            setMapHeading(0);
+                            // Also reset follows?
+                            // setIsFollowing(true);
                         }}
-                        className="bg-white/95 text-black p-2 rounded-full shadow-lg border border-gray-200 flex items-center justify-center font-bold text-xs active:scale-90 transition-all"
+                        className="bg-white/95 text-black p-2 rounded-full shadow-lg border border-gray-200 flex items-center justify-center transition-all active:scale-90"
                         style={{ width: '42px', height: '42px' }}
                     >
-                        {mapTilt === 0 ? '3D' : '2D'}
+                        <div style={{ transform: `rotate(${-mapHeading}deg)`, transition: 'transform 0.1s linear' }}>
+                            <span className="material-symbols-outlined text-2xl text-red-600 font-bold">navigation</span>
+                        </div>
                     </button>
-                )}
-            </div>
 
-            {/* Bottom Left "Centrar" Button (Google Maps Style) */}
-            <div className="absolute bottom-64 left-4 z-[1000]">
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setIsFollowing(true);
-                        setMapHeading(0);
-                        setMapTilt(0);
-                        lastForceFollowTime.current = Date.now();
-                    }}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-full shadow-2xl transition-all active:scale-95 border-2 ${isFollowing ? 'bg-green-600/95 text-white border-white/20' : 'bg-white text-blue-600 border-blue-500'}`}
-                >
-                    <span className="material-symbols-outlined text-xl">near_me</span>
-                    <span className="font-bold text-sm tracking-wide">Centrar</span>
-                </button>
-            </div>
+                    {/* Satellite Toggle */}
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setMapTypeId(prev => prev === 'roadmap' ? 'hybrid' : 'roadmap');
+                        }}
+                        className={`p-2 rounded-full shadow-lg border flex items-center justify-center transition-all active:scale-90 ${mapTypeId === 'hybrid' ? 'bg-blue-600 text-white border-blue-400' : 'bg-white/95 text-black border-gray-200'}`}
+                        style={{ width: '42px', height: '42px' }}
+                    >
+                        <span className="material-symbols-outlined text-2xl">{mapTypeId === 'hybrid' ? 'map' : 'layers'}</span>
+                    </button>
+
+                    {/* 3D/2D Toggle */}
+                    {(isFollowing && (isDriver || assignedDriver)) && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setMapTilt(prev => prev === 0 ? 45 : 0);
+                            }}
+                            className="bg-white/95 text-black p-2 rounded-full shadow-lg border border-gray-200 flex items-center justify-center font-bold text-xs active:scale-90 transition-all font-sans"
+                            style={{ width: '42px', height: '42px' }}
+                        >
+                            {mapTilt === 0 ? '3D' : '2D'}
+                        </button>
+                    )}
+                </div>
+            </MapControl>
+
+            <MapControl position={ControlPosition.LEFT_BOTTOM}>
+                <div className="mb-64 ml-4">
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setIsFollowing(true);
+                            setMapHeading(0);
+                            setMapTilt(0);
+                            lastForceFollowTime.current = Date.now();
+                        }}
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-full shadow-2xl transition-all active:scale-95 border-2 ${isFollowing ? 'bg-green-600/95 text-white border-white/20' : 'bg-white text-blue-600 border-blue-500'}`}
+                    >
+                        <span className="material-symbols-outlined text-xl font-bold">near_me</span>
+                        <span className="font-bold text-sm tracking-wide">Centrar</span>
+                    </button>
+                </div>
+            </MapControl>
         </Map>
     );
 };

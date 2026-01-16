@@ -198,6 +198,7 @@ const MOCK_LOCATIONS = [
     { title: "Valera", address: "Trujillo", lat: 9.314987620561668, lng: -70.60765180995233 },
     { title: "Ciudad Bolivar", address: "Bolívar", lat: 8.095054114468255, lng: -63.5519180353494 },
     { title: "El Cayao", address: "Bolívar", lat: 8.085614410048219, lng: -63.5545682787963 },
+    { title: "Zoom de Higuerote", address: "Higuerote, Miranda", lat: 10.481403499892968, lng: -66.09885822605273 },
 ];
 
 // 1. Maps Grounding Service
