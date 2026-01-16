@@ -275,8 +275,11 @@ const AnimatedVehicleMarker = ({ position, heading, icon, type, zIndex, children
 // VehicleIcon Component REMOVED to simplify hook logic.
 // Using inline CSS transitions instead.
 
-const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = false, markersProp, center, origin, heading = 0, destination, assignedDriver, destinationIconType = 'flag', onRouteData, className, routeColor = "#8A2BE2", isDriver = false, vehicleType = 'standard', enableSimulation = true, activeRideId = null, navStep = 0 }) => {
-    const [apiKey] = useState(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '');
+const MapContent = ({
+    selectedRide, onRideSelect, showPin, markersProp, center, origin, heading,
+    destination, assignedDriver, destinationIconType, onRouteData, className,
+    routeColor, isDriver, vehicleType, enableSimulation, activeRideId, navStep
+}) => {
     const map = useMap();
     const [isFollowing, setIsFollowing] = useState(true);
     const [mapHeading, setMapHeading] = useState(0);
@@ -293,7 +296,7 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
         const navStateChanged = activeRideId !== prevRideIdRef.current || navStep !== prevNavStepRef.current;
 
         if (destination || (isNavigationActive && navStateChanged)) {
-            console.log("🎯 [Map] Navigation trigger detected, forcing follow");
+            console.log("🎯 [MapContent] Navigation trigger detected, forcing follow");
             setIsFollowing(true);
             setMapTilt(45);
             lastForceFollowTime.current = Date.now();
@@ -305,7 +308,7 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
     // Also reset when entering "Online" mode (origin first arrival)
     useEffect(() => {
         if (origin && !prevOriginRef.current && isValidCoordinate(origin)) {
-            console.log("🚗 [Map] Driver went online, enabling auto-follow");
+            console.log("🚗 [MapContent] Driver went online, enabling auto-follow");
             setIsFollowing(true);
             lastForceFollowTime.current = Date.now();
         }
@@ -335,9 +338,6 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
         }
     }, [map, isFollowing, isDriver, origin, heading, assignedDriver]);
 
-    // ... (rest of component state) ...
-    // ... [omitted logic remains same until return] ...
-
     // Route Data for ETA Bubble
     const [routeInfo, setRouteInfo] = useState(null);
 
@@ -353,43 +353,10 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
 
     // Imperative Center Control to allow gestures
     useEffect(() => {
-        if (map && center && !showPin) { // Don't auto-center if selecting pin location to allow dragging
+        if (map && center && !showPin) {
             map.panTo(center);
         }
     }, [map, center, showPin]);
-
-    // AUTO-FOLLOW LOGIC: Pan to driver/vehicle position
-    useEffect(() => {
-        if (!map || !isFollowing) return;
-
-        let target = null;
-        if (isDriver && origin && isValidCoordinate(origin)) {
-            target = origin;
-        } else if (assignedDriver && isValidCoordinate(assignedDriver)) {
-            // assignedDriver might be an object with lat/lng or just lat/lng depending on caller
-            target = { lat: assignedDriver.lat, lng: assignedDriver.lng };
-        }
-
-        if (target && isValidCoordinate(target)) {
-            map.panTo(target);
-        }
-    }, [map, isFollowing, origin, assignedDriver, isDriver]);
-
-    // Mock Drivers State for Simulation (REMOVED)
-    // const [mockDrivers, setMockDrivers] = useState([]);
-
-    // Simulation Effects REMOVED to prevent "Ghost Cars"
-    /*
-    // Initialize Simulated Drivers on mount
-    useEffect(() => {
-        // ... removed
-    }, [center, assignedDriver, enableSimulation]);
-
-    // Animation Loop for Simulated Drivers
-    useEffect(() => {
-        // ... removed
-    }, [assignedDriver]);
-    */
 
     // Initialize Real Drivers (Real-time from Supabase)
     useEffect(() => {
@@ -400,7 +367,7 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
 
         const fetchOnlineDrivers = async () => {
             const ninetySecondsAgo = new Date(Date.now() - 90000).toISOString();
-            const { data, error } = await supabase
+            const { data } = await supabase
                 .from('profiles')
                 .select('id, vehicle_type, vehicle_brand, vehicle_model, vehicle_color, curr_lat, curr_lng, heading, status, updated_at')
                 .eq('role', 'driver')
@@ -409,12 +376,12 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
 
             if (data) {
                 const mapped = data
-                    .filter(d => d.curr_lat && d.curr_lng) // Only valid coords
+                    .filter(d => d.curr_lat && d.curr_lng)
                     .map(d => ({
                         id: d.id,
                         lat: d.curr_lat,
                         lng: d.curr_lng,
-                        type: (d.vehicle_type || 'standard').toLowerCase(), // Normalize
+                        type: (d.vehicle_type || 'standard').toLowerCase(),
                         heading: d.heading || 0,
                         name: d.vehicle_model || 'Higo Driver',
                         lastUpdate: d.updated_at
@@ -425,19 +392,14 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
 
         fetchOnlineDrivers();
 
-        // Realtime Subscription for drivers moving or going online/offline
         const channel = supabase
             .channel('public:drivers_map_v2')
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: "role=eq.driver" }, (payload) => {
                 const newDriver = payload.new;
-
                 setDrivers(prev => {
-                    // 1. If Offline -> Remove
                     if (newDriver.status !== 'online') {
                         return prev.filter(d => d.id !== newDriver.id);
                     }
-
-                    // 2. If Online & Valid Coords -> Update or Add
                     if (newDriver.curr_lat && newDriver.curr_lng) {
                         const driverData = {
                             id: newDriver.id,
@@ -448,7 +410,6 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                             name: newDriver.vehicle_model || 'Higo Driver',
                             lastUpdate: newDriver.updated_at
                         };
-
                         const exists = prev.find(d => d.id === newDriver.id);
                         if (exists) {
                             return prev.map(d => d.id === newDriver.id ? driverData : d);
@@ -456,20 +417,18 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
                             return [...prev, driverData];
                         }
                     }
-
                     return prev;
                 });
             })
             .subscribe();
 
-        // 3. Periodic Cleanup of "Ghost Cars" (Stale Local State)
         const cleanupInterval = setInterval(() => {
             const now = Date.now();
             setDrivers(prev => prev.filter(d => {
                 const age = now - new Date(d.lastUpdate || 0).getTime();
-                return age < 90000; // 90 seconds max
+                return age < 90000;
             }));
-        }, 30000); // Check every 30 seconds
+        }, 30000);
 
         return () => {
             supabase.removeChannel(channel);
@@ -477,220 +436,194 @@ const InteractiveMap = ({ selectedRide = 'standard', onRideSelect, showPin = fal
         };
     }, [assignedDriver]);
 
+    return (
+        <Map
+            defaultCenter={HIGUEROTE_CENTER}
+            defaultZoom={15}
+            heading={mapHeading}
+            tilt={mapTilt}
+            onHeadingChange={(e) => setMapHeading(e.detail.heading)}
+            onTiltChange={(e) => setMapTilt(e.detail.tilt)}
+            mapId="DEMO_MAP_ID"
+            options={{
+                disableDefaultUI: true,
+                zoomControl: true,
+                rotateControl: true,
+                tiltControl: true,
+                streetViewControl: false,
+                mapTypeControl: false,
+                fullscreenControl: false,
+                gestureHandling: 'greedy',
+                styles: [
+                    { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+                    { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+                    { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+                    { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
+                    { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
+                    { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
+                    { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
+                ]
+            }}
+            onDragstart={() => {
+                const now = Date.now();
+                const timeSinceForce = now - lastForceFollowTime.current;
+                if (timeSinceForce < 2000) return;
+                console.log("🖐️ [MapContent] User interaction detected, pausing follow");
+                setIsFollowing(false);
+                lastInteractionTime.current = now;
+            }}
+            className="w-full h-full"
+        >
+            {/* Drivers */}
+            {!assignedDriver && !isDriver && drivers.map(driver => (
+                <AnimatedVehicleMarker
+                    key={driver.id}
+                    position={{ lat: driver.lat, lng: driver.lng }}
+                    zIndex={50}
+                >
+                    <VehicleIconWithHeading
+                        heading={driver.heading}
+                        type={driver.type}
+                    />
+                </AnimatedVehicleMarker>
+            ))}
 
+            {/* Assigned Driver */}
+            {assignedDriver && !isDriver && isValidCoordinate({ lat: assignedDriver.lat, lng: assignedDriver.lng }) && (
+                <AnimatedVehicleMarker
+                    position={snapToPolyline({ lat: assignedDriver.lat, lng: assignedDriver.lng }, routeInfo?.overviewPath)}
+                    zIndex={100}
+                >
+                    <div className="relative">
+                        <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-black/80 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg whitespace-nowrap mb-1 flex flex-col items-center">
+                            <span>{assignedDriver.plate || "HIGO"}</span>
+                            {routeInfo && <span className="text-green-400 text-[9px]">{routeInfo.duration.text}</span>}
+                        </div>
+                        <VehicleIconWithHeading
+                            heading={assignedDriver.heading}
+                            type={assignedDriver.type || 'standard'}
+                            isLarge
+                        />
+                    </div>
+                </AnimatedVehicleMarker>
+            )}
+
+            {/* Origin Marker */}
+            {origin && !showPin && !assignedDriver && !isDriver && isValidCoordinate(origin) && (
+                <AdvancedMarker position={origin}>
+                    <div className="relative -mt-10 flex items-center justify-center">
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="w-32 h-32 border border-blue-500/30 rounded-full animate-ping [animation-duration:2s]"></div>
+                        </div>
+                        <img src={PassengerPin} className="w-12 h-12 object-contain drop-shadow-lg z-10" alt="Pickup" />
+                    </div>
+                </AdvancedMarker>
+            )}
+
+            {/* Driver Self Marker */}
+            {isDriver && origin && isValidCoordinate(origin) && (
+                <AnimatedVehicleMarker
+                    position={snapToPolyline(origin, routeInfo?.overviewPath)}
+                    zIndex={100}
+                >
+                    <VehicleIconWithHeading
+                        heading={heading || routeInfo?.next_step?.heading || 0}
+                        type={vehicleType}
+                        isLarge
+                    />
+                </AnimatedVehicleMarker>
+            )}
+
+            {/* Destination Marker */}
+            {destination && !showPin && isValidCoordinate(destination) && (
+                <AdvancedMarker position={destination}>
+                    <div className="relative -mt-10">
+                        <img
+                            src={destinationIconType === 'passenger' ? PassengerPin : DestinationPin}
+                            className="w-12 h-12 object-contain drop-shadow-2xl"
+                            alt="Destination"
+                        />
+                        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-1.5 bg-black/30 rounded-full blur-sm animate-pulse"></div>
+                    </div>
+                </AdvancedMarker>
+            )}
+
+            {/* ETA Bubble */}
+            {routeInfo && destination && isValidCoordinate(destination) && (
+                <AdvancedMarker position={destination} zIndex={50}>
+                    <div className="mb-14 bg-[#1A1E29] text-white px-3 py-1.5 rounded-xl shadow-xl flex items-center gap-2 border border-white/10">
+                        <div className="bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+                            {routeInfo.duration.text}
+                        </div>
+                        <div className="flex flex-col leading-none">
+                            <span className="font-bold text-xs">Llegada</span>
+                            <span className="text-[10px] text-gray-400">aprox.</span>
+                        </div>
+                    </div>
+                </AdvancedMarker>
+            )}
+
+            {/* Directions */}
+            {origin && destination && isValidCoordinate(origin) && isValidCoordinate(destination) && (
+                <Directions
+                    origin={origin}
+                    destination={destination}
+                    onRouteData={setRouteInfo}
+                    routeColor={routeColor}
+                />
+            )}
+
+            {/* Controls */}
+            <div className="absolute bottom-80 right-4 z-[1000] flex flex-col gap-3">
+                {isFollowing && (isDriver || assignedDriver) && (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setMapTilt(prev => prev === 0 ? 45 : 0);
+                        }}
+                        className="bg-[#1A1E29] text-white p-3 rounded-full shadow-2xl border-2 border-white/10 flex items-center justify-center font-bold text-xs active:scale-95 transition-all hover:bg-[#242f3e]"
+                        style={{ width: '48px', height: '48px' }}
+                    >
+                        {mapTilt === 0 ? '3D' : '2D'}
+                    </button>
+                )}
+
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setIsFollowing(true);
+                        setMapHeading(0);
+                        setMapTilt(0);
+                        lastForceFollowTime.current = Date.now();
+                    }}
+                    className={`${isFollowing ? 'bg-green-600' : 'bg-blue-600'} text-white p-3 rounded-full shadow-2xl active:scale-95 transition-all flex items-center justify-center border-2 border-white/20`}
+                    style={{ width: '48px', height: '48px' }}
+                >
+                    <span className="text-xl">🎯</span>
+                </button>
+            </div>
+        </Map>
+    );
+};
+
+const InteractiveMap = (props) => {
+    const [apiKey] = useState(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '');
     if (!apiKey) return <div className="text-white p-4">Loading Map... (Key Missing)</div>;
 
     return (
         <APIProvider apiKey={apiKey} libraries={['places', 'geometry']}>
-            <div className={className || "w-full h-full relative"}>
-                <Map
-                    defaultCenter={HIGUEROTE_CENTER}
-                    // Removed controlled 'center' prop to allow gestures
-                    defaultZoom={15}
-                    heading={mapHeading}
-                    tilt={mapTilt}
-                    onHeadingChange={(e) => setMapHeading(e.detail.heading)}
-                    onTiltChange={(e) => setMapTilt(e.detail.tilt)}
-                    mapId="DEMO_MAP_ID"
-                    options={{
-                        disableDefaultUI: true,
-                        zoomControl: true,
-                        rotateControl: true,
-                        tiltControl: true,
-                        streetViewControl: false,
-                        mapTypeControl: false,
-                        fullscreenControl: false,
-                        gestureHandling: 'greedy', // Enable one-finger panning
-                        styles: [ // Dark Theme Styling
-                            { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
-                            { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
-                            { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-                            {
-                                featureType: "road",
-                                elementType: "geometry",
-                                stylers: [{ color: "#38414e" }],
-                            },
-                            {
-                                featureType: "road",
-                                elementType: "geometry.stroke",
-                                stylers: [{ color: "#212a37" }],
-                            },
-                            {
-                                featureType: "road",
-                                elementType: "labels.text.fill",
-                                stylers: [{ color: "#9ca5b3" }],
-                            },
-                            {
-                                featureType: "water",
-                                elementType: "geometry",
-                                stylers: [{ color: "#17263c" }],
-                            },
-                        ]
-                    }}
-                    onDragstart={() => {
-                        const now = Date.now();
-                        const timeSinceForce = now - lastForceFollowTime.current;
+            <div className={props.className || "w-full h-full relative"}>
+                <MapContent {...props} />
 
-                        if (timeSinceForce < 2000) {
-                            console.log("🚫 [Map] Ignoring drag event (Grace period active:", 2000 - timeSinceForce, "ms remaining)");
-                            return;
-                        }
-
-                        console.log("🖐️ [Map] User interaction detected, pausing follow");
-                        setIsFollowing(false);
-                        lastInteractionTime.current = now;
-                    }}
-                    className="w-full h-full"
-                >
-                    {/* Render Real + Simulated Drivers (Only if NOT in Driver Navigation Mode) */}
-                    {!assignedDriver && !isDriver && drivers.map(driver => {
-                        if (!isValidCoordinate({ lat: driver.lat, lng: driver.lng })) return null;
-                        return (
-                            <AnimatedVehicleMarker
-                                key={driver.id}
-                                position={{ lat: driver.lat, lng: driver.lng }}
-                                zIndex={50}
-                            >
-                                <VehicleIconWithHeading
-                                    heading={driver.heading}
-                                    type={driver.type}
-                                />
-                            </AnimatedVehicleMarker>
-                        );
-                    })}
-
-                    {/* Render ASSIGNED DRIVER with Smooth Animation - HIDE IF DRIVER (Use Self-Icon) */}
-                    {assignedDriver && !isDriver && isValidCoordinate({ lat: assignedDriver.lat, lng: assignedDriver.lng }) && (
-                        <AnimatedVehicleMarker
-                            position={snapToPolyline({ lat: assignedDriver.lat, lng: assignedDriver.lng }, routeInfo?.overviewPath)}
-                            zIndex={100}
-                        >
-                            <div className="relative">
-                                {/* Name Tag */}
-                                <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-black/80 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg whitespace-nowrap mb-1 flex flex-col items-center">
-                                    <span>{assignedDriver.plate || "HIGO"}</span>
-                                    {routeInfo && <span className="text-green-400 text-[9px]">{routeInfo.duration.text}</span>}
-                                </div>
-                                <VehicleIconWithHeading
-                                    heading={assignedDriver.heading}
-                                    type={assignedDriver.type || 'standard'}
-                                    isLarge
-                                />
-                            </div>
-                        </AnimatedVehicleMarker>
-                    )}
-
-                    {/* Custom Origin/Dest Markers for Route (No animation needed, static) */}
-                    {origin && !showPin && !assignedDriver && !isDriver && isValidCoordinate(origin) && (
-                        <AdvancedMarker position={origin}>
-                            {/* Updated to use Passenger Pin Icon */}
-                            <div className="relative -mt-10 flex items-center justify-center">
-                                {/* Searching Radar Effect on Map */}
-                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                    <div className="w-32 h-32 border border-blue-500/30 rounded-full animate-ping [animation-duration:2s]"></div>
-                                    <div className="absolute w-20 h-20 border border-blue-500/40 rounded-full animate-ping [animation-duration:1.5s]"></div>
-                                </div>
-                                <img src={PassengerPin} className="w-12 h-12 object-contain drop-shadow-lg z-10" alt="Pickup" />
-                            </div>
-                        </AdvancedMarker>
-                    )}
-
-                    {/* DRIVER SELF ICON (Refined for Dashboard) with Smooth Animation */}
-                    {isDriver && origin && isValidCoordinate(origin) && (
-                        <AnimatedVehicleMarker
-                            position={snapToPolyline(origin, routeInfo?.overviewPath)}
-                            zIndex={100}
-                        >
-                            <VehicleIconWithHeading
-                                heading={heading || routeInfo?.next_step?.heading || 0}
-                                type={vehicleType}
-                                isLarge
-                            />
-                        </AnimatedVehicleMarker>
-                    )}
-
-                    {destination && !showPin && isValidCoordinate(destination) && (
-                        <AdvancedMarker position={destination}>
-                            {/* Destination Pin: Dynamic based on Prop */}
-                            <div className="relative -mt-10">
-                                <img
-                                    src={destinationIconType === 'passenger' ? PassengerPin : DestinationPin}
-                                    className="w-12 h-12 object-contain drop-shadow-2xl"
-                                    alt="Destination"
-                                />
-                                {/* Simple Pulse Effect at base */}
-                                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-1.5 bg-black/30 rounded-full blur-sm animate-pulse"></div>
-                            </div>
-                        </AdvancedMarker>
-                    )}
-
-                    {/* ETA Bubble Overlay (Attach to Destination) */}
-                    {routeInfo && destination && isValidCoordinate(destination) && (
-                        <AdvancedMarker position={destination} zIndex={50}>
-                            <div className="mb-14 bg-[#1A1E29] text-white px-3 py-1.5 rounded-xl shadow-xl flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 border border-white/10">
-                                <div className="bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">
-                                    {routeInfo.duration.text}
-                                </div>
-                                <div className="flex flex-col leading-none">
-                                    <span className="font-bold text-xs">Llegada</span>
-                                    <span className="text-[10px] text-gray-400">aprox.</span>
-                                </div>
-                            </div>
-                        </AdvancedMarker>
-                    )}
-
-
-                    {/* Directions Renderer */}
-                    {origin && destination && isValidCoordinate(origin) && isValidCoordinate(destination) && (
-                        <Directions
-                            origin={origin}
-                            destination={destination}
-                            onRouteData={setRouteInfo}
-                            routeColor={routeColor}
-                        />
-                    )}
-
-                    {/* Control Overlays */}
-                    <div className="absolute bottom-80 right-4 z-[1000] flex flex-col gap-3">
-                        {/* Perspective Toggle (Only if FOLLOWING) */}
-                        {isFollowing && (isDriver || assignedDriver) && (
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setMapTilt(prev => prev === 0 ? 45 : 0);
-                                }}
-                                className="bg-[#1A1E29] text-white p-3 rounded-full shadow-2xl border-2 border-white/10 flex items-center justify-center font-bold text-xs active:scale-95 transition-all hover:bg-[#242f3e]"
-                                style={{ width: '48px', height: '48px' }}
-                            >
-                                {mapTilt === 0 ? '3D' : '2D'}
-                            </button>
-                        )}
-
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setIsFollowing(true);
-                                setMapHeading(0);
-                                setMapTilt(0);
-                                lastForceFollowTime.current = Date.now();
-                            }}
-                            className={`${isFollowing ? 'bg-green-600' : 'bg-blue-600'} text-white p-3 rounded-full shadow-2xl active:scale-95 transition-all flex items-center justify-center border-2 border-white/20`}
-                            style={{ width: '48px', height: '48px' }}
-                        >
-                            <span className="text-xl">🎯</span>
-                        </button>
-                    </div>
-                </Map>
-
-                {/* Pin for Selection (Center) */}
-                {showPin && (
+                {/* Pin for Selection (Center) stays at top level wrapper for simple positioning */}
+                {props.showPin && (
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -mt-8 z-50 pointer-events-none drop-shadow-2xl animate-bounce">
                         <span className="material-symbols-outlined text-5xl text-violet-600">location_on</span>
                         <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-3 w-3 h-1.5 bg-black/20 rounded-full blur-[1px]"></div>
                     </div>
                 )}
             </div>
-        </APIProvider >
+        </APIProvider>
     );
 };
 
