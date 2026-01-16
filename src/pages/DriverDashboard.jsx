@@ -579,6 +579,7 @@ const DriverDashboard = () => {
         // Normalize Driver Vehicle (Handle 'Carro' from DB)
         let driverVehicleType = profile.vehicle_type ? profile.vehicle_type.toLowerCase() : 'standard';
         if (driverVehicleType === 'carro' || driverVehicleType === 'auto') driverVehicleType = 'standard';
+        if (driverVehicleType === 'camioneta') driverVehicleType = 'van';
 
         const checkRide = (ride) => {
             // Fix: Use correct column 'ride_type' from DB, fallback to 'standard'
@@ -673,11 +674,14 @@ const DriverDashboard = () => {
                                 }).eq('id', profile.id);
 
                                 // Poll for rides
+                                let vType = (profile.vehicle_type || 'standard').toLowerCase();
+                                if (vType === 'camioneta') vType = 'van';
+
                                 const { data } = await supabase.rpc('get_nearby_rides', {
                                     driver_lat: latitude,
                                     driver_lng: longitude,
                                     radius_km: 10.0,
-                                    driver_vehicle_type: profile.vehicle_type || 'standard'
+                                    driver_vehicle_type: vType
                                 });
 
                                 if (data && data.length > 0) {
@@ -787,12 +791,15 @@ const DriverDashboard = () => {
                             return; // Stop polling while on trip
                         }
 
+                        let vType = (currentProfile.vehicle_type || 'standard').toLowerCase();
+                        if (vType === 'camioneta') vType = 'van';
+
                         const { data } = await supabase
                             .rpc('get_nearby_rides', {
                                 driver_lat: latitude,
                                 driver_lng: longitude,
                                 radius_km: 10.0,
-                                driver_vehicle_type: currentProfile.vehicle_type || 'standard'
+                                driver_vehicle_type: vType
                             });
 
                         if (data && data.length > 0) {
@@ -1488,7 +1495,6 @@ const DriverDashboard = () => {
                         </div>
                     </div>
                 )}
-
             </div>
         </div>
     );
