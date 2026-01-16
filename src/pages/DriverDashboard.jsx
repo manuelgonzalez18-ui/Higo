@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, getUserProfile } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
 import InteractiveMap from '../components/InteractiveMap';
