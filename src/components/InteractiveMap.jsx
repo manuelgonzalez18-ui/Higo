@@ -468,7 +468,7 @@ const MapContent = ({
             mapId="DEMO_MAP_ID"
             options={{
                 disableDefaultUI: true,
-                zoomControl: true,
+                zoomControl: false,
                 rotateControl: true,
                 tiltControl: true,
                 streetViewControl: false,
@@ -597,15 +597,38 @@ const MapContent = ({
             )}
 
             {/* UI Controls using MapControl for better placement and event handling */}
-            <MapControl position={ControlPosition.RIGHT_CENTER}>
-                <div className="flex flex-col gap-3 mr-3">
+            <MapControl position={ControlPosition.LEFT_CENTER}>
+                <div className="flex flex-col gap-3 ml-3">
+                    {/* Zoom In (+) */}
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (map) map.setZoom(map.getZoom() + 1);
+                        }}
+                        className="bg-white/95 text-black p-2 rounded-full shadow-lg border border-gray-200 flex items-center justify-center transition-all active:scale-90"
+                        style={{ width: '42px', height: '42px' }}
+                    >
+                        <span className="material-symbols-outlined text-2xl font-bold">add</span>
+                    </button>
+
+                    {/* Zoom Out (-) */}
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (map) map.setZoom(map.getZoom() - 1);
+                        }}
+                        className="bg-white/95 text-black p-2 rounded-full shadow-lg border border-gray-200 flex items-center justify-center transition-all active:scale-90"
+                        style={{ width: '42px', height: '42px' }}
+                    >
+                        <span className="material-symbols-outlined text-2xl font-bold">remove</span>
+                    </button>
+
                     {/* Compass (North Pointer) */}
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
                             setMapHeading(0);
-                            // Also reset follows?
-                            // setIsFollowing(true);
+                            setMapTilt(0); // Reset tilt too for a flat view
                         }}
                         className="bg-white/95 text-black p-2 rounded-full shadow-lg border border-gray-200 flex items-center justify-center transition-all active:scale-90"
                         style={{ width: '42px', height: '42px' }}
@@ -628,18 +651,16 @@ const MapContent = ({
                     </button>
 
                     {/* 3D/2D Toggle */}
-                    {(isFollowing && (isDriver || assignedDriver)) && (
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setMapTilt(prev => prev === 0 ? 45 : 0);
-                            }}
-                            className="bg-white/95 text-black p-2 rounded-full shadow-lg border border-gray-200 flex items-center justify-center font-bold text-xs active:scale-90 transition-all font-sans"
-                            style={{ width: '42px', height: '42px' }}
-                        >
-                            {mapTilt === 0 ? '3D' : '2D'}
-                        </button>
-                    )}
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setMapTilt(prev => prev === 0 ? 45 : 0);
+                        }}
+                        className={`bg-white/95 text-black p-2 rounded-full shadow-lg border border-gray-200 flex items-center justify-center font-bold text-xs active:scale-90 transition-all font-sans ${mapTilt > 0 ? 'bg-blue-600 text-white' : ''}`}
+                        style={{ width: '42px', height: '42px' }}
+                    >
+                        {mapTilt === 0 ? '3D' : '2D'}
+                    </button>
                 </div>
             </MapControl>
 
