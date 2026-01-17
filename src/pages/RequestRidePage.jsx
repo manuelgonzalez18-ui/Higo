@@ -24,6 +24,7 @@ const RequestRidePage = () => {
     const [oldPrice, setOldPrice] = useState(0);
     const [roadDistance, setRoadDistance] = useState(0); // Store actual road distance in meters
     const [showStopConfirm, setShowStopConfirm] = useState(false);
+    const [hasPendingStopConfirm, setHasPendingStopConfirm] = useState(false);
 
     // NEW STATES FOR HIGO ENVÍOS
     const [serviceType, setServiceType] = useState(null); // 'ride' | 'delivery'
@@ -59,6 +60,7 @@ const RequestRidePage = () => {
                 const updatedStop = { ...s, address: name };
                 if (place && place.lat && place.lng) {
                     updatedStop.coords = { lat: place.lat, lng: place.lng };
+                    setHasPendingStopConfirm(true); // Trigger confirmation modal
                 }
                 return updatedStop;
             }
@@ -186,11 +188,10 @@ const RequestRidePage = () => {
 
     // Check if we should show the "Confirm Stop" modal
     React.useEffect(() => {
-        const allStopsValid = stops.length > 0 && stops.every(s => s.coords);
-        if (allStopsValid && stops.length > 0 && !showStopConfirm) {
+        if (hasPendingStopConfirm && !showStopConfirm) {
             setShowStopConfirm(true);
         }
-    }, [stops, showStopConfirm]);
+    }, [hasPendingStopConfirm, showStopConfirm]);
 
     const handleRequestRide = async () => {
         if (!pickup || !dropoff) {
@@ -468,6 +469,7 @@ const RequestRidePage = () => {
                                         onClick={() => {
                                             // Cancel: Remove stop and close
                                             setStops([]);
+                                            setHasPendingStopConfirm(false);
                                             setShowStopConfirm(false);
                                         }}
                                         className="flex-1 py-4 bg-gray-200 text-gray-800 font-bold rounded-2xl hover:bg-gray-300 transition-colors"
@@ -475,7 +477,10 @@ const RequestRidePage = () => {
                                         Volver
                                     </button>
                                     <button
-                                        onClick={() => setShowStopConfirm(false)}
+                                        onClick={() => {
+                                            setHasPendingStopConfirm(false);
+                                            setShowStopConfirm(false);
+                                        }}
                                         className="flex-1 py-4 bg-[#FF4F00] text-white font-bold rounded-2xl hover:bg-[#ff6a26] transition-colors shadow-lg shadow-orange-500/20"
                                     >
                                         Confirmar
