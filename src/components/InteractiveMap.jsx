@@ -650,22 +650,7 @@ const MapContent = ({
                         <span className="material-symbols-outlined text-2xl">{mapTypeId === 'hybrid' ? 'map' : 'layers'}</span>
                     </button>
 
-                    {/* 3D/2D Toggle */}
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            setMapTilt(prev => prev === 0 ? 45 : 0);
-                        }}
-                        className={`bg-white/95 text-black p-2 rounded-full shadow-lg border border-gray-200 flex items-center justify-center font-bold text-xs active:scale-90 transition-all font-sans ${mapTilt > 0 ? 'bg-blue-600 text-white' : ''}`}
-                        style={{ width: '42px', height: '42px' }}
-                    >
-                        {mapTilt === 0 ? '3D' : '2D'}
-                    </button>
-                </div>
-            </MapControl>
-
-            <MapControl position={ControlPosition.LEFT_BOTTOM}>
-                <div className="mb-64 ml-4">
+                    {/* Centrar Button (Now in Sidebar) */}
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
@@ -674,10 +659,10 @@ const MapContent = ({
                             setMapTilt(0);
                             lastForceFollowTime.current = Date.now();
                         }}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-full shadow-2xl transition-all active:scale-95 border-2 ${isFollowing ? 'bg-green-600/95 text-white border-white/20' : 'bg-white text-blue-600 border-blue-500'}`}
+                        className={`p-2 rounded-full shadow-lg border flex items-center justify-center transition-all active:scale-90 ${isFollowing ? 'bg-green-600/95 text-white border-white/20' : 'bg-white/95 text-blue-600 border-blue-500'}`}
+                        style={{ width: '42px', height: '42px' }}
                     >
-                        <span className="material-symbols-outlined text-xl font-bold">near_me</span>
-                        <span className="font-bold text-sm tracking-wide">Centrar</span>
+                        <span className="material-symbols-outlined text-2xl font-bold">near_me</span>
                     </button>
                 </div>
             </MapControl>

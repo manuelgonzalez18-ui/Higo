@@ -73,6 +73,13 @@ const DriverDashboard = () => {
     const wakeLockRef = useRef(null);
     const lastInstruction = React.useRef("");
 
+    // Reset instruction memory when voice is toggled back on
+    useEffect(() => {
+        if (voiceEnabled) {
+            lastInstruction.current = "";
+        }
+    }, [voiceEnabled]);
+
     // SYNC REFS FOR BG WATCHER
     useEffect(() => {
         profileRef.current = profile;
@@ -94,8 +101,8 @@ const DriverDashboard = () => {
     // --- HELPER FUNCTIONS ---
     // --- HELPER FUNCTIONS ---
     const speak = useCallback(async (text) => {
-        if (!voiceEnabled) return;
         setInstruction(text);
+        if (!voiceEnabled) return;
 
         try {
             await TextToSpeech.speak({
