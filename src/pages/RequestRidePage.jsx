@@ -344,7 +344,7 @@ const RequestRidePage = () => {
                                     <div className="space-y-3 bg-[#0F1014]/50 p-2 rounded-2xl border border-white/5">
                                         <LocationInput
                                             placeholder="Punto de partida"
-                                            defaultValue={serviceType === 'delivery' ? "Origen - Ubicación Actual" : "Ubicación Actual"}
+                                            defaultValue="Ubicación Actual"
                                             icon="my_location"
                                             iconColor="text-blue-500"
                                             showConnector={true}
