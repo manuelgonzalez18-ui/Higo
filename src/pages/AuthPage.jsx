@@ -33,15 +33,16 @@ const AuthPage = () => {
                     .eq('id', user.id)
                     .single();
 
-                if (profile?.role === 'driver') {
-                    // Generate and Save new Session ID
-                    const newSessionId = self.crypto.randomUUID();
-                    await supabase
-                        .from('profiles')
-                        .update({ current_session_id: newSessionId })
-                        .eq('id', user.id);
+                // Enforce Single Session for all roles
+                const newSessionId = self.crypto.randomUUID();
+                await supabase
+                    .from('profiles')
+                    .update({ current_session_id: newSessionId })
+                    .eq('id', user.id);
 
-                    localStorage.setItem('session_id', newSessionId);
+                localStorage.setItem('session_id', newSessionId);
+
+                if (profile?.role === 'driver') {
                     navigate('/driver');
                 } else {
                     navigate('/'); // Default to passenger

@@ -327,11 +327,7 @@ const RideStatusPage = () => {
                                 <p className="text-[9px] text-gray-400 uppercase font-bold text-center">PLACA</p>
                                 <p className="font-mono font-bold text-white tracking-widest leading-none mt-0.5">{driver.license_plate}</p>
                             </div>
-                            {/* GPS ACTIVE INDICATOR */}
-                            {/* GPS FRESHNESS TIMER */}
-                            <p className={`text-[9px] font-mono mt-1 ${secondsAgo < 10 ? 'text-green-500' : 'text-red-500 animate-pulse'}`}>
-                                Act: {secondsAgo}s
-                            </p>
+                            {/* GPS ACTIVE INDICATOR REMOVED */}
                         </div>
                     </div>
                 ) : (

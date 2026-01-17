@@ -327,9 +327,8 @@ const RequestRidePage = () => {
                         <>
 
                             {/* Floating Title (Optional branding) */}
-                            <div className="mb-6 text-center shadow-black/50 drop-shadow-lg">
-                                <h1 className="text-3xl font-black tracking-tight mb-1 text-white">¿A dónde vamos?</h1>
-                                <p className="text-blue-500 text-sm font-bold tracking-wide">Viaja seguro en Higuerote</p>
+                            <div className="mb-6 invisible h-0">
+                                {/* Branding removed as per user request */}
                             </div>
 
                             {/* GLASS CARD FORM */}

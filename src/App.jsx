@@ -17,9 +17,49 @@ import { getToken, onMessage } from 'firebase/messaging';
 import { useEffect, useState } from 'react';
 import { initGlobalAudio } from './services/notificationService';
 import DriverRequestCard from './components/DriverRequestCard';
+import { supabase } from './services/supabase';
 
 const App = () => {
   const [incomingRequest, setIncomingRequest] = useState(null);
+
+  // --- GLOBAL SESSION LOCKING ---
+  useEffect(() => {
+    let channel;
+
+    const setupSessionWatcher = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Monitor local session changes
+      channel = supabase
+        .channel(`global_session:${user.id}`)
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${user.id}`
+        }, (payload) => {
+          const dbSessionId = payload.new.current_session_id;
+          const localSessionId = localStorage.getItem('session_id');
+
+          if (dbSessionId && localSessionId && dbSessionId !== localSessionId) {
+            alert("⚠️ Tu cuenta se ha abierto en otro dispositivo. Se cerrará la sesión en este equipo.");
+            supabase.auth.signOut().then(() => {
+              localStorage.removeItem('session_id');
+              window.location.href = '#/auth';
+              window.location.reload();
+            });
+          }
+        })
+        .subscribe();
+    };
+
+    setupSessionWatcher();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, []);
 
   useEffect(() => {
     initGlobalAudio(); // Unlock audio context on first interaction
