@@ -1,4 +1,4 @@
-package com.higo.app;
+package com.higoapp.ve;
 
 import android.app.Notification;
 import android.app.NotificationChannel;

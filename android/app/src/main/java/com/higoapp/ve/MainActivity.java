@@ -1,4 +1,4 @@
-package com.higo.app;
+package com.higoapp.ve;
 
 import android.os.Build;
 import android.os.Bundle;

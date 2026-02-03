@@ -1,6 +1,6 @@
 {
-  "appId": "com.higo.app",
-  "appName": "Higo",
+  "appId": "com.higoapp.ve",
+  "appName": "Higo App",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"
