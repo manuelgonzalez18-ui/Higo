@@ -46,6 +46,10 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/
           server-dir: ./public_html/
+          # Un deploy limpio una vez para resetear el estado FTP que quedó
+          # desincronizado tras varios builds con hashes distintos de Vite.
+          # Quitar esta línea después del primer deploy exitoso.
+          dangerous-clean-slate: true
           exclude: |
             **/.git*
             **/.git*/**
