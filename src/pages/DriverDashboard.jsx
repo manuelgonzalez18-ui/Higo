@@ -62,6 +62,35 @@ const DriverDashboard = () => {
     const headingRef = React.useRef(0);
     const lastSentTimeRef = React.useRef(0);
     const activeRideRef = React.useRef(null);
+    // Throttling de sync a DB y polling de viajes cercanos.
+    // Guardamos la última vez y la última posición enviadas para evitar
+    // hits innecesarios cuando el conductor está quieto.
+    const lastDbSyncRef = React.useRef({ t: 0, lat: null, lng: null });
+    const lastNearbyPollRef = React.useRef(0);
+    const DB_SYNC_MIN_MS = 10000;       // 10s mínimo entre updates a profiles
+    const DB_SYNC_MIN_METERS = 20;      // o 20m de movimiento
+    const NEARBY_POLL_MIN_MS = 30000;   // 30s mínimo entre get_nearby_rides
+
+    const shouldSyncDb = (lat, lng) => {
+        const now = Date.now();
+        const last = lastDbSyncRef.current;
+        if (!last.t) return true;
+        const elapsed = now - last.t;
+        if (elapsed < DB_SYNC_MIN_MS && last.lat != null) {
+            const distM = getDistanceFromLatLonInKm(last.lat, last.lng, lat, lng) * 1000;
+            if (distM < DB_SYNC_MIN_METERS) return false;
+        }
+        return true;
+    };
+    const markDbSynced = (lat, lng) => {
+        lastDbSyncRef.current = { t: Date.now(), lat, lng };
+    };
+    const shouldPollNearby = () => {
+        const now = Date.now();
+        if (now - lastNearbyPollRef.current < NEARBY_POLL_MIN_MS) return false;
+        lastNearbyPollRef.current = now;
+        return true;
+    };
 
     // Navigation State
     const [navStep, setNavStep] = useState(0); // 0: Idle, 1: To Pickup, 2: To Dropoff
@@ -688,33 +717,38 @@ const DriverDashboard = () => {
                     watcherId = navigator.geolocation.watchPosition(
                         async (pos) => {
                             const { latitude, longitude } = pos.coords;
-                            console.log("📍 Web Location Update:", latitude, longitude);
                             lastLocationRef.current = { latitude, longitude };
                             setCurrentLoc({ lat: latitude, lng: longitude });
 
-                            if (profile?.id) {
-                                // Sync to DB
+                            if (!profile?.id) return;
+
+                            // Throttle DB sync: >=10s o >=20m desde el último envío
+                            if (shouldSyncDb(latitude, longitude)) {
                                 await supabase.from('profiles').update({
                                     curr_lat: latitude,
                                     curr_lng: longitude,
                                     last_location_update: new Date(),
                                     status: isOnline ? 'online' : 'offline'
                                 }).eq('id', profile.id);
+                                markDbSynced(latitude, longitude);
+                            }
 
-                                // Poll for rides
-                                let vType = (profile.vehicle_type || 'standard').toLowerCase();
-                                if (vType === 'camioneta') vType = 'van';
+                            // Poll de viajes cercanos: máximo cada 30s, y no durante un viaje activo
+                            if (activeRideRef.current) return;
+                            if (!shouldPollNearby()) return;
 
-                                const { data } = await supabase.rpc('get_nearby_rides', {
-                                    driver_lat: latitude,
-                                    driver_lng: longitude,
-                                    radius_km: 10.0,
-                                    driver_vehicle_type: vType
-                                });
+                            let vType = (profile.vehicle_type || 'standard').toLowerCase();
+                            if (vType === 'camioneta') vType = 'van';
 
-                                if (data && data.length > 0) {
-                                    processRequests(data, false);
-                                }
+                            const { data } = await supabase.rpc('get_nearby_rides', {
+                                driver_lat: latitude,
+                                driver_lng: longitude,
+                                radius_km: 10.0,
+                                driver_vehicle_type: vType
+                            });
+
+                            if (data && data.length > 0) {
+                                processRequests(data, false);
                             }
                         },
                         (err) => console.error("Web Geo Error:", err),
@@ -789,35 +823,35 @@ const DriverDashboard = () => {
                     // Update Profile Logic
                     const currentProfile = profileRef.current;
                     if (currentProfile?.id) {
-                        // Force re-render for map route update
+                        // Force re-render for map route update (local only, no DB)
                         setCurrentLoc({ lat: latitude, lng: longitude });
 
-                        try {
-                            // Optimistic update via RPC (Bypasses RLS & Upserts if missing)
-                            const { data: rpcSuccess, error: rpcError } = await supabase.rpc('update_driver_gps', {
-                                lat: latitude,
-                                lng: longitude,
-                                head: newHeading || 0
-                            });
+                        // Throttle: solo sincronizar a DB si pasaron >=10s o se movió >=20m
+                        if (shouldSyncDb(latitude, longitude)) {
+                            try {
+                                const { error: rpcError } = await supabase.rpc('update_driver_gps', {
+                                    lat: latitude,
+                                    lng: longitude,
+                                    head: newHeading || 0
+                                });
 
-                            if (rpcError) {
-                                console.error("❌ LOCATION SYNC ERROR:", rpcError);
-                                // Show first 15 chars of message to diagnose column name
-                                lastSentTimeRef.current = `ERR: ${rpcError.message?.substring(0, 20) || rpcError.code}`;
-                            } else {
-                                lastSentTimeRef.current = Date.now(); // Confirm update success
+                                if (rpcError) {
+                                    console.error("❌ LOCATION SYNC ERROR:", rpcError);
+                                    lastSentTimeRef.current = `ERR: ${rpcError.message?.substring(0, 20) || rpcError.code}`;
+                                } else {
+                                    lastSentTimeRef.current = Date.now();
+                                    markDbSynced(latitude, longitude);
+                                }
+                            } catch (err) {
+                                console.error("❌ LOCATION SYNC EXCEPTION:", err);
+                                lastSentTimeRef.current = "EXC";
                             }
-
-                        } catch (err) {
-                            console.error("❌ LOCATION SYNC EXCEPTION:", err);
-                            lastSentTimeRef.current = "EXC";
                         }
 
                         // --- BACKGROUND POLLING FOR RIDES ---
-                        // Only poll if we have a valid profile AND NO ACTIVE RIDE
-                        if (activeRideRef.current) {
-                            return; // Stop polling while on trip
-                        }
+                        // Evita polling si ya hay viaje activo o si poll reciente (<30s)
+                        if (activeRideRef.current) return;
+                        if (!shouldPollNearby()) return;
 
                         let vType = (currentProfile.vehicle_type || 'standard').toLowerCase();
                         if (vType === 'camioneta') vType = 'van';
@@ -1159,10 +1193,9 @@ const DriverDashboard = () => {
                                     <span className="material-symbols-outlined text-white text-xl">turn_right</span>
                                 </div>
                                 <div>
-                                    <h2
-                                        className="font-bold text-white text-base leading-tight text-left max-w-[200px]"
-                                        dangerouslySetInnerHTML={{ __html: navInfo?.next_step?.instruction || "Calculando ruta..." }}
-                                    ></h2>
+                                    <h2 className="font-bold text-white text-base leading-tight text-left max-w-[200px]">
+                                        {navInfo?.next_step?.instruction?.replace(/<[^>]*>/g, '') || "Calculando ruta..."}
+                                    </h2>
                                     <p className="text-gray-400 text-xs text-left">
                                         {navInfo?.next_step?.distance?.text || "--"} • {navInfo?.duration?.text || "--"}
                                     </p>
