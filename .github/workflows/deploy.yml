@@ -68,5 +68,5 @@ jobs:
           set net:reconnect-interval-multiplier 1.5;
           set mirror:parallel-transfer-count 2;
           open -u '$FTP_USERNAME','$FTP_PASSWORD' '$FTP_SERVER';
-          mirror --reverse --delete --verbose --parallel=2 --exclude-glob .ftp-deploy-sync-state.json ./dist/ ./;
+          mirror --reverse --delete --verbose --parallel=2 --exclude-glob .ftp-deploy-sync-state.json --exclude '^markers/' ./dist/ ./;
           "
