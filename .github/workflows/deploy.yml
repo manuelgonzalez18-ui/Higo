@@ -36,7 +36,16 @@ jobs:
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
           VITE_FIREBASE_MEASUREMENT_ID: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}
-        run: npm run build
+        run: |
+          echo "=== ENV DIAGNOSTIC (lengths only, no values) ==="
+          echo "VITE_SUPABASE_URL length: ${#VITE_SUPABASE_URL}"
+          echo "VITE_SUPABASE_ANON_KEY length: ${#VITE_SUPABASE_ANON_KEY}"
+          echo "VITE_GOOGLE_MAPS_API_KEY length: ${#VITE_GOOGLE_MAPS_API_KEY}"
+          echo "VITE_GEMINI_API_KEY length: ${#VITE_GEMINI_API_KEY}"
+          echo "VITE_FIREBASE_API_KEY length: ${#VITE_FIREBASE_API_KEY}"
+          echo "VITE_FIREBASE_PROJECT_ID length: ${#VITE_FIREBASE_PROJECT_ID}"
+          echo "================================================="
+          npm run build
 
       # lftp es más robusto que FTP-Deploy-Action contra Hostinger:
       # sube cada archivo con su nombre final (no usa .in.tmp + rename),
