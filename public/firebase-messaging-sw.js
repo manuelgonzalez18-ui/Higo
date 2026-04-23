@@ -22,7 +22,7 @@ messaging.onBackgroundMessage((payload) => {
     const notificationTitle = payload.notification.title;
     const notificationOptions = {
         body: payload.notification.body,
-        icon: '/vite.svg', // Change to your app icon
+        icon: '/higo-icon.svg',
         vibrate: [200, 100, 200, 100, 200, 100, 200], // Custom vibration pattern
         sound: 'default', // Or link to a custom sound file in public folder if browser supports it
         data: { url: payload.data?.click_action || '/' }
