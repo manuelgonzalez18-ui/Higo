@@ -1,9 +1,39 @@
+# Higo SPA · Vite + React Router (HashRouter)
+# Sirve los archivos reales cuando existen. Sólo reescribe a index.html
+# cuando el path solicitado no es un archivo ni carpeta que existe.
+
 <IfModule mod_rewrite.c>
-  RewriteEngine On
-  RewriteBase /
-  RewriteRule ^index\.html$ - [L]
-  RewriteCond %{REQUEST_FILENAME} !-f
-  RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteCond %{REQUEST_FILENAME} !-l
-  RewriteRule . /index.html [L]
+    RewriteEngine On
+    RewriteBase /
+    RewriteRule ^index\.html$ - [L]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-l
+    RewriteRule . /index.html [L]
+</IfModule>
+
+# MIME types para módulos ES
+<IfModule mod_mime.c>
+    AddType application/javascript .js
+    AddType application/javascript .mjs
+    AddType text/css .css
+    AddType image/svg+xml .svg
+</IfModule>
+
+# Compresión
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css
+    AddOutputFilterByType DEFLATE application/javascript application/json
+    AddOutputFilterByType DEFLATE image/svg+xml
+</IfModule>
+
+# Cache: como los JS no tienen hash, NO los cacheamos de forma inmutable.
+# Sólo fuentes e imágenes (que rara vez cambian y con hash) pueden ser immutables.
+<IfModule mod_headers.c>
+    <FilesMatch "\.(woff2?|ttf|eot|png|jpg|jpeg|gif)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+    <FilesMatch "\.(js|css|html|svg)$">
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+    </FilesMatch>
 </IfModule>

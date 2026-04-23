@@ -10,8 +10,19 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       output: {
-        // Separar dependencias pesadas en chunks propios para mejor caching
-        // y first-paint más rápido (cada chunk se descarga/parsea en paralelo).
+        // Nombres estables (sin hash) para que lftp siempre haga overwrite
+        // en vez de crear archivos nuevos (Hostinger FTP falla con archivos
+        // nuevos grandes). El cache-busting lo hace el .htaccess con
+        // Cache-Control: no-cache para HTML.
+        entryFileNames: 'assets/[name].js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: (info) => {
+          // Fuentes y binarios con [hash] para mejor caching (rara vez cambian)
+          if (/\.(woff2?|ttf|eot|png|jpe?g|gif|svg)$/.test(info.name || '')) {
+            return 'assets/[name]-[hash][extname]';
+          }
+          return 'assets/[name][extname]';
+        },
         manualChunks: {
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'supabase': ['@supabase/supabase-js'],
