@@ -209,6 +209,26 @@ const RideStatusPage = () => {
         }
     };
 
+    const confirmPayment = async (method) => {
+        const updates = {
+            payment_confirmed_by_user: true,
+            payment_method: method
+        };
+        // Si el conductor ya confirmó, cerramos con timestamp.
+        if (ride?.payment_confirmed_by_driver) {
+            updates.payment_confirmed_at = new Date().toISOString();
+        }
+        const { error } = await supabase
+            .from('rides')
+            .update(updates)
+            .eq('id', id);
+        if (error) {
+            alert(`No se pudo confirmar el pago: ${error.message}`);
+        } else {
+            setRide(prev => ({ ...prev, ...updates }));
+        }
+    };
+
     const handleShare = async () => {
         if (navigator.share) {
             try {
@@ -363,7 +383,44 @@ const RideStatusPage = () => {
                     </div>
                 )}
 
-                {/* Ride Stats or Rating if Completed */}
+                {/* Payment Confirmation (after trip is completed) */}
+                {ride.status === 'completed' && !submitted && (
+                    <div className="mt-6 pt-6 border-t border-white/10">
+                        <h3 className="text-center font-bold mb-2">Confirmación de pago</h3>
+                        <p className="text-center text-gray-400 text-xs mb-4">
+                            Monto: <span className="text-white font-bold">${Number(ride.price || 0).toFixed(2)}</span>
+                        </p>
+
+                        {!ride.payment_confirmed_by_user ? (
+                            <div className="space-y-2">
+                                <p className="text-xs text-gray-400 text-center mb-2">¿Cómo pagaste al conductor?</p>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <button onClick={() => confirmPayment('pago_movil')} className="py-3 bg-blue-600 hover:bg-blue-700 rounded-xl text-white text-xs font-bold active:scale-95 transition-all">
+                                        <span className="material-symbols-outlined block text-lg mb-1">qr_code_2</span>
+                                        Pago Móvil
+                                    </button>
+                                    <button onClick={() => confirmPayment('efectivo')} className="py-3 bg-emerald-600 hover:bg-emerald-700 rounded-xl text-white text-xs font-bold active:scale-95 transition-all">
+                                        <span className="material-symbols-outlined block text-lg mb-1">payments</span>
+                                        Efectivo
+                                    </button>
+                                    <button onClick={() => confirmPayment('zelle')} className="py-3 bg-purple-600 hover:bg-purple-700 rounded-xl text-white text-xs font-bold active:scale-95 transition-all">
+                                        <span className="material-symbols-outlined block text-lg mb-1">credit_card</span>
+                                        Zelle
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className={`flex items-center justify-center gap-2 py-3 rounded-xl ${ride.payment_confirmed_by_driver ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                                <span className="material-symbols-outlined">{ride.payment_confirmed_by_driver ? 'verified' : 'hourglass_top'}</span>
+                                <span className="text-sm font-bold">
+                                    {ride.payment_confirmed_by_driver ? 'Pago confirmado por ambos' : 'Esperando al conductor...'}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Rating if Completed */}
                 {ride.status === 'completed' && !submitted && (
                     <div className="mt-6 pt-6 border-t border-white/10">
                         <h3 className="text-center font-bold mb-4">Califica tu viaje</h3>

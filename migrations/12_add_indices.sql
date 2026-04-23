@@ -22,5 +22,5 @@ CREATE INDEX IF NOT EXISTS idx_profiles_curr_location
     ON public.profiles(curr_lat, curr_lng)
     WHERE status = 'online';
 
--- chat_messages: por ride (scroll del chat) y creación.
-CREATE INDEX IF NOT EXISTS idx_chat_messages_ride_id ON public.chat_messages(ride_id, created_at);
+-- messages: por ride (scroll del chat) y creación.
+CREATE INDEX IF NOT EXISTS idx_messages_ride_id ON public.messages(ride_id, created_at);
