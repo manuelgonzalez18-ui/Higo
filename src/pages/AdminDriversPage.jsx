@@ -107,6 +107,36 @@ const AdminDriversPage = () => {
         return matchesSearch && matchesStatus;
     });
 
+    // Plan de membresía inferido del tipo de vehículo.
+    const MEMBERSHIP_PLANS = {
+        moto: { plan: 'moto', amount: 10 },
+        standard: { plan: 'standard', amount: 20 },
+        carro: { plan: 'standard', amount: 20 },
+        van: { plan: 'van', amount: 25 },
+        camioneta: { plan: 'van', amount: 25 }
+    };
+
+    const registerMembership = async (driver, period = 'monthly') => {
+        const vType = (driver.vehicle_type || 'standard').toLowerCase();
+        const planInfo = MEMBERSHIP_PLANS[vType] || MEMBERSHIP_PLANS.standard;
+        const now = new Date();
+        const expires = new Date(now);
+        if (period === 'weekly') expires.setDate(expires.getDate() + 7);
+        else if (period === 'yearly') expires.setFullYear(expires.getFullYear() + 1);
+        else expires.setMonth(expires.getMonth() + 1);
+
+        const { error } = await supabase.from('driver_memberships').insert({
+            driver_id: driver.id,
+            plan: planInfo.plan,
+            amount: planInfo.amount,
+            period,
+            paid_at: now.toISOString(),
+            expires_at: expires.toISOString(),
+            status: 'active'
+        });
+        return error;
+    };
+
     // Helper Action
     const executeAction = async () => {
         if (!selectedDriver) return;
@@ -114,36 +144,30 @@ const AdminDriversPage = () => {
         setMessage(null);
 
         try {
-            let updates = {};
-            const today = new Date().toISOString();
-
-            if (actionType === 'pago') {
-                updates = { last_payment_date: today };
-            } else if (actionType === 'pago_activar') {
-                updates = { last_payment_date: today, subscription_status: 'active' };
+            if (actionType === 'pago' || actionType === 'pago_activar') {
+                // El trigger sync_driver_subscription_status actualiza
+                // profiles.subscription_status y last_payment_date automáticamente.
+                const err = await registerMembership(selectedDriver, 'monthly');
+                if (err) throw err;
+                setMessage({ type: 'success', text: 'Membresía registrada. Conductor activo por 30 días.' });
             } else if (actionType === 'activar') {
-                updates = { subscription_status: 'active' };
+                const { error } = await supabase.from('profiles')
+                    .update({ subscription_status: 'active' }).eq('id', selectedDriver.id);
+                if (error) throw error;
+                setMessage({ type: 'success', text: 'Conductor activado.' });
             } else if (actionType === 'desactivar') {
-                updates = { subscription_status: 'suspended' };
+                const { error } = await supabase.from('profiles')
+                    .update({ subscription_status: 'suspended' }).eq('id', selectedDriver.id);
+                if (error) throw error;
+                setMessage({ type: 'success', text: 'Conductor suspendido.' });
             } else if (actionType === 'eliminar') {
-                // Delete
                 const { error } = await supabase.from('profiles').delete().eq('id', selectedDriver.id);
                 if (error) throw error;
-                setMessage({ type: 'success', text: 'Driver deleted successfully.' });
-                setShowObjModal(false);
-                fetchDrivers();
-                return;
-            }
-
-            if (Object.keys(updates).length > 0) {
-                const { error } = await supabase.from('profiles').update(updates).eq('id', selectedDriver.id);
-                if (error) throw error;
-                setMessage({ type: 'success', text: 'Driver updated successfully.' });
+                setMessage({ type: 'success', text: 'Conductor eliminado.' });
             }
 
             setShowObjModal(false);
             fetchDrivers();
-
         } catch (error) {
             setMessage({ type: 'error', text: error.message });
         } finally {

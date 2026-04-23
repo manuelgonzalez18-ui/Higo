@@ -940,6 +940,13 @@ const DriverDashboard = () => {
     // --- OTHER HANDLERS ---
 
     const handleAcceptRide = async (ride) => {
+        // Gatekeeping: sólo conductores con membresía activa pueden aceptar.
+        // subscription_status se sincroniza automáticamente con driver_memberships
+        // via trigger SQL, así que basta una sola lectura.
+        if (profile?.subscription_status === 'suspended') {
+            alert("⚠️ Tu membresía está vencida. Renuévala con el administrador para aceptar viajes.");
+            return;
+        }
         try {
             const { data, error } = await supabase
                 .from('rides')
@@ -1042,6 +1049,22 @@ const DriverDashboard = () => {
                 setShowPaymentQR(true);
             }
         }
+    };
+
+    // El conductor confirma que recibió el pago. Actualiza la fila del ride.
+    // Si el pasajero ya confirmó también, cerramos con payment_confirmed_at.
+    const confirmDriverPayment = async () => {
+        if (!activeRide) return;
+        const updates = { payment_confirmed_by_driver: true };
+        if (activeRide.payment_confirmed_by_user) {
+            updates.payment_confirmed_at = new Date().toISOString();
+        }
+        const { error } = await supabase.from('rides').update(updates).eq('id', activeRide.id);
+        if (error) {
+            alert(`No se pudo confirmar el pago: ${error.message}`);
+            return;
+        }
+        setActiveRide({ ...activeRide, ...updates });
     };
 
     // Handler for closing QR and advancing state
@@ -1162,6 +1185,12 @@ const DriverDashboard = () => {
                                         subscriptionStatus === 'CONNECTING' ? 'Conectando...' :
                                             'Reconectando...'}
                             </span>
+                        </div>
+                    )}
+                    {profile?.subscription_status === 'suspended' && (
+                        <div className="bg-red-500/20 backdrop-blur-md px-3 py-2 rounded-full border border-red-500/40 flex items-center gap-2 shadow-lg ml-2">
+                            <span className="material-symbols-outlined text-red-400 text-base">error</span>
+                            <span className="font-bold text-xs text-red-300 tracking-wide">Membresía vencida</span>
                         </div>
                     )}
                     <div className="flex gap-2 ml-auto">
@@ -1508,6 +1537,33 @@ const DriverDashboard = () => {
                                     Cambiar Imagen QR
                                 </span>
                             </label>
+
+                            {/* Estado del pago bilateral (solo en navStep 2, fin del viaje) */}
+                            {navStep === 2 && activeRide && (
+                                <div className="mb-3 px-3 py-2 rounded-xl bg-[#0F1014]/70 border border-white/5 flex items-center justify-between text-xs">
+                                    <div className="flex items-center gap-1.5">
+                                        <span className={`material-symbols-outlined text-base ${activeRide.payment_confirmed_by_user ? 'text-emerald-400' : 'text-gray-500'}`}>
+                                            {activeRide.payment_confirmed_by_user ? 'check_circle' : 'hourglass_empty'}
+                                        </span>
+                                        <span className="text-gray-300">Pasajero</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className={`material-symbols-outlined text-base ${activeRide.payment_confirmed_by_driver ? 'text-emerald-400' : 'text-gray-500'}`}>
+                                            {activeRide.payment_confirmed_by_driver ? 'check_circle' : 'hourglass_empty'}
+                                        </span>
+                                        <span className="text-gray-300">Tú</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {navStep === 2 && activeRide && !activeRide.payment_confirmed_by_driver && (
+                                <button
+                                    onClick={confirmDriverPayment}
+                                    className="w-full mb-2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-[20px] font-bold text-base shadow-lg active:scale-95 transition-colors"
+                                >
+                                    Pago Recibido ✓
+                                </button>
+                            )}
 
                             <button
                                 onClick={handleQRClosed}
