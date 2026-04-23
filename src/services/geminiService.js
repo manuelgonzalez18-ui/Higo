@@ -1,9 +1,18 @@
 import { GoogleGenAI } from "@google/genai";
 
-// Initialize Gemini Client
+// Lazy init: si VITE_GEMINI_API_KEY falta, NO crashear la app al importar este
+// módulo. Sólo al llamar una función que use Gemini se lanza el error controlado.
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-if (!API_KEY) console.warn("Missing VITE_GEMINI_API_KEY in .env");
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+let _ai = null;
+const getAi = () => {
+    if (_ai) return _ai;
+    if (!API_KEY) {
+        console.warn("VITE_GEMINI_API_KEY no está configurada. Las funciones de IA no estarán disponibles.");
+        return null;
+    }
+    _ai = new GoogleGenAI({ apiKey: API_KEY });
+    return _ai;
+};
 
 // Mock Data for Fallback
 const MOCK_LOCATIONS = [
@@ -259,7 +268,10 @@ export const searchPlaces = async (query, userLocation) => {
 
     // METHOD B: Gemini Grounding (Enrichment / Semantic Search) - Only if standard failed or for variety
     if (aiSuggestions.length === 0) {
-        try {
+        const ai = getAi();
+        if (!ai) {
+            // Sin AI: saltamos el enrichment y vamos directo al merge final.
+        } else try {
             console.log("🤖 Asking Gemini for Google Maps results (Backup)...");
             const response = await ai.models.generateContent({
                 model: "gemini-2.0-flash-exp",
@@ -311,6 +323,8 @@ export const searchPlaces = async (query, userLocation) => {
 
 // 2. Chat Service
 export const chatWithAI = async (message, history) => {
+    const ai = getAi();
+    if (!ai) return "Lo siento, la asistencia con IA no está disponible en este momento.";
     try {
         const chat = ai.chats.create({
             model: 'gemini-2.0-flash', // Using 2.0 flash which is widely available
@@ -330,8 +344,9 @@ export const chatWithAI = async (message, history) => {
 
 // 3. Text-to-Speech Service
 export const generateSpeech = async (text) => {
+    const ai = getAi();
+    if (!ai) return null;
     try {
-        // This is a hypothetical model/endpoint from the snippet.
         const response = await ai.models.generateContent({
             model: "gemini-2.0-flash-exp",
             contents: [{ parts: [{ text }] }],
