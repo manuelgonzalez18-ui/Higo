@@ -62,9 +62,11 @@ jobs:
           lftp -c "
           set ftp:ssl-allow no;
           set ssl:verify-certificate no;
-          set net:timeout 30;
-          set net:max-retries 3;
+          set net:timeout 60;
+          set net:max-retries 10;
           set net:reconnect-interval-base 5;
+          set net:reconnect-interval-multiplier 1.5;
+          set mirror:parallel-transfer-count 2;
           open -u '$FTP_USERNAME','$FTP_PASSWORD' '$FTP_SERVER';
-          mirror --reverse --delete --verbose --parallel=3 --exclude-glob .ftp-deploy-sync-state.json ./dist/ ./public_html/;
+          mirror --reverse --delete --verbose --parallel=2 --exclude-glob .ftp-deploy-sync-state.json ./dist/ ./;
           "
