@@ -7,7 +7,8 @@ const AuthPage = () => {
     const [loading, setLoading] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [isLogin, setIsLogin] = useState(true); // Toggle between Login and Register
+    const [referralCode, setReferralCode] = useState('');
+    const [isLogin, setIsLogin] = useState(true);
     const [message, setMessage] = useState('');
     const navigate = useNavigate();
 
@@ -42,6 +43,16 @@ const AuthPage = () => {
 
                 localStorage.setItem('session_id', newSessionId);
 
+                // Si quedó un referral pendiente del signup, registrarlo ahora.
+                const pendingRef = localStorage.getItem('pending_referral_code');
+                if (pendingRef) {
+                    await supabase.rpc('register_referral', {
+                        p_code: pendingRef,
+                        p_referred_id: user.id
+                    });
+                    localStorage.removeItem('pending_referral_code');
+                }
+
                 if (profile?.role === 'driver') {
                     navigate('/driver');
                 } else {
@@ -49,11 +60,25 @@ const AuthPage = () => {
                 }
             } else {
                 // Register
-                const { error } = await supabase.auth.signUp({
+                const { data: { user }, error } = await supabase.auth.signUp({
                     email,
                     password,
                 });
                 if (error) throw error;
+                // Si el usuario quedó autenticado y entró un código de referido,
+                // lo registramos. Si requiere verificación por email, user puede
+                // ser null; en ese caso lo guardamos en localStorage para procesarlo
+                // tras el primer login.
+                if (referralCode.trim()) {
+                    if (user?.id) {
+                        await supabase.rpc('register_referral', {
+                            p_code: referralCode.trim().toUpperCase(),
+                            p_referred_id: user.id
+                        });
+                    } else {
+                        localStorage.setItem('pending_referral_code', referralCode.trim().toUpperCase());
+                    }
+                }
                 setMessage('¡Registro exitoso! Por favor verifica tu correo electrónico.');
             }
         } catch (error) {
@@ -112,6 +137,25 @@ const AuthPage = () => {
                                 />
                             </div>
                         </div>
+
+                        {!isLogin && (
+                            <div>
+                                <label htmlFor="referral" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    Código de referido <span className="text-gray-400 font-normal">(opcional)</span>
+                                </label>
+                                <div className="mt-1">
+                                    <input
+                                        id="referral"
+                                        type="text"
+                                        value={referralCode}
+                                        onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                                        placeholder="Ej: ABC123"
+                                        className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-[#233535] text-gray-900 dark:text-white uppercase"
+                                    />
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">Si alguien te invitó, ambos reciben $1 al primer viaje.</p>
+                            </div>
+                        )}
 
                         {message && (
                             <div className={`text-sm ${message.includes('success') ? 'text-green-600' : 'text-red-600'}`}>

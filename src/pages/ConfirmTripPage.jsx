@@ -39,8 +39,12 @@ const ConfirmTripPage = () => {
     console.log('ConfirmTripPage State:', { selectedRide, price, pickup, dropoff, serviceType, deliveryData });
 
     const [loading, setLoading] = useState(false);
-    const [passengerPhone, setPassengerPhone] = useState(''); // New state for phone
-    const [paymentMethod, setPaymentMethod] = useState('cash'); // Default to cash
+    const [passengerPhone, setPassengerPhone] = useState('');
+    const [paymentMethod, setPaymentMethod] = useState('cash');
+    // Códigos promocionales: el descuento se aplica vía RPC tras crear el ride.
+    const [promoCode, setPromoCode] = useState('');
+    const [appliedPromo, setAppliedPromo] = useState(null); // { code, discount, finalPrice }
+    const finalPrice = appliedPromo ? appliedPromo.finalPrice : price;
 
     // Dynamic Vehicle Info with Weight Limits for Delivery
     const getVehicleInfo = () => {
@@ -56,6 +60,57 @@ const ConfirmTripPage = () => {
     };
 
     const currentVehicle = getVehicleInfo();
+
+    // Validar código promo localmente (lee promo_codes con RLS — sin escribir).
+    // El descuento real se aplica vía RPC apply_promo_code después de crear el ride.
+    const validatePromo = async () => {
+        const code = promoCode.trim().toUpperCase();
+        if (!code) return;
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+            alert('Debes iniciar sesión para usar códigos promocionales.');
+            return;
+        }
+        const { data: promo, error } = await supabase
+            .from('promo_codes')
+            .select('code, discount_type, discount_value, min_ride_amount, expires_at, max_uses, used_count')
+            .eq('code', code)
+            .eq('active', true)
+            .maybeSingle();
+        if (error || !promo) {
+            setAppliedPromo(null);
+            alert('Código inválido o inactivo.');
+            return;
+        }
+        if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
+            setAppliedPromo(null);
+            alert('El código ha expirado.');
+            return;
+        }
+        if (promo.max_uses != null && promo.used_count >= promo.max_uses) {
+            setAppliedPromo(null);
+            alert('El código alcanzó su límite de usos.');
+            return;
+        }
+        if (price < (promo.min_ride_amount || 0)) {
+            setAppliedPromo(null);
+            alert(`El viaje debe ser de al menos $${promo.min_ride_amount}.`);
+            return;
+        }
+        const discount = promo.discount_type === 'percent'
+            ? Math.round(price * promo.discount_value) / 100
+            : Math.min(promo.discount_value, price);
+        setAppliedPromo({
+            code: promo.code,
+            discount: parseFloat(discount.toFixed(2)),
+            finalPrice: parseFloat(Math.max(price - discount, 0).toFixed(2))
+        });
+    };
+
+    const removePromo = () => {
+        setAppliedPromo(null);
+        setPromoCode('');
+    };
 
     const handleConfirm = async () => {
         setLoading(true);
@@ -74,27 +129,33 @@ const ConfirmTripPage = () => {
                     user_id: session.user.id,
                     pickup: pickup,
                     dropoff: dropoff,
-                    price: price,
+                    price: finalPrice,  // ya con descuento aplicado si hay promo
                     ride_type: selectedRide,
                     status: 'requested',
                     payment_method: 'direct',
                     passenger_phone: passengerPhone || null,
-                    // Smart Assignment: Save Coords
                     pickup_lat: pickupCoords?.lat || null,
                     pickup_lng: pickupCoords?.lng || null,
                     dropoff_lat: dropoffCoords?.lat || null,
                     dropoff_lng: dropoffCoords?.lng || null,
-
-                    // New Delivery Fields
                     service_type: serviceType || 'ride',
                     delivery_info: deliveryData || null,
                     payer: deliveryData?.payer || 'sender'
                 }])
-                .select(); // Return inserted data
+                .select();
 
             if (error) throw error;
 
-            // Navigate to tracking page with the new ride ID
+            // Si hay código promo, registrarlo contra el ride recién creado.
+            if (data && data[0] && appliedPromo) {
+                await supabase.rpc('apply_promo_code', {
+                    p_code: appliedPromo.code,
+                    p_ride_id: data[0].id,
+                    p_user_id: session.user.id,
+                    p_ride_amount: price
+                });
+            }
+
             if (data && data[0]) {
                 navigate(`/ride/${data[0].id}`);
             } else {
@@ -184,7 +245,14 @@ const ConfirmTripPage = () => {
                         </div>
                     </div>
                     <div className="text-right">
-                        <p className="text-white font-black text-3xl">${price.toFixed(2)}</p>
+                        {appliedPromo ? (
+                            <>
+                                <p className="text-gray-500 text-sm line-through">${price.toFixed(2)}</p>
+                                <p className="text-emerald-400 font-black text-3xl">${finalPrice.toFixed(2)}</p>
+                            </>
+                        ) : (
+                            <p className="text-white font-black text-3xl">${price.toFixed(2)}</p>
+                        )}
                         {serviceType === 'delivery' && (
                             <p className="text-[10px] text-gray-500 mt-1">
                                 {deliveryData?.payer === 'receiver' ? 'Paga Destinatario' : 'Paga Remitente'}
@@ -195,6 +263,40 @@ const ConfirmTripPage = () => {
 
                 {/* Payment Method - Removed Visa, default cash logic implied or simplified */}
                 {/* Simplified to just show total price clearly or nothing specific for now if cash is default */}
+
+                {/* Promo Code */}
+                <div>
+                    <label className="text-xs font-bold text-gray-400 mb-2 block">Código Promocional <span className="text-gray-600 font-normal">(Opcional)</span></label>
+                    {appliedPromo ? (
+                        <div className="bg-emerald-500/10 border border-emerald-500/40 rounded-2xl px-4 py-3 flex items-center justify-between">
+                            <div>
+                                <p className="text-emerald-300 font-bold text-sm">{appliedPromo.code}</p>
+                                <p className="text-emerald-200/70 text-xs">−${appliedPromo.discount.toFixed(2)} de descuento</p>
+                            </div>
+                            <button onClick={removePromo} className="text-gray-400 hover:text-white p-2">
+                                <span className="material-symbols-outlined text-base">close</span>
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="bg-[#1A1F2E] rounded-2xl flex items-center px-2 border border-white/5 focus-within:border-blue-500 transition-colors">
+                            <input
+                                type="text"
+                                placeholder="Ej: HIGUEROTE"
+                                className="bg-transparent w-full py-3 px-2 text-white placeholder-gray-600 outline-none uppercase"
+                                value={promoCode}
+                                onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                                onKeyDown={(e) => e.key === 'Enter' && validatePromo()}
+                            />
+                            <button
+                                onClick={validatePromo}
+                                disabled={!promoCode.trim()}
+                                className="px-3 py-2 text-sm font-bold text-blue-400 hover:text-blue-300 disabled:text-gray-600"
+                            >
+                                Aplicar
+                            </button>
+                        </div>
+                    )}
+                </div>
 
                 {/* Phone Input */}
                 <div>

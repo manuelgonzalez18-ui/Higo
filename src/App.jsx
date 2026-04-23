@@ -4,6 +4,7 @@ import RequestRidePage from './pages/RequestRidePage';
 import ScheduleRidePage from './pages/ScheduleRidePage';
 import ConfirmTripPage from './pages/ConfirmTripPage';
 import DriverDashboard from './pages/DriverDashboard';
+import DriverStatsPage from './pages/DriverStatsPage';
 import RideStatusPage from './pages/RideStatusPage';
 import AdminDriversPage from './pages/AdminDriversPage';
 import DriverLandingPage from './pages/DriverLandingPage';
@@ -152,6 +153,7 @@ const App = () => {
         <Route path="/schedule" element={<ScheduleRidePage />} />
         <Route path="/confirm" element={<ConfirmTripPage />} />
         <Route path="/driver" element={<DriverDashboard />} />
+        <Route path="/driver/stats" element={<DriverStatsPage />} />
         <Route path="/ride/:id" element={<RideStatusPage />} />
         <Route path="/admin/drivers" element={<AdminDriversPage />} />
         <Route path="/join" element={<DriverLandingPage />} />
