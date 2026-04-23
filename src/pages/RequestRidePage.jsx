@@ -70,12 +70,14 @@ const RequestRidePage = () => {
     };
 
     // Price mapping
-    // Vehicle Rates (Provided by User)
+    // Vehicle Rates (Base incluye 1km. Después +perKm por km adicional)
     const VEHICLE_RATES = {
-        moto: { base: 0.80, perKm: 0.28 },
-        standard: { base: 1.50, perKm: 0.57 },
-        van: { base: 1.70, perKm: 0.66 } // 'track' mapped to 'van'
+        moto: { base: 1.00, perKm: 0.25, deliveryFee: 0.50, waitPerMin: 0.05 },
+        standard: { base: 1.50, perKm: 0.40, deliveryFee: 1.50, waitPerMin: 0.08 },
+        van: { base: 1.70, perKm: 0.60, deliveryFee: 2.00, waitPerMin: 0.10 } // 'track' mapped to 'van'
     };
+    const FREE_WAIT_MINUTES = 3;
+    const INCLUDED_KM = 1;
 
     // Haversine Formula for Distance
     const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
@@ -129,55 +131,30 @@ const RequestRidePage = () => {
         });
 
 
-        let basePrice = 0;
-        let perKm = 0;
-        let serviceFee = 0;
-
         // Pricing Logic based on selectedRide (type)
         const type = selectedRide; // Use selectedRide from state
-
-        if (type === 'moto') {
-            basePrice = distKm <= 2 ? 0.8 : 0.8;
-            perKm = distKm > 2 ? 0.25 : 0;
-            if (serviceType === 'delivery') serviceFee = 1.0; // Delivery fee
-        } else if (type === 'standard') { // Carro
-            basePrice = distKm <= 2 ? 1.5 : 1.5;
-            perKm = distKm > 2 ? 0.40 : 0;
-            if (serviceType === 'delivery') serviceFee = 2.0;
-        } else if (type === 'van') { // Camioneta
-            basePrice = distKm <= 2 ? 1.7 : 1.7;
-            perKm = distKm > 2 ? 0.60 : 0;
-            if (serviceType === 'delivery') serviceFee = 2.5;
-        }
+        const rates = VEHICLE_RATES[type];
+        const basePrice = rates.base;
+        const perKm = rates.perKm;
+        const serviceFee = serviceType === 'delivery' ? rates.deliveryFee : 0;
 
         // Add additional stops cost
         const validStopsCount = stops.filter(s => s.coords).length;
         const stopFee = type === 'moto' ? 0.50 : 1.00;
         const stopsCost = validStopsCount * stopFee;
 
-        let calculated = basePrice + (Math.max(0, distKm - 2) * perKm) + stopsCost + serviceFee;
+        let calculated = basePrice + (Math.max(0, distKm - INCLUDED_KM) * perKm) + stopsCost + serviceFee;
 
-        // Minimums check
-        if (type === 'moto' && calculated < 0.8) calculated = 0.8;
-        if (type === 'standard' && calculated < 1.5) calculated = 1.5;
-        if (type === 'van' && calculated < 1.7) calculated = 1.7;
+        // Minimum is the base price
+        if (calculated < basePrice) calculated = basePrice;
 
         setPrice(parseFloat(calculated.toFixed(2)));
 
         // Calculate old price (without stops) for comparison in modal
         if (validStopsCount > 0) {
-            let baseDistNoStops = roadDistance > 0 ? (roadDistance / 1000) : getDistanceFromLatLonInKm(pickupCoords.lat, pickupCoords.lng, dropoffCoords.lat, dropoffCoords.lng);
-            let oldCalculated = 0;
-            if (type === 'moto') {
-                oldCalculated = (baseDistNoStops <= 2 ? 0.8 : 0.8) + (Math.max(0, baseDistNoStops - 2) * (baseDistNoStops > 2 ? 0.25 : 0)) + (serviceType === 'delivery' ? 1.0 : 0);
-                if (oldCalculated < 0.8) oldCalculated = 0.8;
-            } else if (type === 'standard') {
-                oldCalculated = (baseDistNoStops <= 2 ? 1.5 : 1.5) + (Math.max(0, baseDistNoStops - 2) * (baseDistNoStops > 2 ? 0.40 : 0)) + (serviceType === 'delivery' ? 2.0 : 0);
-                if (oldCalculated < 1.5) oldCalculated = 1.5;
-            } else if (type === 'van') {
-                oldCalculated = (baseDistNoStops <= 2 ? 1.7 : 1.7) + (Math.max(0, baseDistNoStops - 2) * (baseDistNoStops > 2 ? 0.60 : 0)) + (serviceType === 'delivery' ? 2.5 : 0);
-                if (oldCalculated < 1.7) oldCalculated = 1.7;
-            }
+            const baseDistNoStops = roadDistance > 0 ? (roadDistance / 1000) : getDistanceFromLatLonInKm(pickupCoords.lat, pickupCoords.lng, dropoffCoords.lat, dropoffCoords.lng);
+            let oldCalculated = basePrice + (Math.max(0, baseDistNoStops - INCLUDED_KM) * perKm) + serviceFee;
+            if (oldCalculated < basePrice) oldCalculated = basePrice;
             setOldPrice(parseFloat(oldCalculated.toFixed(2)));
         } else {
             setOldPrice(0); // No stops, so no "old price" to compare
