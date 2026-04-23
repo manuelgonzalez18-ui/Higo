@@ -2,23 +2,18 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-// Firebase Web SDK config — los valores se inyectan en build vía Vite/.env.
-// Aunque el config de Firebase web no es realmente "secreto" (Firebase lo
-// expone deliberadamente y depende de Security Rules), lo mantenemos en .env
-// para no commitearlo y poder rotarlo si fuera necesario.
+// Firebase Web SDK config. Estos valores no son secretos: Firebase los expone
+// deliberadamente y la seguridad real vive en Security Rules. Si .env está,
+// prevalece; si no, usamos los valores hardcoded.
 const firebaseConfig = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-    appId: import.meta.env.VITE_FIREBASE_APP_ID,
-    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyAcoBzdfPRJ76luR-bTjW4Kxen3dWZ0Xn4',
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'higo-app-26a19.firebaseapp.com',
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'higo-app-26a19',
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'higo-app-26a19.firebasestorage.app',
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '402695441944',
+    appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:402695441944:web:104db3fe36029e2c36bd6d',
+    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || 'G-0N2ZDGDGNT'
 };
-
-if (!firebaseConfig.apiKey) {
-    console.warn("Missing VITE_FIREBASE_* en .env. Firebase no se inicializará.");
-}
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
