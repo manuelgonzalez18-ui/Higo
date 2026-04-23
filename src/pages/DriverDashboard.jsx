@@ -1193,6 +1193,24 @@ const DriverDashboard = () => {
                             <span className="font-bold text-xs text-red-300 tracking-wide">Membresía vencida</span>
                         </div>
                     )}
+                    {/* Aviso de vencimiento próximo (3 días o menos) usando last_payment_date.
+                        Asume membresía mensual de 30 días. */}
+                    {profile?.subscription_status === 'active' && profile?.last_payment_date && (() => {
+                        const expires = new Date(profile.last_payment_date);
+                        expires.setDate(expires.getDate() + 30);
+                        const daysLeft = Math.ceil((expires - Date.now()) / 86400e3);
+                        if (daysLeft > 0 && daysLeft <= 3) {
+                            return (
+                                <div className="bg-amber-500/20 backdrop-blur-md px-3 py-2 rounded-full border border-amber-500/40 flex items-center gap-2 shadow-lg ml-2">
+                                    <span className="material-symbols-outlined text-amber-400 text-base">schedule</span>
+                                    <span className="font-bold text-xs text-amber-300 tracking-wide">
+                                        Vence en {daysLeft} {daysLeft === 1 ? 'día' : 'días'}
+                                    </span>
+                                </div>
+                            );
+                        }
+                        return null;
+                    })()}
                     <div className="flex gap-2 ml-auto">
                         <button
                             onClick={() => setVoiceEnabled(!voiceEnabled)}
@@ -1200,6 +1218,9 @@ const DriverDashboard = () => {
                             title={voiceEnabled ? 'Desactivar Voz' : 'Activar Voz'}
                         >
                             <span className="material-symbols-outlined text-white">{voiceEnabled ? 'volume_up' : 'volume_off'}</span>
+                        </button>
+                        <button onClick={() => navigate('/driver/stats')} className="w-10 h-10 bg-[#0F172A]/90 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 shadow-lg hover:bg-emerald-500/20 transition-colors" title="Mis estadísticas">
+                            <span className="material-symbols-outlined text-white">bar_chart</span>
                         </button>
                         <button onClick={() => setShowPaymentQR(true)} className="w-10 h-10 bg-[#0F172A]/90 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 shadow-lg hover:bg-blue-500/20 transition-colors">
                             <span className="material-symbols-outlined text-white">qr_code_2</span>
