@@ -65,7 +65,19 @@ const DriverDashboard = () => {
 
     // Navigation State
     const [navStep, setNavStep] = useState(0); // 0: Idle, 1: To Pickup, 2: To Dropoff
+    const [arrivalTime, setArrivalTime] = useState(null); // Timestamp when driver arrived at pickup (waiting for passenger)
+    const [waitElapsedSec, setWaitElapsedSec] = useState(0); // Live counter of seconds since arrival
+    const [waitFee, setWaitFee] = useState(0); // Computed wait fee added to final price
     const [instruction, setInstruction] = useState("Waiting for rides...");
+
+    // Wait fee config (mirrors VEHICLE_RATES on RequestRidePage)
+    const WAIT_RATES_PER_MIN = { moto: 0.05, standard: 0.08, van: 0.10 };
+    const FREE_WAIT_MINUTES = 3;
+    const computeWaitFee = (rideType, seconds) => {
+        const rate = WAIT_RATES_PER_MIN[rideType] ?? WAIT_RATES_PER_MIN.standard;
+        const billableMin = Math.max(0, seconds / 60 - FREE_WAIT_MINUTES);
+        return parseFloat((billableMin * rate).toFixed(2));
+    };
     const [currentLoc, setCurrentLoc] = useState(null);
     const [heading, setHeading] = useState(0); // Vehicle Bearing
     const [navInfo, setNavInfo] = useState(null);
@@ -97,6 +109,15 @@ const DriverDashboard = () => {
             stopLoopingRequestAlert();
         }
     }, [activeRide]);
+
+    // Tick the wait timer once per second while driver is waiting at pickup
+    useEffect(() => {
+        if (!arrivalTime) return;
+        const id = setInterval(() => {
+            setWaitElapsedSec(Math.floor((Date.now() - arrivalTime) / 1000));
+        }, 1000);
+        return () => clearInterval(id);
+    }, [arrivalTime]);
 
     // --- HELPER FUNCTIONS ---
     // --- HELPER FUNCTIONS ---
@@ -913,6 +934,15 @@ const DriverDashboard = () => {
         }
     };
 
+    // Driver pressed "Marcar Llegada" — start waiting timer at pickup
+    const handleMarkArrival = () => {
+        if (arrivalTime) return;
+        setArrivalTime(Date.now());
+        setWaitElapsedSec(0);
+        setWaitFee(0);
+        speak("Llegada marcada. Esperando al pasajero.");
+    };
+
     const handleCompleteStep = async () => {
         if (!activeRide) return;
 
@@ -920,26 +950,46 @@ const DriverDashboard = () => {
         const isDelivery = activeRide.service_type === 'delivery' || activeRide.delivery_info;
 
         if (navStep === 1) {
-            // ARRIVED AT PICKUP
+            // STARTING THE TRIP from pickup. Compute wait fee if driver marked arrival.
+            const elapsedSec = arrivalTime ? Math.floor((Date.now() - arrivalTime) / 1000) : 0;
+            const fee = arrivalTime ? computeWaitFee(activeRide.ride_type, elapsedSec) : 0;
+            setWaitFee(fee);
 
             // Only show QR at pickup if it is a DELIVERY and SENDER is paying
             const isSenderPayer = isDelivery && (activeRide.delivery_info?.payer === 'sender' || activeRide.payer === 'sender');
 
             if (isSenderPayer) {
-                // Determine if we need to show QR NOW (at Pickup)
+                // Sender pays now at pickup: include wait fee in displayed total before QR
+                if (fee > 0) {
+                    const finalPrice = parseFloat(((Number(activeRide.price) || 0) + fee).toFixed(2));
+                    await supabase.from('rides').update({
+                        wait_seconds: elapsedSec,
+                        wait_fee: fee,
+                        price: finalPrice
+                    }).eq('id', activeRide.id);
+                    setActiveRide({ ...activeRide, price: finalPrice, wait_fee: fee, wait_seconds: elapsedSec });
+                }
                 speak("Llegada al origen. El remitente debe pagar ahora.");
                 setShowPaymentQR(true);
                 // We pause state advance until QR is closed/confirmed
             } else {
                 // Standard Flow (Pay at End) or Receiver Pays
                 setNavStep(2);
+                setArrivalTime(null); // Stop the wait timer once trip starts
                 if (isDelivery) {
                     speak(`Paquete recogido. Iniciando ruta de entrega.`);
                 } else {
                     speak(`Recogida exitosa. Iniciando viaje a ${activeRide.dropoff}`);
                 }
 
-                await supabase.from('rides').update({ status: 'in_progress' }).eq('id', activeRide.id);
+                const finalPrice = parseFloat(((Number(activeRide.price) || 0) + fee).toFixed(2));
+                await supabase.from('rides').update({
+                    status: 'in_progress',
+                    wait_seconds: elapsedSec,
+                    wait_fee: fee,
+                    price: finalPrice
+                }).eq('id', activeRide.id);
+                setActiveRide({ ...activeRide, price: finalPrice, wait_fee: fee, wait_seconds: elapsedSec });
             }
 
         } else if (navStep === 2) {
@@ -967,6 +1017,7 @@ const DriverDashboard = () => {
         // If we were at Step 1 (Sender Paid), move to Step 2
         if (navStep === 1) {
             setNavStep(2);
+            setArrivalTime(null); // Stop the wait timer once trip starts
             speak(`Pago confirmado. Iniciando viaje al destino.`);
             await supabase.from('rides').update({ status: 'in_progress' }).eq('id', activeRide.id);
         } else {
@@ -985,6 +1036,9 @@ const DriverDashboard = () => {
         setTimeout(() => {
             setActiveRide(null);
             setNavStep(0);
+            setArrivalTime(null);
+            setWaitElapsedSec(0);
+            setWaitFee(0);
             setRequests([]);
             stopLoopingRequestAlert(); // Stop sound
         }, 150);
@@ -1201,11 +1255,42 @@ const DriverDashboard = () => {
                                 </>
                             )}
 
+                            {navStep === 1 && arrivalTime && (() => {
+                                const liveFee = computeWaitFee(activeRide?.ride_type, waitElapsedSec);
+                                const mm = String(Math.floor(waitElapsedSec / 60)).padStart(2, '0');
+                                const ss = String(waitElapsedSec % 60).padStart(2, '0');
+                                const billing = waitElapsedSec / 60 > FREE_WAIT_MINUTES;
+                                return (
+                                    <div className="mb-3 px-3 py-2 rounded-xl bg-[#0F1014]/50 border border-white/5 flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <span className="material-symbols-outlined text-amber-400 text-base">schedule</span>
+                                            <span className="text-xs text-gray-400 font-bold uppercase tracking-wider">Espera</span>
+                                            <span className="text-white font-bold tabular-nums">{mm}:{ss}</span>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">{billing ? 'Cargo' : `Gratis ${FREE_WAIT_MINUTES} min`}</p>
+                                            <p className={`font-bold ${billing ? 'text-amber-400' : 'text-emerald-400'}`}>+${liveFee.toFixed(2)}</p>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
+                            {navStep === 1 && !arrivalTime && (
+                                <button
+                                    onClick={handleMarkArrival}
+                                    className={`w-full mb-2 bg-amber-500 hover:bg-amber-600 text-black rounded-[20px] font-bold text-lg shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 active:scale-95 transition-all ${isCardMinimized ? 'py-3 text-base' : 'py-4'}`}
+                                >
+                                    <span className="material-symbols-outlined">flag</span>
+                                    <span>Marcar Llegada</span>
+                                </button>
+                            )}
+
                             <button
                                 onClick={handleCompleteStep}
-                                className={`w-full bg-blue-600 hover:bg-blue-700 text-white rounded-[20px] font-bold text-lg shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 active:scale-95 transition-all ${isCardMinimized ? 'py-3 text-base' : 'py-4'}`}
+                                disabled={navStep === 1 && !arrivalTime}
+                                className={`w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-[20px] font-bold text-lg shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 active:scale-95 transition-all ${isCardMinimized ? 'py-3 text-base' : 'py-4'}`}
                             >
-                                <span>{navStep === 1 ? "He Llegado" : "Terminar Viaje"}</span>
+                                <span>{navStep === 1 ? "Iniciar Viaje" : "Terminar Viaje"}</span>
                                 <span className="material-symbols-outlined">arrow_forward</span>
                             </button>
                         </div>
