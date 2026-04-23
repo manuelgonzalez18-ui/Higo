@@ -38,16 +38,24 @@ jobs:
           VITE_FIREBASE_MEASUREMENT_ID: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}
         run: npm run build
 
-      - name: Sync files (FTP)
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./dist/
-          server-dir: ./
-          timeout: 600000
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
+      # lftp es más robusto que FTP-Deploy-Action contra Hostinger:
+      # sube cada archivo con su nombre final (no usa .in.tmp + rename),
+      # paraleliza transferencias y maneja reintentos.
+      - name: Install lftp
+        run: sudo apt-get update && sudo apt-get install -y lftp
+
+      - name: Deploy via lftp
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          lftp -c "
+          set ftp:ssl-allow no;
+          set ssl:verify-certificate no;
+          set net:timeout 30;
+          set net:max-retries 3;
+          set net:reconnect-interval-base 5;
+          open -u '$FTP_USERNAME','$FTP_PASSWORD' '$FTP_SERVER';
+          mirror --reverse --delete --verbose --parallel=3 --exclude-glob .ftp-deploy-sync-state.json ./dist/ ./public_html/;
+          "
