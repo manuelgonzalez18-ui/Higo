@@ -1,5 +1,4 @@
 import React from 'react';
-import StandardIcon from '../assets/car_yellow_cartoon.png';
 
 const ServiceSelection = ({ onSelect }) => {
     return (
