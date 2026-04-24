@@ -45,6 +45,10 @@ jobs:
           echo "VITE_FIREBASE_API_KEY length: ${#VITE_FIREBASE_API_KEY}"
           echo "VITE_FIREBASE_PROJECT_ID length: ${#VITE_FIREBASE_PROJECT_ID}"
           echo "================================================="
+          if [[ ! "$VITE_GOOGLE_MAPS_API_KEY" =~ ^AIza[0-9A-Za-z_-]{35}$ ]]; then
+            echo "::error::VITE_GOOGLE_MAPS_API_KEY no tiene formato valido de Google API key (esperado: AIza + 35 chars alfanumericos/_-, total 39; recibido: ${#VITE_GOOGLE_MAPS_API_KEY} chars). Revisa el secret en GitHub: Settings > Secrets and variables > Actions. Causa comun: espacios, saltos de linea o comillas al pegar."
+            exit 1
+          fi
           npm run build
 
       # lftp es más robusto que FTP-Deploy-Action contra Hostinger:
