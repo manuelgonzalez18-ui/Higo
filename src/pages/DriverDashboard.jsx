@@ -70,6 +70,7 @@ const DriverDashboard = () => {
     const DB_SYNC_MIN_MS = 10000;       // 10s mínimo entre updates a profiles
     const DB_SYNC_MIN_METERS = 20;      // o 20m de movimiento
     const NEARBY_POLL_MIN_MS = 30000;   // 30s mínimo entre get_nearby_rides
+    const NEARBY_RADIUS_KM = 30.0;      // radio de búsqueda de viajes cercanos
 
     const shouldSyncDb = (lat, lng) => {
         const now = Date.now();
@@ -709,6 +710,18 @@ const DriverDashboard = () => {
     useEffect(() => {
         let watcherId;
 
+        // En web watcherId es el número que devuelve navigator.geolocation.watchPosition;
+        // en nativo es el id string del plugin BackgroundGeolocation. Hay que limpiar
+        // con la API correspondiente — antes se llamaba removeWatcher en ambos casos
+        // y crasheaba en web porque BackgroundGeolocation es null fuera de Capacitor.
+        const stopWatcher = (id) => {
+            if (Capacitor.isNativePlatform()) {
+                BackgroundGeolocation?.removeWatcher({ id });
+            } else if (navigator.geolocation) {
+                navigator.geolocation.clearWatch(id);
+            }
+        };
+
         const startTracking = async () => {
             // WEB FALLBACK for Driver Tracking
             if (!Capacitor.isNativePlatform()) {
@@ -743,7 +756,7 @@ const DriverDashboard = () => {
                             const { data } = await supabase.rpc('get_nearby_rides', {
                                 driver_lat: latitude,
                                 driver_lng: longitude,
-                                radius_km: 10.0,
+                                radius_km: NEARBY_RADIUS_KM,
                                 driver_vehicle_type: vType
                             });
 
@@ -860,7 +873,7 @@ const DriverDashboard = () => {
                             .rpc('get_nearby_rides', {
                                 driver_lat: latitude,
                                 driver_lng: longitude,
-                                radius_km: 10.0,
+                                radius_km: NEARBY_RADIUS_KM,
                                 driver_vehicle_type: vType
                             });
 
@@ -875,11 +888,11 @@ const DriverDashboard = () => {
         if (isOnline) {
             startTracking();
         } else {
-            if (watcherId) BackgroundGeolocation.removeWatcher({ id: watcherId });
+            if (watcherId) stopWatcher(watcherId);
         }
 
         return () => {
-            if (watcherId) BackgroundGeolocation.removeWatcher({ id: watcherId });
+            if (watcherId) stopWatcher(watcherId);
         };
         // Removed 'heading' and 'profile' from dependencies. Added 'isOnline'.
         // 'processRequests' is likely stable or should be ref'd if not.

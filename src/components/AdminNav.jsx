@@ -2,11 +2,12 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 const TABS = [
-    { to: '/admin/drivers',  label: 'Conductores', icon: 'directions_car' },
-    { to: '/admin/users',    label: 'Usuarios',    icon: 'group' },
-    { to: '/admin/pricing',  label: 'Tarifas',     icon: 'payments' },
-    { to: '/admin/promos',   label: 'Promos',      icon: 'local_offer' },
-    { to: '/admin/disputes', label: 'Disputas',    icon: 'report' }
+    { to: '/admin/dashboard', label: 'Dashboard',   icon: 'dashboard' },
+    { to: '/admin/drivers',   label: 'Conductores', icon: 'directions_car' },
+    { to: '/admin/users',     label: 'Usuarios',    icon: 'group' },
+    { to: '/admin/pricing',   label: 'Tarifas',     icon: 'payments' },
+    { to: '/admin/promos',    label: 'Promos',      icon: 'local_offer' },
+    { to: '/admin/disputes',  label: 'Disputas',    icon: 'report' }
 ];
 
 const AdminNav = () => {
