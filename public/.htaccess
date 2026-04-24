@@ -2,6 +2,13 @@
 # Sirve los archivos reales cuando existen. Sólo reescribe a index.html
 # cuando el path solicitado no es un archivo ni carpeta que existe.
 
+# Bloqueo absoluto del diagnóstico Banesco vía HTTP — es CLI-only.
+# Defensa en profundidad: el propio script ya hace PHP_SAPI !== 'cli' → 403,
+# pero acá cortamos antes de que Apache lo invoque.
+<Files "banesco-diagnostic.php">
+    Require all denied
+</Files>
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteBase /
