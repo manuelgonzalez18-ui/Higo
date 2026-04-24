@@ -70,6 +70,7 @@ const DriverDashboard = () => {
     const DB_SYNC_MIN_MS = 10000;       // 10s mínimo entre updates a profiles
     const DB_SYNC_MIN_METERS = 20;      // o 20m de movimiento
     const NEARBY_POLL_MIN_MS = 30000;   // 30s mínimo entre get_nearby_rides
+    const NEARBY_RADIUS_KM = 30.0;      // radio de búsqueda de viajes cercanos
 
     const shouldSyncDb = (lat, lng) => {
         const now = Date.now();
@@ -755,7 +756,7 @@ const DriverDashboard = () => {
                             const { data } = await supabase.rpc('get_nearby_rides', {
                                 driver_lat: latitude,
                                 driver_lng: longitude,
-                                radius_km: 10.0,
+                                radius_km: NEARBY_RADIUS_KM,
                                 driver_vehicle_type: vType
                             });
 
@@ -872,7 +873,7 @@ const DriverDashboard = () => {
                             .rpc('get_nearby_rides', {
                                 driver_lat: latitude,
                                 driver_lng: longitude,
-                                radius_km: 10.0,
+                                radius_km: NEARBY_RADIUS_KM,
                                 driver_vehicle_type: vType
                             });
 
