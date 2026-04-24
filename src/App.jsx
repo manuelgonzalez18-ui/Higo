@@ -11,6 +11,9 @@ import AdminUsersPage from './pages/AdminUsersPage';
 import AdminPricingPage from './pages/AdminPricingPage';
 import AdminPromoCodesPage from './pages/AdminPromoCodesPage';
 import AdminDisputesPage from './pages/AdminDisputesPage';
+import AdminLoginPage from './pages/AdminLoginPage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
+import AdminGuard from './components/AdminGuard';
 import DriverLandingPage from './pages/DriverLandingPage';
 import ChatWidget from './components/ChatWidget';
 import './index.css';         // Ensure Tailwind/global CSS is imported
@@ -159,11 +162,13 @@ const App = () => {
         <Route path="/driver" element={<DriverDashboard />} />
         <Route path="/driver/stats" element={<DriverStatsPage />} />
         <Route path="/ride/:id" element={<RideStatusPage />} />
-        <Route path="/admin/drivers" element={<AdminDriversPage />} />
-        <Route path="/admin/users" element={<AdminUsersPage />} />
-        <Route path="/admin/pricing" element={<AdminPricingPage />} />
-        <Route path="/admin/promos" element={<AdminPromoCodesPage />} />
-        <Route path="/admin/disputes" element={<AdminDisputesPage />} />
+        <Route path="/admin" element={<AdminLoginPage />} />
+        <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+        <Route path="/admin/drivers" element={<AdminGuard><AdminDriversPage /></AdminGuard>} />
+        <Route path="/admin/users" element={<AdminGuard><AdminUsersPage /></AdminGuard>} />
+        <Route path="/admin/pricing" element={<AdminGuard><AdminPricingPage /></AdminGuard>} />
+        <Route path="/admin/promos" element={<AdminGuard><AdminPromoCodesPage /></AdminGuard>} />
+        <Route path="/admin/disputes" element={<AdminGuard><AdminDisputesPage /></AdminGuard>} />
         <Route path="/join" element={<DriverLandingPage />} />
       </Routes>
       <ChatWidget />
