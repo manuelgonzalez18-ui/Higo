@@ -20,10 +20,20 @@ declare(strict_types=1);
  *   4. accountId: cuenta Banesco destino (la de Higo), 20 dígitos,
  *      arranca con "0134". Va al config privado, no hardcodeado.
  *   5. phoneNum: formato 58XXXXXXXXXX (12 dígitos). El driver lo da
- *      como 04XXXXXXXXX, hay que convertir en el borde.
+ *      como 04XXXXXXXXX, hay que convertir en el borde. phoneNum PUEDE
+ *      ser null cuando bankId=0134 (transferencia cuenta-a-cuenta interna
+ *      Banesco, no pago móvil). Pasá --phone=none para ese caso.
  *   6. Respuesta: httpStatus.statusCode === "200" y filtrar
  *      dataResponse.transactionDetail[] por trnType='CR' (créditos).
- *      Códigos conocidos: 70001 = no existe, CRT503 = mantenimiento.
+ *      Códigos de error reales:
+ *        70001  = consulta sin resultados (tupla no existe).
+ *        VRN04  = servicio en horario de mantenimiento (HTTP 503).
+ *        VDE01  = falta campo obligatorio (startDt/bankId/referenceNumber).
+ *        VDE02  = formato inválido (típico: phoneNum mal normalizado).
+ *      OJO: Banesco NO valida amount — devuelve 200 aunque el monto
+ *      solicitado difiera del real. La validación de tolerancia tiene
+ *      que hacerse en nuestro lado comparando request.amount vs
+ *      response.transactionDetail[].amount.
  *   7. SSL verify DESHABILITADO (cert interno de Banesco). Se matchea
  *      la realidad aunque es un downgrade — TODO pinnear el CA real.
  *
@@ -94,9 +104,17 @@ function bd_print_help(): void {
  *   04141234567    -> 584141234567
  *   584141234567   -> 584141234567
  *   +58 414 123 45 67 -> 584141234567
- * Retorna null si no encaja.
+ *   "" | "none" | "null" -> phoneNum=null (caso interbank bankId=0134).
+ * Retorna:
+ *   string 58XXXXXXXXXX → a usar tal cual
+ *   null                → phoneNum se enviará como null (explícito)
+ *   false               → formato inválido, abortar
  */
-function bd_normalize_phone(string $raw): ?string {
+function bd_normalize_phone(string $raw) {
+    $trim = strtolower(trim($raw));
+    if ($trim === '' || $trim === 'none' || $trim === 'null') {
+        return null;
+    }
     $digits = preg_replace('/\D+/', '', $raw) ?? '';
     if (strlen($digits) === 10 && str_starts_with($digits, '4')) {
         return '58' . $digits;
@@ -107,7 +125,7 @@ function bd_normalize_phone(string $raw): ?string {
     if (strlen($digits) === 12 && str_starts_with($digits, '58')) {
         return $digits;
     }
-    return null;
+    return false;
 }
 
 /**
@@ -211,15 +229,23 @@ $bank      = bd_arg($opts, 'bank',    (string) ($cfg['BANESCO_BANK_ID'] ?? '0134
 
 if ($reference === null || $reference === '') bd_die("Falta --reference=<num>");
 if ($amountRaw === null || $amountRaw === '') bd_die("Falta --amount=<bs>");
-if ($phoneRaw === null || $phoneRaw === '')   bd_die("Falta --phone=<04...|58...>");
+if ($phoneRaw === null) {
+    bd_die("Falta --phone=<04...|58...|none>  (usá --phone=none si bankId=0134 interbank)");
+}
 
 $amount = (float) $amountRaw;
 if ($amount <= 0) bd_die("--amount debe ser > 0 (recibí: {$amountRaw})");
 
-$phoneNum = bd_normalize_phone($phoneRaw);
-if ($phoneNum === null) {
-    bd_die("--phone no reconocido: {$phoneRaw}  (esperado 04XXXXXXXXX o 58XXXXXXXXXX)");
+$phoneNumResult = bd_normalize_phone($phoneRaw);
+if ($phoneNumResult === false) {
+    bd_die(
+        "--phone no reconocido: {$phoneRaw}  (esperado 04XXXXXXXXX, "
+      . "58XXXXXXXXXX, o 'none' para phoneNum=null). Banesco rechaza "
+      . "otros formatos con VDE02."
+    );
 }
+/** @var string|null $phoneNum  string con 58... o null explícito */
+$phoneNum = $phoneNumResult;
 
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $date)) {
     bd_die("--date debe ser YYYY-MM-DD (recibí: {$date})");
@@ -232,8 +258,15 @@ if (!preg_match('/^\d{20}$/', (string) $account)) {
 printf(
     "[diag] reference=%s  amount=%.2f  phone=%s (orig=%s)  date=%s\n"
   . "       account=%s  bank=%s\n",
-    $reference, $amount, $phoneNum, $phoneRaw, $date, $account, $bank
+    $reference, $amount, $phoneNum ?? 'null', $phoneRaw, $date, $account, $bank
 );
+if ($phoneNum === null && $bank !== '0134') {
+    fwrite(
+        STDERR,
+        "Aviso: phoneNum=null solo es válido cuando bankId=0134 (transferencia "
+      . "interna Banesco). Con bankId={$bank} es probable 70001. Continuo igual.\n"
+    );
+}
 if ($dryRun) echo "[diag] DRY-RUN: no se harán requests reales.\n";
 
 // ── Paso 1/2: Autenticación ──────────────────────────────────────────
@@ -318,7 +351,7 @@ $payload = [
             'accountId'       => (string) $account,
             'amount'          => $amount,
             'startDt'         => (string) $date,
-            'phoneNum'        => $phoneNum,
+            'phoneNum'        => $phoneNum, // string 58... | null (se serializa como null)
             'bankId'          => (string) $bank,
         ],
     ],
@@ -366,23 +399,35 @@ if (!is_array($resp)) {
 }
 
 $hStatus  = $resp['httpStatus']['statusCode'] ?? null;
-$hMessage = $resp['httpStatus']['message']    ?? '';
+$hDesc    = $resp['httpStatus']['statusDesc']
+         ?? $resp['httpStatus']['message']
+         ?? '';
 printf("  httpStatus.statusCode = %s\n", var_export($hStatus, true));
-if ($hMessage !== '') {
-    printf("  httpStatus.message    = %s\n", $hMessage);
+if ($hDesc !== '') {
+    printf("  httpStatus.statusDesc = %s\n", $hDesc);
 }
 
+// Códigos observados en producción (ver logs wifirapidito).
 if ($hStatus === '70001') {
-    echo "  → Banesco dice: transacción NO existe (ref/monto/phone/fecha no matchean).\n";
-    echo "    Respuesta válida, no es error del diagnóstico.\n";
+    echo "  → 70001: Banesco no encontró la transacción con esos datos.\n";
+    echo "    Típicas causas: fecha equivocada (probá el día real del pago),\n";
+    echo "    bankId mal (probá otro código), referencia con dígitos extra.\n";
     exit(0);
 }
-if ($hStatus === 'CRT503') {
-    echo "  → API de Banesco en MANTENIMIENTO. Reintentar luego.\n";
+if ($hStatus === 'VRN04' || $hStatus === 'CRT503') {
+    echo "  → {$hStatus}: Banesco en horario de mantenimiento (típico 02:00-06:00).\n";
+    echo "    Reintentá más tarde.\n";
     exit(0);
+}
+if ($hStatus === '400' || str_starts_with((string) $hStatus, 'VDE')) {
+    // VDE01 falta campo obligatorio, VDE02 formato inválido (ej phoneNum).
+    echo "  → Error de validación del payload ({$hStatus}). Revisá startDt,\n";
+    echo "    bankId, referenceNumber, o el formato de phoneNum (58XXXXXXXXXX\n";
+    echo "    exactos, 12 dígitos, o null si bankId=0134).\n";
+    exit(5);
 }
 if ($hStatus !== '200') {
-    echo "  → statusCode desconocido. Ver body completo arriba.\n";
+    echo "  → statusCode inesperado. Ver body arriba.\n";
     exit(5);
 }
 
@@ -400,18 +445,47 @@ printf("  transactionDetail total   = %d\n", count($details));
 printf("  trnType='CR' (abonos)     = %d\n", count($credits));
 
 foreach ($credits as $i => $t) {
-    $ref = $t['referenceNumber'] ?? $t['reference'] ?? '?';
-    $amt = $t['amount']          ?? '?';
-    $dt  = $t['date']
-        ?? $t['paidAt']
-        ?? $t['startDt']
-        ?? '?';
-    printf("    #%d  ref=%s  amount=%s  date=%s\n", $i + 1, $ref, $amt, $dt);
+    $respRef = trim((string) ($t['referenceNumber'] ?? '?'));
+    $respAmt = $t['amount'] ?? null;
+    $respAcc = trim((string) ($t['accountId']    ?? ''));
+    $respDate = (string) ($t['trnDate'] ?? $t['date'] ?? '');
+    $respTime = (string) ($t['trnTime'] ?? '');
+    $respSrc  = trim((string) ($t['sourceBankId'] ?? ''));
+    $respDst  = trim((string) ($t['destBankId']   ?? ''));
+    $respConcept = trim((string) ($t['concept']   ?? ''));
+
+    // Variante A = pago móvil (accountId en response es un telef. enmascarado,
+    // típicamente "5841************XXXX"). Variante B = transfer interno
+    // Banesco (accountId es cuenta bancaria, ej "1340************1868").
+    $isPhoneAcc = str_starts_with($respAcc, '5841') || str_starts_with($respAcc, '5842')
+                  || str_starts_with($respAcc, '5844') || str_starts_with($respAcc, '5826');
+    $variant = $isPhoneAcc ? 'A (pago móvil)' : 'B (transf. interna cta→cta)';
+
+    printf("    #%d  ref=%s  amount=%s  trnDate=%s %s\n",
+        $i + 1, $respRef, var_export($respAmt, true), $respDate, $respTime);
+    printf("        accountId=%s  (variante %s)\n", $respAcc, $variant);
+    printf("        sourceBank=%s  destBank=%s  concept=\"%s\"\n",
+        $respSrc, $respDst, $respConcept);
+
+    // Comparación de amount (Banesco NO valida amount en el request).
+    if (is_numeric($respAmt)) {
+        $realAmt = (float) $respAmt;
+        $diff    = $realAmt - $amount;
+        $pct     = $amount > 0 ? ($diff / $amount) * 100.0 : 0.0;
+        $verdict = abs($pct) <= 1.0 ? 'dentro de ±1%'
+                : (abs($pct) <= 5.0 ? 'dentro de ±5%'
+                : 'FUERA de tolerancia');
+        printf("        amount request=%.2f  response=%.2f  diff=%+.2f (%+.2f%% → %s)\n",
+            $amount, $realAmt, $diff, $pct, $verdict);
+    }
 }
 
 if (count($credits) === 0) {
-    echo "  → httpStatus=200 pero no hay créditos. Pago no confirmado con esos datos.\n";
-} else {
-    echo "  → OK: Banesco confirmó " . count($credits) . " abono(s).\n";
+    echo "  → httpStatus=200 pero sin créditos. Shape de respuesta raro — ver body.\n";
+    exit(0);
 }
+
+echo "  → OK: Banesco confirmó " . count($credits) . " abono(s). ";
+echo "La validación de tolerancia queda a tu cargo (Banesco devuelve 200\n";
+echo "    aun cuando el monto real difiere del consultado).\n";
 exit(0);
