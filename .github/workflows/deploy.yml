@@ -53,6 +53,10 @@ jobs:
       - name: Install lftp
         run: sudo apt-get update && sudo apt-get install -y lftp
 
+      # IMPORTANTE: public_html/markers/ contiene PNG de iconos (car, moto, van,
+      # pin_pickup, pin_dropoff) subidos MANUALMENTE vía FTP, fuera del repo y
+      # fuera de /dist. Hay que excluir tanto el directorio como su contenido
+      # del mirror --delete, si no lftp lo borra en cada deploy.
       - name: Deploy via lftp
         env:
           FTP_SERVER: ${{ secrets.FTP_SERVER }}
@@ -68,5 +72,5 @@ jobs:
           set net:reconnect-interval-multiplier 1.5;
           set mirror:parallel-transfer-count 2;
           open -u '$FTP_USERNAME','$FTP_PASSWORD' '$FTP_SERVER';
-          mirror --reverse --delete --verbose --parallel=2 --exclude-glob .ftp-deploy-sync-state.json --exclude '^markers/' ./dist/ ./;
+          mirror --reverse --delete --verbose --parallel=2 --exclude-glob .ftp-deploy-sync-state.json --exclude-glob 'markers' --exclude-glob 'markers/*' ./dist/ ./;
           "
