@@ -1,5 +1,5 @@
-// Markers PNG servidos desde public_html/markers/ en Hostinger (subidos manualmente
-// al FTP, fuera de /dist, por eso deploy.yml los excluye del --delete).
+// Markers PNG servidos desde /markers/ (origen: public/markers/ en el repo,
+// incluidos en el build de Vite y deployados automáticamente por deploy.yml).
 
 export const MotoIcon = '/markers/moto.png';
 export const StandardIcon = '/markers/car.png';
