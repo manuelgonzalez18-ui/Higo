@@ -2,6 +2,19 @@
 # Sirve los archivos reales cuando existen. Sólo reescribe a index.html
 # cuando el path solicitado no es un archivo ni carpeta que existe.
 
+# Bloquear acceso HTTP al poller de Banesco: solo debe correr por CLI
+# desde el cron de Hostinger. La defensa en profundidad vive también en
+# el PHP (chequeo de PHP_SAPI) pero cerramos también a nivel Apache.
+<Files "banesco-poller.php">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</Files>
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteBase /

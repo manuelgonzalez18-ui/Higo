@@ -1,0 +1,9 @@
+# Los archivos en /banesco-lib/ son helpers internos del poller PHP.
+# Nadie debe poder listarlos ni invocarlos directamente desde web.
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>
