@@ -709,6 +709,18 @@ const DriverDashboard = () => {
     useEffect(() => {
         let watcherId;
 
+        // En web watcherId es el número que devuelve navigator.geolocation.watchPosition;
+        // en nativo es el id string del plugin BackgroundGeolocation. Hay que limpiar
+        // con la API correspondiente — antes se llamaba removeWatcher en ambos casos
+        // y crasheaba en web porque BackgroundGeolocation es null fuera de Capacitor.
+        const stopWatcher = (id) => {
+            if (Capacitor.isNativePlatform()) {
+                BackgroundGeolocation?.removeWatcher({ id });
+            } else if (navigator.geolocation) {
+                navigator.geolocation.clearWatch(id);
+            }
+        };
+
         const startTracking = async () => {
             // WEB FALLBACK for Driver Tracking
             if (!Capacitor.isNativePlatform()) {
@@ -875,11 +887,11 @@ const DriverDashboard = () => {
         if (isOnline) {
             startTracking();
         } else {
-            if (watcherId) BackgroundGeolocation.removeWatcher({ id: watcherId });
+            if (watcherId) stopWatcher(watcherId);
         }
 
         return () => {
-            if (watcherId) BackgroundGeolocation.removeWatcher({ id: watcherId });
+            if (watcherId) stopWatcher(watcherId);
         };
         // Removed 'heading' and 'profile' from dependencies. Added 'isOnline'.
         // 'processRequests' is likely stable or should be ref'd if not.
