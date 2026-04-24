@@ -69,15 +69,34 @@ const RequestRidePage = () => {
         setStops(newStops);
     };
 
-    // Price mapping
-    // Vehicle Rates (Base incluye 1km. Después +perKm por km adicional)
-    const VEHICLE_RATES = {
-        moto: { base: 1.00, perKm: 0.25, deliveryFee: 0.50, waitPerMin: 0.05 },
-        standard: { base: 1.50, perKm: 0.40, deliveryFee: 1.50, waitPerMin: 0.08 },
-        van: { base: 1.70, perKm: 0.60, deliveryFee: 2.00, waitPerMin: 0.10 } // 'track' mapped to 'van'
+    // Vehicle Rates: viven en DB (tabla pricing_config), editables desde /admin/pricing.
+    // Fallback a estos valores si la query falla (primer render o error de red).
+    const FALLBACK_RATES = {
+        moto:     { base: 1.00, perKm: 0.25, deliveryFee: 0.50, waitPerMin: 0.05, stopFee: 0.50 },
+        standard: { base: 1.50, perKm: 0.40, deliveryFee: 1.50, waitPerMin: 0.08, stopFee: 1.00 },
+        van:      { base: 1.70, perKm: 0.60, deliveryFee: 2.00, waitPerMin: 0.10, stopFee: 1.00 }
     };
+    const [VEHICLE_RATES, setVehicleRates] = useState(FALLBACK_RATES);
     const FREE_WAIT_MINUTES = 3;
     const INCLUDED_KM = 1;
+
+    useEffect(() => {
+        (async () => {
+            const { data, error } = await supabase.from('pricing_config').select('*');
+            if (error || !data?.length) return;
+            const rates = {};
+            for (const r of data) {
+                rates[r.vehicle_type] = {
+                    base: Number(r.base),
+                    perKm: Number(r.per_km),
+                    deliveryFee: Number(r.delivery_fee),
+                    waitPerMin: Number(r.wait_per_min),
+                    stopFee: Number(r.stop_fee)
+                };
+            }
+            setVehicleRates(prev => ({ ...prev, ...rates }));
+        })();
+    }, []);
 
     // Haversine Formula for Distance
     const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
@@ -138,9 +157,9 @@ const RequestRidePage = () => {
         const perKm = rates.perKm;
         const serviceFee = serviceType === 'delivery' ? rates.deliveryFee : 0;
 
-        // Add additional stops cost
+        // Add additional stops cost (leído desde pricing_config, fallback 1.0)
         const validStopsCount = stops.filter(s => s.coords).length;
-        const stopFee = type === 'moto' ? 0.50 : 1.00;
+        const stopFee = rates.stopFee ?? (type === 'moto' ? 0.50 : 1.00);
         const stopsCost = validStopsCount * stopFee;
 
         let calculated = basePrice + (Math.max(0, distKm - INCLUDED_KM) * perKm) + stopsCost + serviceFee;
@@ -160,7 +179,7 @@ const RequestRidePage = () => {
             setOldPrice(0); // No stops, so no "old price" to compare
         }
 
-    }, [pickupCoords, dropoffCoords, selectedRide, stops, serviceType, roadDistance]);
+    }, [pickupCoords, dropoffCoords, selectedRide, stops, serviceType, roadDistance, VEHICLE_RATES]);
 
 
     // Check if we should show the "Confirm Stop" modal
