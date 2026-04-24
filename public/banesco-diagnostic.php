@@ -37,19 +37,28 @@ declare(strict_types=1);
  *   7. SSL verify DESHABILITADO (cert interno de Banesco). Se matchea
  *      la realidad aunque es un downgrade — TODO pinnear el CA real.
  *
+ * UBICACIÓN
+ * ---
+ * Vive en public/ SOLO para que el CI (lftp) lo suba a
+ *   /home/<user>/public_html/banesco-diagnostic.php
+ * El acceso HTTP está bloqueado por dos capas:
+ *   1) public/.htaccess → <Files "banesco-diagnostic.php"> Require all denied
+ *   2) Este archivo → if (PHP_SAPI !== 'cli') exit(403)
+ * Solo se ejecuta por SSH / cron CLI.
+ *
  * USO
  * ---
- *   php scripts/banesco-diagnostic.php --help
+ *   php /home/<user>/public_html/banesco-diagnostic.php --help
  *
- *   php scripts/banesco-diagnostic.php \
+ *   php /home/<user>/public_html/banesco-diagnostic.php \
  *       --config=/home/<user>/private/higo-banesco.php \
  *       --reference=000123456789 \
  *       --amount=420.00 \
  *       --phone=04141234567 \
  *       --date=2026-04-24
  *
- *   php scripts/banesco-diagnostic.php --dry-run ...   # no ejecuta nada
- *   php scripts/banesco-diagnostic.php --verbose ...   # imprime cuerpos
+ *   ... --dry-run      # no ejecuta nada, solo muestra requests
+ *   ... --verbose      # imprime cuerpos completos
  *
  * CONFIG (archivo PHP que retorna array, o env vars si no hay --config)
  * ---
