@@ -7,6 +7,10 @@ import DriverDashboard from './pages/DriverDashboard';
 import DriverStatsPage from './pages/DriverStatsPage';
 import RideStatusPage from './pages/RideStatusPage';
 import AdminDriversPage from './pages/AdminDriversPage';
+import AdminUsersPage from './pages/AdminUsersPage';
+import AdminPricingPage from './pages/AdminPricingPage';
+import AdminPromoCodesPage from './pages/AdminPromoCodesPage';
+import AdminDisputesPage from './pages/AdminDisputesPage';
 import DriverLandingPage from './pages/DriverLandingPage';
 import ChatWidget from './components/ChatWidget';
 import './index.css';         // Ensure Tailwind/global CSS is imported
@@ -156,6 +160,10 @@ const App = () => {
         <Route path="/driver/stats" element={<DriverStatsPage />} />
         <Route path="/ride/:id" element={<RideStatusPage />} />
         <Route path="/admin/drivers" element={<AdminDriversPage />} />
+        <Route path="/admin/users" element={<AdminUsersPage />} />
+        <Route path="/admin/pricing" element={<AdminPricingPage />} />
+        <Route path="/admin/promos" element={<AdminPromoCodesPage />} />
+        <Route path="/admin/disputes" element={<AdminDisputesPage />} />
         <Route path="/join" element={<DriverLandingPage />} />
       </Routes>
       <ChatWidget />

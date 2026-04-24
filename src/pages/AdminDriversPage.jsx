@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, getUserProfile } from '../services/supabase';
+import AdminNav from '../components/AdminNav';
 
 // Helper to format date
 const formatDate = (dateString) => {
@@ -230,6 +231,7 @@ const AdminDriversPage = () => {
 
     return (
         <div className="min-h-screen bg-[#0F1014] p-4 md:p-8 font-sans text-white">
+            <AdminNav />
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
                 <div className="flex items-center gap-4">
