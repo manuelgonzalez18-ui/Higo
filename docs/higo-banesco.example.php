@@ -47,4 +47,21 @@ return [
     // (BDV), 0105 (Mercantil), 0108 (Provincial), etc según el origen
     // del pago móvil que querés validar.
     'BANESCO_BANK_ID' => '0134',
+
+    // RIF del titular (meramente cosmético en el lookup UI).
+    'BANESCO_RIF' => 'J402638850',
+
+    // ── Herramienta de diagnóstico web (banesco-lookup.php) ────────────
+    // Si está vacío o no existe, la UI queda deshabilitada (503).
+    // Si está seteado, el acceso a higoapp.com/banesco-lookup.php pide
+    // HTTP Basic Auth: user libre, password = este valor.
+    //
+    // Elegí algo largo y único (no reciclado). Ejemplo:
+    //   'DIAG_PASSWORD' => 'k9Z-higo-diag-ab3f7x2q',
+    'DIAG_PASSWORD' => '',
+
+    // Dónde se escribe el log de requests/responses del lookup.
+    // Si se deja en null/ausente, se usa el default:
+    //   /home/<user>/private/higo-banesco-diag.log
+    'DIAG_LOG_PATH' => null,
 ];
