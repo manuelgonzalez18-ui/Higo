@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { validateBanescoPayment, VENEZUELAN_BANKS } from '../services/banesco';
+import { getOfficialBcvRate } from '../services/bcv';
 
 // Datos de recepción del comerciante (Higo). Pueden venir del backend en
 // el futuro; por ahora son constantes acordadas con Banesco.
@@ -22,6 +23,7 @@ const HigoPayPage = () => {
     const [user, setUser]         = useState(null);
     const [profile, setProfile]   = useState(null);
     const [plan, setPlan]         = useState(null);            // membership_plans row
+    const [bcv, setBcv]           = useState(null);            // {rate, fetchedAt, ...} | null
     const [rides, setRides]       = useState([]);
     const [reports, setReports]   = useState([]);
     const [loading, setLoading]   = useState(true);
@@ -50,13 +52,25 @@ const HigoPayPage = () => {
             setProfile(prof);
 
             const planKey = prof.vehicle_model || 'standard';
-            const { data: planRow } = await supabase
-                .from('membership_plans')
-                .select('plan, period, amount_usd, amount_bs, bs_updated_at')
-                .eq('plan', planKey)
-                .maybeSingle();
+            const [{ data: planRow }, bcvRate] = await Promise.all([
+                supabase
+                    .from('membership_plans')
+                    .select('plan, period, amount_usd, amount_bs, bs_updated_at')
+                    .eq('plan', planKey)
+                    .maybeSingle(),
+                getOfficialBcvRate(),
+            ]);
             setPlan(planRow || null);
-            if (planRow?.amount_bs) setAmount(String(planRow.amount_bs));
+            setBcv(bcvRate);
+
+            // Monto a pagar: USD del plan × tasa BCV (preferido).
+            // Fallback: lo que esté guardado en amount_bs si la tasa falla.
+            const live = (planRow?.amount_usd && bcvRate?.rate)
+                ? Number(planRow.amount_usd) * Number(bcvRate.rate)
+                : null;
+            const fallback = planRow?.amount_bs ? Number(planRow.amount_bs) : null;
+            const computed = live ?? fallback;
+            if (computed) setAmount(computed.toFixed(2));
 
             const { data: ridesData } = await supabase
                 .from('rides')
@@ -90,12 +104,14 @@ const HigoPayPage = () => {
     const membershipActive = profile?.subscription_status === 'active';
 
     const copyAll = async () => {
+        const liveBs = (plan?.amount_usd && bcv?.rate) ? Number(plan.amount_usd) * Number(bcv.rate) : null;
+        const monto  = liveBs ?? (plan?.amount_bs ? Number(plan.amount_bs) : null);
         const text =
             `Banco: ${RECEIVER.bank}\n` +
             `RIF: ${RECEIVER.rif}\n` +
             `Cuenta: ${RECEIVER.accountNumber}\n` +
             `Teléfono: ${RECEIVER.phone}\n` +
-            (plan?.amount_bs ? `Monto: ${fmtBs(plan.amount_bs)}\n` : '');
+            (monto ? `Monto: ${fmtBs(monto)}\n` : '');
         await navigator.clipboard.writeText(text);
         setResult({ kind: 'ok', msg: 'Datos copiados al portapapeles.' });
         setTimeout(() => setResult(prev => prev?.msg === 'Datos copiados al portapapeles.' ? null : prev), 2500);
@@ -310,15 +326,27 @@ const HigoPayPage = () => {
                         <Field label="RIF / Cédula"      value={RECEIVER.rif}           onCopy={() => copyOne('RIF', RECEIVER.rif)} />
                         <Field label="Número de cuenta"  value={RECEIVER.accountNumber} onCopy={() => copyOne('Cuenta', RECEIVER.accountNumber)} mono />
                         <Field label="Teléfono Pago Móvil" value={RECEIVER.phone}       onCopy={() => copyOne('Teléfono', RECEIVER.phone)} mono />
-                        <Field
-                            label="Monto a pagar"
-                            value={plan?.amount_bs
-                                ? fmtBs(plan.amount_bs)
-                                : (plan?.amount_usd ? `${fmtUsd(plan.amount_usd)} (consultar tasa)` : '—')}
-                            onCopy={plan?.amount_bs ? () => copyOne('Monto', String(plan.amount_bs)) : null}
-                            highlight
-                        />
-                        {plan?.bs_updated_at && (
+                        {(() => {
+                            const liveBs   = (plan?.amount_usd && bcv?.rate) ? Number(plan.amount_usd) * Number(bcv.rate) : null;
+                            const stored   = plan?.amount_bs ? Number(plan.amount_bs) : null;
+                            const display  = liveBs ?? stored;
+                            return (
+                                <Field
+                                    label="Monto a pagar"
+                                    value={display ? fmtBs(display) : (plan?.amount_usd ? `${fmtUsd(plan.amount_usd)} (consultar tasa)` : '—')}
+                                    onCopy={display ? () => copyOne('Monto', display.toFixed(2)) : null}
+                                    highlight
+                                />
+                            );
+                        })()}
+                        {bcv?.rate ? (
+                            <p className="text-[10px] text-gray-500">
+                                Tasa BCV: <span className="font-mono text-gray-300">{bcv.rate.toFixed(2)} Bs/USD</span>
+                                {' · '}
+                                {plan?.amount_usd && <>equivale a <span className="text-cyan-300/80">{fmtUsd(plan.amount_usd)}</span> · </>}
+                                {bcv.stale ? 'cache vencido' : 'actualizada hoy'}
+                            </p>
+                        ) : plan?.bs_updated_at && (
                             <p className="text-[10px] text-gray-500">
                                 Tasa actualizada: {new Date(plan.bs_updated_at).toLocaleDateString('es-VE')}
                             </p>
