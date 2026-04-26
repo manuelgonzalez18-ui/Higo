@@ -15,6 +15,7 @@ import AdminLoginPage from './pages/AdminLoginPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminGuard from './components/AdminGuard';
 import DriverLandingPage from './pages/DriverLandingPage';
+import HigoPayPage from './pages/HigoPayPage';
 import ChatWidget from './components/ChatWidget';
 import './index.css';         // Ensure Tailwind/global CSS is imported
 
@@ -161,6 +162,7 @@ const App = () => {
         <Route path="/confirm" element={<ConfirmTripPage />} />
         <Route path="/driver" element={<DriverDashboard />} />
         <Route path="/driver/stats" element={<DriverStatsPage />} />
+        <Route path="/higo-pay" element={<HigoPayPage />} />
         <Route path="/ride/:id" element={<RideStatusPage />} />
         <Route path="/admin" element={<AdminLoginPage />} />
         <Route path="/admin/dashboard" element={<AdminDashboardPage />} />

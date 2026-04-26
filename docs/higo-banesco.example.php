@@ -19,8 +19,9 @@
  *   5. Permisos 600 si tu hosting lo permite (via SSH: chmod 600 ...).
  *
  * Lo consume:
- *   public_html/banesco-diagnostic.php  (diagnóstico CLI — ahora)
- *   public_html/banesco-poller.php      (runtime de validación — cuando se pivotee)
+ *   public_html/banesco-diagnostic.php   (diagnóstico CLI)
+ *   public_html/banesco-lookup.php       (UI diagnóstico web · HTTP Basic Auth)
+ *   public_html/api/banesco-validate.php (endpoint JSON de Higo Pay · JWT Supabase)
  */
 
 return [
@@ -64,4 +65,28 @@ return [
     // Si se deja en null/ausente, se usa el default:
     //   /home/<user>/private/higo-banesco-diag.log
     'DIAG_LOG_PATH' => null,
+
+    // ── Higo Pay (api/banesco-validate.php) ─────────────────────────────
+    // Orígenes que pueden hacer fetch al endpoint desde el browser.
+    // El handler responde Access-Control-Allow-Origin sólo si el Origin
+    // que llega coincide con uno de estos.
+    'HIGOPAY_ALLOWED_ORIGINS' => [
+        'https://higoapp.com',
+        'https://www.higoapp.com',
+        'https://higodriver.com',
+        'http://localhost:5173',
+    ],
+
+    // Datos del comerciante que el SPA muestra como "Datos de recepción".
+    // (Hoy también están hardcodeados en src/pages/HigoPayPage.jsx.
+    //  Si los cambiás aquí, actualizá también allí o exponelos por API.)
+    'HIGOPAY_RECEIVER_RIF'   => 'J-402638850',
+    'HIGOPAY_RECEIVER_PHONE' => '04120330315',
+
+    // ── Supabase (introspección de JWT del conductor) ───────────────────
+    // El endpoint api/banesco-validate.php valida el Bearer token llamando
+    // a <SUPABASE_PROJECT_URL>/auth/v1/user con SUPABASE_ANON_KEY como apikey.
+    // No usamos service_role; basta el anon key para esa llamada.
+    'SUPABASE_PROJECT_URL' => 'https://yfgomicdcwifgeumqsvv.supabase.co',
+    'SUPABASE_ANON_KEY'    => 'REEMPLAZAR_CON_VITE_SUPABASE_ANON_KEY',
 ];
