@@ -51,7 +51,9 @@ const HigoPayPage = () => {
             if (!prof || prof.role !== 'driver') { navigate('/'); return; }
             setProfile(prof);
 
-            const planKey = prof.vehicle_model || 'standard';
+            const planKey = ['moto', 'standard', 'van'].includes(prof.vehicle_model)
+                ? prof.vehicle_model
+                : 'standard';
             const [{ data: planRow }, bcvRate] = await Promise.all([
                 supabase
                     .from('membership_plans')
@@ -129,8 +131,8 @@ const HigoPayPage = () => {
         setResult(null);
 
         // Validación local antes de gastar una llamada a Banesco.
-        if (!/^\d{1,20}$/.test(reference)) {
-            setResult({ kind: 'bad', msg: 'La referencia debe ser numérica (1–20 dígitos).' });
+        if (!/^\d{1,8}$/.test(reference)) {
+            setResult({ kind: 'bad', msg: 'La referencia debe ser numérica (1–8 dígitos).' });
             return;
         }
         const amt = Number(amount);
@@ -148,29 +150,41 @@ const HigoPayPage = () => {
             bank,
         });
 
-        // Caso 1: Banesco no encontró / error
+        // Sesión expirada → mandar a re-loguear, no dejar un report basura.
+        if (!r.ok && r.errorCode === 'BAD_TOKEN') {
+            setResult({ kind: 'bad', msg: 'Tu sesión expiró. Volvé a iniciar sesión.' });
+            setSubmitting(false);
+            setTimeout(() => navigate('/auth'), 1200);
+            return;
+        }
+
+        // Caso 1: Banesco no encontró / error / duplicado
         if (!r.ok) {
-            await supabase.from('payment_reports').insert({
-                driver_id: user.id,
-                bank_origin: bank,
-                reference_last6: reference,
-                sender_phone: phone || null,
-                amount_reported: amt,
-                amount_real: null,
-                trn_date: date,
-                banesco_status: r.statusCode || r.errorCode || null,
-                status: 'rejected',
-                error_message: r.errorMessage || 'Error desconocido',
-                raw_response: r.raw || null,
-            });
+            // ALREADY_VALIDATED ya está auditado server-side, no insertamos otro.
+            if (r.errorCode !== 'ALREADY_VALIDATED') {
+                await supabase.from('payment_reports').insert({
+                    driver_id: user.id,
+                    bank_origin: bank,
+                    reference_last6: reference,
+                    sender_phone: phone || null,
+                    amount_reported: amt,
+                    amount_real: null,
+                    trn_date: date,
+                    banesco_status: r.statusCode || r.errorCode || null,
+                    status: 'rejected',
+                    error_message: r.errorMessage || 'Error desconocido',
+                    raw_response: r.raw || null,
+                });
+            }
             setResult({ kind: 'bad', msg: r.errorMessage || 'No se pudo validar.' });
             await refreshReports();
             setSubmitting(false);
             return;
         }
 
-        // Caso 2: Banesco confirmó pero el monto no coincide
+        // Caso 2: Banesco confirmó pero el monto no alcanza el del plan.
         if (!r.withinTolerance) {
+            const expected = Number(r.expectedBs) || 0;
             await supabase.from('payment_reports').insert({
                 driver_id: user.id,
                 bank_origin: bank,
@@ -181,12 +195,12 @@ const HigoPayPage = () => {
                 trn_date: r.trnDate || date,
                 banesco_status: r.statusCode,
                 status: 'rejected',
-                error_message: `Monto no coincide. Pagaste ${r.amountReal} Bs, debes pagar ${amt} Bs.`,
+                error_message: `Monto insuficiente. Banesco recibió ${r.amountReal} Bs; el plan cuesta ${expected} Bs.`,
                 raw_response: r.raw || null,
             });
             setResult({
                 kind: 'warn',
-                msg: `Banesco confirmó el pago pero el monto no coincide: pagaste ${fmtBs(r.amountReal)}, debías pagar ${fmtBs(amt)}.`,
+                msg: `Banesco confirmó el pago, pero el monto no alcanza: recibió ${fmtBs(r.amountReal)} y el plan cuesta ${fmtBs(expected)}.`,
             });
             await refreshReports();
             setSubmitting(false);
@@ -392,10 +406,10 @@ const HigoPayPage = () => {
                                 className="w-full bg-[#0F1014] border border-white/10 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-cyan-500"
                             />
                         </FormField>
-                        <FormField label="Referencia (últimos 6)">
+                        <FormField label="Referencia (últimos 6–8)">
                             <input
                                 value={reference}
-                                onChange={e => setReference(e.target.value.replace(/\D/g, '').slice(0, 20))}
+                                onChange={e => setReference(e.target.value.replace(/\D/g, '').slice(0, 8))}
                                 placeholder="376765"
                                 inputMode="numeric"
                                 required
