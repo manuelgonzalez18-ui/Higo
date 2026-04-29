@@ -51,9 +51,10 @@ jobs:
           fi
           npm run build
 
-      # lftp es más robusto que FTP-Deploy-Action contra Hostinger:
-      # sube cada archivo con su nombre final (no usa .in.tmp + rename),
-      # paraleliza transferencias y maneja reintentos.
+      # lftp con xfer:clobber on + ftp:use-allo off para que suba cada
+      # archivo con su nombre final y evite el patron .in.<file> + rename
+      # que Hostinger rompe (su antivirus/sync quita dotfiles antes del
+      # rename y devuelve 550 No such file or directory).
       - name: Install lftp
         run: sudo apt-get update && sudo apt-get install -y lftp
 
@@ -73,7 +74,9 @@ jobs:
           set net:max-retries 10;
           set net:reconnect-interval-base 5;
           set net:reconnect-interval-multiplier 1.5;
-          set mirror:parallel-transfer-count 2;
+          set xfer:clobber on;
+          set ftp:use-allo off;
+          set mirror:parallel-transfer-count 1;
           open -u '$FTP_USERNAME','$FTP_PASSWORD' '$FTP_SERVER';
-          mirror --reverse --delete --verbose --parallel=2 --exclude-glob .ftp-deploy-sync-state.json --exclude-glob '.builds' --exclude-glob '.builds/*' ./dist/ ./;
+          mirror --reverse --delete --verbose --parallel=1 --exclude-glob .ftp-deploy-sync-state.json --exclude-glob '.builds' --exclude-glob '.builds/*' ./dist/ ./;
           "
