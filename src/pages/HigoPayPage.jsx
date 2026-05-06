@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { validateBanescoPayment, VENEZUELAN_BANKS } from '../services/banesco';
 import { getOfficialBcvRate } from '../services/bcv';
+import { useDriverMembership } from '../hooks/useDriverMembership';
 
 // Datos de recepción del comerciante (Higo). Pueden venir del backend en
 // el futuro; por ahora son constantes acordadas con Banesco.
@@ -96,6 +97,8 @@ const HigoPayPage = () => {
         };
         load();
     }, [navigate]);
+
+    const { expiresAt, daysLeft, severity, refresh: refreshMembership } = useDriverMembership(user?.id);
 
     const monthlyEarnings = useMemo(
         () => rides.reduce((s, r) => s + Number(r.price || 0), 0),
@@ -235,7 +238,7 @@ const HigoPayPage = () => {
         const expires = rpcData?.expires_at ? new Date(rpcData.expires_at).toLocaleDateString('es-VE') : '—';
         setResult({ kind: 'ok', msg: `✓ Pago validado. Membresía activa hasta ${expires}.` });
         setReference('');
-        await Promise.all([refreshProfile(), refreshReports()]);
+        await Promise.all([refreshProfile(), refreshReports(), refreshMembership()]);
         setSubmitting(false);
     };
 
@@ -303,17 +306,36 @@ const HigoPayPage = () => {
                             <p className="font-bold text-lg truncate">{profile?.full_name || 'Conductor'}</p>
                             <p className="text-xs text-gray-400 truncate">{user?.email}</p>
                         </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                            membershipActive
-                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                                : 'bg-red-500/20 text-red-300 border border-red-500/40'
-                        }`}>
-                            {membershipActive ? 'Activa' : 'Vencida'}
-                        </span>
+                        <MembershipBadge active={membershipActive} severity={severity} daysLeft={daysLeft} />
                     </div>
-                    {profile?.last_payment_date && (
+                    {expiresAt ? (
+                        <div className="mt-3 space-y-0.5">
+                            <p className="text-[11px] text-gray-400">
+                                {membershipActive ? 'Vence' : 'Venció'} el{' '}
+                                <span className="font-mono text-white">
+                                    {expiresAt.toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                </span>
+                                {daysLeft !== null && membershipActive && daysLeft <= 7 && (
+                                    <span className={`ml-2 font-bold ${
+                                        severity === 'critical' ? 'text-red-300' : 'text-amber-300'
+                                    }`}>
+                                        · {daysLeft} {daysLeft === 1 ? 'día restante' : 'días restantes'}
+                                    </span>
+                                )}
+                            </p>
+                            {profile?.last_payment_date && (
+                                <p className="text-[10px] text-gray-500">
+                                    Último pago: {new Date(profile.last_payment_date).toLocaleDateString('es-VE')}
+                                </p>
+                            )}
+                        </div>
+                    ) : profile?.last_payment_date ? (
                         <p className="text-[11px] text-gray-400 mt-3">
                             Último pago: <span className="font-mono text-white">{new Date(profile.last_payment_date).toLocaleString('es-VE')}</span>
+                        </p>
+                    ) : (
+                        <p className="text-[11px] text-gray-500 mt-3">
+                            Aún no registrás pagos. Reportá uno abajo para activar tu membresía.
                         </p>
                     )}
                 </section>
@@ -516,6 +538,29 @@ const HigoPayPage = () => {
                 </p>
             </main>
         </div>
+    );
+};
+
+const MembershipBadge = ({ active, severity, daysLeft }) => {
+    if (!active) {
+        return (
+            <span className="px-3 py-1 rounded-full text-xs font-bold bg-red-500/20 text-red-300 border border-red-500/40">
+                Vencida
+            </span>
+        );
+    }
+    const tone =
+        severity === 'critical' ? 'bg-red-500/20 text-red-300 border-red-500/40' :
+        severity === 'warn'     ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' :
+                                  'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+    const label =
+        daysLeft !== null && daysLeft <= 7
+            ? `Vence en ${daysLeft}${daysLeft === 1 ? ' día' : ' días'}`
+            : 'Activa';
+    return (
+        <span className={`px-3 py-1 rounded-full text-xs font-bold border ${tone}`}>
+            {label}
+        </span>
     );
 };
 
