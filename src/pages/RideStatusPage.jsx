@@ -99,9 +99,7 @@ const RideStatusPage = () => {
                     if (data) setDriver(data);
                 }
             })
-            .subscribe((status) => {
-                console.log("Subscription status:", status);
-            });
+            .subscribe();
 
         // Backup Polling every 5 seconds in case socket fails
         const interval = setInterval(() => {
@@ -237,8 +235,8 @@ const RideStatusPage = () => {
                     text: `Estoy viajando en Higo. Sigue mi ruta aquí:`,
                     url: window.location.href,
                 });
-            } catch (err) {
-                console.log('Error sharing:', err);
+            } catch (_err) {
+                // share failed — fallback to clipboard handled below
             }
         } else {
             alert('Enlace copiado al portapapeles');

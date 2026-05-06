@@ -212,7 +212,6 @@ const MOCK_LOCATIONS = [
 
 // 1. Maps Grounding Service
 export const searchPlaces = async (query, userLocation) => {
-    console.log("🔍 Searching places for:", query);
     // Helper to filter mock suggestions
     const getFilteredSuggestions = () => {
         if (!query) return [];
@@ -232,7 +231,6 @@ export const searchPlaces = async (query, userLocation) => {
     // METHOD A: Google Places Autocomplete Service (Standard, Reliable)
     if (window.google && window.google.maps && window.google.maps.places) {
         try {
-            console.log("🗺️ Using standard Google Places Autocomplete Service...");
             const service = new window.google.maps.places.AutocompleteService();
 
             // Create a promise to handle the callback-based API
@@ -258,7 +256,6 @@ export const searchPlaces = async (query, userLocation) => {
 
             const placesResults = await placesPromise;
             if (placesResults.length > 0) {
-                console.log(`🗺️ Found ${placesResults.length} standard Places results.`);
                 aiSuggestions = [...aiSuggestions, ...placesResults];
             }
         } catch (e) {
@@ -272,7 +269,6 @@ export const searchPlaces = async (query, userLocation) => {
         if (!ai) {
             // Sin AI: saltamos el enrichment y vamos directo al merge final.
         } else try {
-            console.log("🤖 Asking Gemini for Google Maps results (Backup)...");
             const response = await ai.models.generateContent({
                 model: "gemini-2.0-flash-exp",
                 // Broader prompt: Venezuela > Higuerote priority
@@ -315,10 +311,7 @@ export const searchPlaces = async (query, userLocation) => {
     }
 
     // 3. Merge Results
-    const combined = [...localSuggestions, ...aiSuggestions];
-    console.log(`✅ Search complete. Local: ${localSuggestions.length}, External: ${aiSuggestions.length}`);
-
-    return combined;
+    return [...localSuggestions, ...aiSuggestions];
 };
 
 // 2. Chat Service
