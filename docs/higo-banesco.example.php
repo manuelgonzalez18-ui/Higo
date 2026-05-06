@@ -89,4 +89,28 @@ return [
     // No usamos service_role; basta el anon key para esa llamada.
     'SUPABASE_PROJECT_URL' => 'https://yfgomicdcwifgeumqsvv.supabase.co',
     'SUPABASE_ANON_KEY'    => 'REEMPLAZAR_CON_VITE_SUPABASE_ANON_KEY',
+
+    // ── Cron de avisos de vencimiento (api/send-membership-reminders.php) ─
+    // Service role key de Supabase. ⚠️ Tiene permisos totales sobre la DB,
+    // tratar como secreto de servidor; nunca exponerlo al frontend. Se saca
+    // de Supabase → Settings → API → service_role key.
+    'SUPABASE_SERVICE_ROLE_KEY' => 'REEMPLAZAR_CON_SERVICE_ROLE_KEY',
+
+    // Token compartido entre el cron de Hostinger y el endpoint. El cron
+    // lo manda en el header `X-Cron-Secret`. Generar con:
+    //   openssl rand -hex 32
+    'CRON_SECRET' => 'REEMPLAZAR_CON_TOKEN_LARGO_ALEATORIO',
+
+    // Project ID de Firebase (mismo que firebaseConfig.projectId del SPA).
+    'FIREBASE_PROJECT_ID' => 'higo-app-26a19',
+
+    // Path absoluto al Service Account JSON de Firebase, fuera de
+    // public_html/. Cómo obtenerlo:
+    //   Firebase Console → Project settings → Service accounts →
+    //   "Generate new private key" → descarga JSON.
+    // Subirlo a /home/<TU_USER>/private/firebase-sa.json (chmod 600).
+    'FIREBASE_SA_PATH' => '/home/REEMPLAZAR_USER/private/firebase-sa.json',
+
+    // Log opcional del cron. Si está vacío, no se escribe.
+    'CRON_LOG_PATH' => null,
 ];

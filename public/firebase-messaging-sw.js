@@ -35,20 +35,21 @@ self.addEventListener('notificationclick', function (event) {
     console.log('[firebase-messaging-sw.js] Notification click Received.', event);
     event.notification.close();
 
-    // Open the app or specific URL
+    // Si la push trajo una URL específica (ej. /#/higo-pay), preferirla.
+    // Si ya hay un cliente del mismo origen abierto, foco + navegación.
+    var targetUrl = (event.notification.data && event.notification.data.url) || '/';
+
     event.waitUntil(
-        clients.matchAll({ type: 'window' }).then(function (windowClients) {
-            // Check if there is already a window/tab open with the target URL
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (windowClients) {
             for (var i = 0; i < windowClients.length; i++) {
                 var client = windowClients[i];
-                // If so, just focus it.
-                if (client.url === '/' && 'focus' in client) {
+                if (new URL(client.url).origin === self.location.origin && 'focus' in client) {
+                    if ('navigate' in client) client.navigate(targetUrl).catch(function () {});
                     return client.focus();
                 }
             }
-            // If not, then open the target URL in a new window/tab.
             if (clients.openWindow) {
-                return clients.openWindow('/');
+                return clients.openWindow(targetUrl);
             }
         })
     );
