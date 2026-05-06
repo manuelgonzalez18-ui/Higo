@@ -56,6 +56,37 @@ const DriverDashboard = () => {
     const [loading, setLoading] = useState(true);
     const [profile, setProfile] = useState(null);
     const { daysLeft: membershipDaysLeft, severity: membershipSeverity } = useDriverMembership(profile?.id);
+    const membershipNotifiedRef = useRef(false);
+
+    // Notificación local al abrir el dashboard si la membresía vence pronto.
+    // Usa la Web Notifications API directa (sin FCM, sin cron). Dispara una
+    // sola vez por sesión gracias al ref, aunque daysLeft se recalcule.
+    useEffect(() => {
+        if (membershipDaysLeft === null) return;
+        if (membershipDaysLeft > 7) return;
+        if (membershipNotifiedRef.current) return;
+        membershipNotifiedRef.current = true;
+
+        if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+
+        const title = membershipDaysLeft <= 0
+            ? 'Tu membresía Higo venció'
+            : membershipDaysLeft === 1
+            ? 'Tu membresía Higo vence mañana'
+            : `Tu membresía Higo vence en ${membershipDaysLeft} días`;
+
+        const n = new Notification(title, {
+            body: 'Abrí Higo Pay para renovarla y seguir activo.',
+            icon: '/higo-icon.svg',
+            tag: 'membership-expiry',
+            renotify: false,
+        });
+        n.onclick = () => {
+            window.focus();
+            window.location.hash = '/higo-pay';
+            n.close();
+        };
+    }, [membershipDaysLeft]);
     const [showPaymentQR, setShowPaymentQR] = useState(false);
     const [showTripDetails, setShowTripDetails] = useState(false); // Floating Info State
     const [isCardMinimized, setIsCardMinimized] = useState(false); // New: Card Minimized State
