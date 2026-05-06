@@ -9,6 +9,7 @@ import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import { registerPlugin, Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { calculateBearing, getDistanceFromLatLonInKm } from '../utils/geoUtils';
+import { useDriverMembership } from '../hooks/useDriverMembership';
 
 const BackgroundGeolocation = Capacitor.isNativePlatform() ? registerPlugin('BackgroundGeolocation') : null;
 
@@ -54,6 +55,7 @@ const DriverDashboard = () => {
     const [activeRide, setActiveRide] = useState(null); // The ride the driver has accepted
     const [loading, setLoading] = useState(true);
     const [profile, setProfile] = useState(null);
+    const { daysLeft: membershipDaysLeft, severity: membershipSeverity } = useDriverMembership(profile?.id);
     const [showPaymentQR, setShowPaymentQR] = useState(false);
     const [showTripDetails, setShowTripDetails] = useState(false); // Floating Info State
     const [isCardMinimized, setIsCardMinimized] = useState(false); // New: Card Minimized State
@@ -491,7 +493,9 @@ const DriverDashboard = () => {
         if (!isOnline) {
             // Trying to go ONLINE
             if (profile.subscription_status === 'suspended') {
-                alert("⚠️ Your account is suspended due to missed payment. Please contact admin.");
+                if (window.confirm("⚠️ Tu membresía está vencida. Renuévala desde Higo Pay para volver a operar.\n\n¿Ir a renovar ahora?")) {
+                    navigate('/higo-pay');
+                }
                 return;
             }
 
@@ -957,7 +961,9 @@ const DriverDashboard = () => {
         // subscription_status se sincroniza automáticamente con driver_memberships
         // via trigger SQL, así que basta una sola lectura.
         if (profile?.subscription_status === 'suspended') {
-            alert("⚠️ Tu membresía está vencida. Renuévala con el administrador para aceptar viajes.");
+            if (window.confirm("⚠️ Tu membresía está vencida. Necesitás renovarla para aceptar viajes.\n\n¿Ir a Higo Pay ahora?")) {
+                navigate('/higo-pay');
+            }
             return;
         }
         try {
@@ -1201,29 +1207,35 @@ const DriverDashboard = () => {
                         </div>
                     )}
                     {profile?.subscription_status === 'suspended' && (
-                        <div className="bg-red-500/20 backdrop-blur-md px-3 py-2 rounded-full border border-red-500/40 flex items-center gap-2 shadow-lg ml-2">
+                        <button
+                            onClick={() => navigate('/higo-pay')}
+                            className="bg-red-500/20 hover:bg-red-500/30 backdrop-blur-md px-3 py-2 rounded-full border border-red-500/40 flex items-center gap-2 shadow-lg ml-2 active:scale-95 transition-all"
+                        >
                             <span className="material-symbols-outlined text-red-400 text-base">error</span>
-                            <span className="font-bold text-xs text-red-300 tracking-wide">Membresía vencida</span>
-                        </div>
+                            <span className="font-bold text-xs text-red-300 tracking-wide">Renovar membresía</span>
+                        </button>
                     )}
-                    {/* Aviso de vencimiento próximo (3 días o menos) usando last_payment_date.
-                        Asume membresía mensual de 30 días. */}
-                    {profile?.subscription_status === 'active' && profile?.last_payment_date && (() => {
-                        const expires = new Date(profile.last_payment_date);
-                        expires.setDate(expires.getDate() + 30);
-                        const daysLeft = Math.ceil((expires - Date.now()) / 86400e3);
-                        if (daysLeft > 0 && daysLeft <= 3) {
-                            return (
-                                <div className="bg-amber-500/20 backdrop-blur-md px-3 py-2 rounded-full border border-amber-500/40 flex items-center gap-2 shadow-lg ml-2">
-                                    <span className="material-symbols-outlined text-amber-400 text-base">schedule</span>
-                                    <span className="font-bold text-xs text-amber-300 tracking-wide">
-                                        Vence en {daysLeft} {daysLeft === 1 ? 'día' : 'días'}
-                                    </span>
-                                </div>
-                            );
-                        }
-                        return null;
-                    })()}
+                    {/* Aviso de vencimiento próximo (≤7 días) usando expires_at real
+                        de driver_memberships, no la heurística de 30 días sobre last_payment_date. */}
+                    {profile?.subscription_status === 'active' && membershipDaysLeft !== null && membershipDaysLeft > 0 && membershipDaysLeft <= 7 && (
+                        <button
+                            onClick={() => navigate('/higo-pay')}
+                            className={`backdrop-blur-md px-3 py-2 rounded-full border flex items-center gap-2 shadow-lg ml-2 active:scale-95 transition-all ${
+                                membershipSeverity === 'critical'
+                                    ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500/40'
+                                    : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/40'
+                            }`}
+                        >
+                            <span className={`material-symbols-outlined text-base ${
+                                membershipSeverity === 'critical' ? 'text-red-400' : 'text-amber-400'
+                            }`}>schedule</span>
+                            <span className={`font-bold text-xs tracking-wide ${
+                                membershipSeverity === 'critical' ? 'text-red-300' : 'text-amber-300'
+                            }`}>
+                                Vence en {membershipDaysLeft} {membershipDaysLeft === 1 ? 'día' : 'días'}
+                            </span>
+                        </button>
+                    )}
                     <div className="flex gap-2 ml-auto">
                         <button
                             onClick={() => setVoiceEnabled(!voiceEnabled)}
