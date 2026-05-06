@@ -528,6 +528,8 @@ const DriverDashboard = () => {
 
                 if (error) throw error;
 
+                // Reset poll cooldown so first GPS fix triggers get_nearby_rides immediately
+                lastNearbyPollRef.current = 0;
                 setIsOnline(true);
                 speak("You are now online. Waiting for requests.");
             } catch (e) {
@@ -927,11 +929,14 @@ const DriverDashboard = () => {
             setSubscriptionStatus('CONNECTING');
 
             const fetchExistingRequests = async () => {
-                const { data, error } = await supabase
+                const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+                const { data } = await supabase
                     .from('rides')
                     .select('*')
                     .eq('status', 'requested')
-                    .order('created_at', { ascending: false });
+                    .gte('created_at', tenMinAgo)
+                    .order('created_at', { ascending: false })
+                    .limit(20);
 
                 if (data) {
                     processRequests(data, true); // true = replace all initial load
@@ -943,6 +948,12 @@ const DriverDashboard = () => {
                 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'rides' }, (payload) => {
                     if (payload.new.status === 'requested') {
                         processRequests([payload.new], false);
+                    }
+                })
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rides' }, (payload) => {
+                    // Another driver accepted or ride was cancelled/expired — remove from pending list
+                    if (payload.new.status !== 'requested') {
+                        setRequests(prev => prev.filter(r => r.id !== payload.new.id));
                     }
                 })
                 .subscribe((status) => {
@@ -960,6 +971,16 @@ const DriverDashboard = () => {
         };
     }, [isOnline, profile, processRequests]);
     // ^ processRequests now stable via useCallback
+
+    // Remove requests older than 5 min that realtime missed (e.g. accepted while offline)
+    useEffect(() => {
+        if (!isOnline) return;
+        const id = setInterval(() => {
+            const cutoff = Date.now() - 5 * 60 * 1000;
+            setRequests(prev => prev.filter(r => new Date(r.created_at).getTime() > cutoff));
+        }, 60_000);
+        return () => clearInterval(id);
+    }, [isOnline]);
 
     // --- OTHER HANDLERS ---
 
