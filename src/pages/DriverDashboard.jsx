@@ -214,7 +214,6 @@ const DriverDashboard = () => {
 
             if (cleanText !== lastInstruction.current) {
                 lastInstruction.current = cleanText;
-                console.log("🗣️ Speaking Instruction:", cleanText);
                 speak(cleanText);
             }
         }
@@ -272,7 +271,6 @@ const DriverDashboard = () => {
         const registerListener = async () => {
             if (Capacitor.isNativePlatform()) {
                 listenerHandle = await LocalNotifications.addListener('localNotificationActionPerformed', async (notification) => {
-                    console.log('🔔 Action Performed:', notification.actionId);
                     if (notification.actionId === 'ACCEPT' || notification.actionId === 'tap') {
                         const rideId = notification.notification.extra?.rideId;
                         if (rideId) {
@@ -310,7 +308,6 @@ const DriverDashboard = () => {
                     // Release existing lock if any
                     if (wakeLockRef.current) await wakeLockRef.current.release();
                     wakeLockRef.current = await navigator.wakeLock.request('screen');
-                    console.log('🔒 Screen Wake Lock is active');
 
                     // Re-request if visibility changes (standard practice)
                     const handleVisibilityChange = async () => {
@@ -326,7 +323,6 @@ const DriverDashboard = () => {
             } else if (wakeLockRef.current) {
                 wakeLockRef.current.release().then(() => {
                     wakeLockRef.current = null;
-                    console.log('🔓 Screen Wake Lock released');
                 });
             }
         };
@@ -347,8 +343,6 @@ const DriverDashboard = () => {
                 const url = new URL(event.url); // Use URL API if compatible or simple split
                 // URL might be "higo://accept?rideId=123"
                 const rideId = url.searchParams.get('rideId') || event.url.split('rideId=')[1];
-
-                console.log("🚀 Deep Link Accepted Ride:", rideId);
 
                 if (rideId) {
                     try {
@@ -449,10 +443,7 @@ const DriverDashboard = () => {
             .channel(`ride_cancel:${activeRide.id}`)
             // Removing strict filter to debug, will filter inside
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rides' }, async (payload) => {
-                console.log("🔔 REALTIME UPDATE RECEIVED:", payload);
-                // Use loose equality for safety
                 if (payload.new.id == activeRide.id && payload.new.status === 'cancelled') {
-                    console.log("🚫 CANCEL DETECTED! Triggering alert...");
 
                     // 1. IMMEDIATE PHYSICAL FEEDBACK
                     if (navigator.vibrate) navigator.vibrate([1000, 500, 1000]);
@@ -494,7 +485,6 @@ const DriverDashboard = () => {
                 .single();
 
             if (data && data.status === 'cancelled') {
-                console.log("🚫 POLLING: CANCELLATION DETECTED");
 
                 // 1. Feedback
                 if (navigator.vibrate) navigator.vibrate([1000, 1000]);
@@ -514,7 +504,7 @@ const DriverDashboard = () => {
                         // sound removed
                         extra: null
                     }]
-                }).catch(e => console.log("Poll notify fail", e));
+                }).catch(() => {});
             }
         }, 5000); // Check every 5 seconds
         return () => clearInterval(interval);
@@ -595,7 +585,6 @@ const DriverDashboard = () => {
     // --- HOISTED LOGIC FOR PROCESSING REQUESTS ---
 
     const notifyNewRequest = useCallback(async (ride) => {
-        console.log("🚨 ATTEMPTING TO NOTIFY NEW REQUEST", ride);
 
         // 1. IMMEDIATE FEEDBACK (Priority)
         if (navigator.vibrate) navigator.vibrate([1000, 500, 1000, 500, 1000]);
@@ -605,8 +594,8 @@ const DriverDashboard = () => {
         try {
             const audio = new Audio('https://www.soundjay.com/buttons/beep-01a.mp3');
             audio.volume = 1.0;
-            audio.play().catch(e => console.log('Web Audio play failed', e));
-        } catch (e) { console.log('Audio init failed', e); }
+            audio.play().catch(() => {});
+        } catch (e) { /* audio not available */ }
 
         // 3. Native Notification (Async)
         try {
@@ -678,25 +667,16 @@ const DriverDashboard = () => {
             // Fix: Use correct column 'ride_type' from DB, fallback to 'standard'
             const rideType = ride.ride_type ? ride.ride_type.toLowerCase() : 'standard';
 
-            // Debug Log
-            console.log(`🔍 Checking Ride ${ride.id ? String(ride.id).slice(0, 4) : '???'}: Driver(${driverVehicleType}) vs Ride(${rideType})`);
-
             let isMatch = false;
             if (driverVehicleType === 'moto' && rideType === 'moto') isMatch = true;
             else if ((driverVehicleType === 'van' || driverVehicleType === 'camioneta') && rideType === 'van') isMatch = true;
             else if (driverVehicleType === 'standard' && (rideType === 'standard' || rideType === 'car')) isMatch = true;
 
-            if (!isMatch) {
-                console.log("❌ Type Mismatch");
-                return false;
-            }
+            if (!isMatch) return false;
 
             // Distance Match (Instant)
             // Fix: Check for pickup_lat (new schema) OR legacy pickup_location if needed, but assuming lat/lng exists for smart assignment
-            if (!ride.pickup_lat) {
-                console.log("⚠️ No pickup coords, allowing (Legacy/Manual)");
-                return true;
-            }
+            if (!ride.pickup_lat) return true; // Legacy/manual ride without coords
 
             if (lastLocationRef.current) {
                 const dist = getDistanceFromLatLonInKm(
@@ -705,11 +685,9 @@ const DriverDashboard = () => {
                     ride.pickup_lat,
                     ride.pickup_lng
                 );
-                console.log(`📏 Distance: ${dist.toFixed(2)}km (Limit: 10km)`);
-                return dist <= 10; // Strict 10km limit per requirements
+                return dist <= 10;
             } else {
-                console.log("⚠️ Driver location unknown, showing ride as fail-safe");
-                return true;
+                return true; // Driver location unknown, fail-safe show
             }
         };
 
@@ -731,7 +709,6 @@ const DriverDashboard = () => {
                 }
             });
 
-            console.log("🔔 Notifying driver of new request!", filtered[0]);
             speak("Nueva solicitud de viaje");
 
             // Loop until accepted or dismissed
@@ -760,7 +737,6 @@ const DriverDashboard = () => {
         const startTracking = async () => {
             // WEB FALLBACK for Driver Tracking
             if (!Capacitor.isNativePlatform()) {
-                console.log("WebApp: Starting standard geolocation watch");
                 if (navigator.geolocation) {
                     watcherId = navigator.geolocation.watchPosition(
                         async (pos) => {

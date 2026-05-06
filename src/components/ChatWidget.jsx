@@ -87,7 +87,6 @@ const ChatWidget = () => {
         const channel = supabase
             .channel(`chat:${rideId}`)
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ride_messages', filter: `ride_id=eq.${rideId}` }, async (payload) => {
-                console.log("💬 CHAT MESSAGE RECEIVED:", payload);
                 setMessages(prev => [...prev, payload.new]);
 
                 // Notify if message is NOT from me

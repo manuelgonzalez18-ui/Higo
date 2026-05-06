@@ -109,13 +109,10 @@ const App = () => {
   }, []);
 
   const handleAcceptRequest = () => {
-    console.log('Request accepted:', incomingRequest);
     setIncomingRequest(null);
-    // Navigate to driver map or specific logic here
   };
 
   const handleDeclineRequest = () => {
-    console.log('Request declined');
     setIncomingRequest(null);
   };
 

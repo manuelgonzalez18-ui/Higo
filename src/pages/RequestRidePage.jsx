@@ -141,13 +141,6 @@ const RequestRidePage = () => {
         // If roadDistance is only for pickup-dropoff, then stop distances need to be added.
         // For simplicity, let's use the Haversine totalDistanceKm for now, and roadDistance can be integrated later if it provides a full route.
         const distKm = roadDistance > 0 ? (roadDistance / 1000) : totalDistanceKm;
-        console.log("💰 Calculating Price:", {
-            roadDistance,
-            totalDistanceKm,
-            distKm,
-            pickupCoords,
-            dropoffCoords
-        });
 
 
         // Pricing Logic based on selectedRide (type)
@@ -272,10 +265,7 @@ const RequestRidePage = () => {
                     destination={dropoffCoords}
                     markersProp={stops}
                     onRouteData={(data) => {
-                        if (data?.distance?.value) {
-                            console.log("🛣️ Road distance updated:", data.distance.value);
-                            setRoadDistance(data.distance.value);
-                        }
+                        if (data?.distance?.value) setRoadDistance(data.distance.value);
                     }}
                 />
                 {/* Overlay Gradients */}

@@ -36,8 +36,6 @@ const ConfirmTripPage = () => {
     // Fallback if accessed directly (should guard ideally)
     if (!pickup) return <div className="p-10 text-white">No trip data found. Go back.</div>;
 
-    console.log('ConfirmTripPage State:', { selectedRide, price, pickup, dropoff, serviceType, deliveryData });
-
     const [loading, setLoading] = useState(false);
     const [passengerPhone, setPassengerPhone] = useState('');
     const [paymentMethod, setPaymentMethod] = useState('cash');

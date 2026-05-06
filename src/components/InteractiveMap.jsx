@@ -293,7 +293,6 @@ const MapContent = ({
         const navStateChanged = activeRideId !== prevRideIdRef.current || navStep !== prevNavStepRef.current;
 
         if (destination || (isNavigationActive && navStateChanged)) {
-            console.log("🎯 [MapContent] Navigation trigger detected, forcing follow");
             setIsFollowing(true);
             setMapTilt(45);
             lastForceFollowTime.current = Date.now();
@@ -305,7 +304,6 @@ const MapContent = ({
     // Also reset when entering "Online" mode (origin first arrival)
     useEffect(() => {
         if (origin && !prevOriginRef.current && isValidCoordinate(origin)) {
-            console.log("🚗 [MapContent] Driver went online, enabling auto-follow");
             setIsFollowing(true);
             lastForceFollowTime.current = Date.now();
         }
@@ -446,7 +444,6 @@ const MapContent = ({
                 if (isFollowing && Math.abs(e.detail.heading - (heading || 0)) > 10) {
                     const now = Date.now();
                     if (now - lastForceFollowTime.current > 2000) {
-                        console.log("🔄 [MapContent] Manual rotation detected, pausing follow");
                         setIsFollowing(false);
                     }
                 }
@@ -456,7 +453,6 @@ const MapContent = ({
                 if (isFollowing && Math.abs(e.detail.tilt - (mapTilt || 0)) > 5) {
                     const now = Date.now();
                     if (now - lastForceFollowTime.current > 2000) {
-                        console.log("📐 [MapContent] Manual tilt detected, pausing follow");
                         setIsFollowing(false);
                     }
                 }
@@ -487,7 +483,6 @@ const MapContent = ({
                 const now = Date.now();
                 const timeSinceForce = now - lastForceFollowTime.current;
                 if (timeSinceForce < 2000) return;
-                console.log("🖐️ [MapContent] User interaction detected, pausing follow");
                 setIsFollowing(false);
                 lastInteractionTime.current = now;
             }}
