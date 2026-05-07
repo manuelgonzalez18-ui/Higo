@@ -17,6 +17,11 @@ create table if not exists public.profiles (
   vehicle_type text check (vehicle_type in ('Moto', 'Carro', 'Camioneta')) default 'Carro',
   vehicle_brand text, -- Added from migration 08
   vehicle_color text, -- Added from migration 08
+  -- GPS (migration 10)
+  curr_lat float,
+  curr_lng float,
+  last_location_update timestamp with time zone,
+  heading float default 0, -- Added from migration 19
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
