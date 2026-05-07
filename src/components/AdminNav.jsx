@@ -7,7 +7,9 @@ const TABS = [
     { to: '/admin/users',     label: 'Usuarios',    icon: 'group' },
     { to: '/admin/pricing',   label: 'Tarifas',     icon: 'payments' },
     { to: '/admin/promos',    label: 'Promos',      icon: 'local_offer' },
-    { to: '/admin/disputes',  label: 'Disputas',    icon: 'report' }
+    { to: '/admin/disputes',  label: 'Disputas',    icon: 'report' },
+    { to: '/admin/analytics', label: 'Analytics',   icon: 'bar_chart' },
+    { to: '/admin/zones',     label: 'Zonas',       icon: 'place' },
 ];
 
 const AdminNav = () => {

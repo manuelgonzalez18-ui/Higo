@@ -57,49 +57,56 @@ const AdminDashboardContent = () => {
         openDisputes: 0
     });
 
+    const loadKpis = async () => {
+        const since = new Date(Date.now() - DRIVER_ONLINE_STALE_MS).toISOString();
+        const today = startOfToday();
+
+        const [drivers, rides, revenue, disputes] = await Promise.all([
+            supabase
+                .from('profiles')
+                .select('id', { count: 'exact', head: true })
+                .eq('role', 'driver')
+                .eq('status', 'online')
+                .gt('updated_at', since),
+            supabase
+                .from('rides')
+                .select('id', { count: 'exact', head: true })
+                .gte('created_at', today),
+            supabase
+                .from('rides')
+                .select('price')
+                .gte('created_at', today)
+                .not('payment_confirmed_at', 'is', null),
+            // Disputas pendientes: mismo criterio que AdminDisputesPage
+            // (pago marcado por una parte pero no cerrado bilateralmente).
+            supabase
+                .from('rides')
+                .select('id', { count: 'exact', head: true })
+                .is('payment_confirmed_at', null)
+                .or('payment_reference.not.is.null,payment_confirmed_by_user.eq.true,payment_confirmed_by_driver.eq.true')
+        ]);
+
+        const totalRevenue = (revenue.data || []).reduce(
+            (sum, r) => sum + (Number(r.price) || 0),
+            0
+        );
+
+        setKpis({
+            driversOnline: drivers.count || 0,
+            ridesToday: rides.count || 0,
+            revenueToday: totalRevenue,
+            openDisputes: disputes.count || 0
+        });
+        setLoading(false);
+    };
+
     useEffect(() => {
-        (async () => {
-            const since = new Date(Date.now() - DRIVER_ONLINE_STALE_MS).toISOString();
-            const today = startOfToday();
-
-            const [drivers, rides, revenue, disputes] = await Promise.all([
-                supabase
-                    .from('profiles')
-                    .select('id', { count: 'exact', head: true })
-                    .eq('role', 'driver')
-                    .eq('status', 'online')
-                    .gt('updated_at', since),
-                supabase
-                    .from('rides')
-                    .select('id', { count: 'exact', head: true })
-                    .gte('created_at', today),
-                supabase
-                    .from('rides')
-                    .select('price')
-                    .gte('created_at', today)
-                    .not('payment_confirmed_at', 'is', null),
-                // Disputas pendientes: mismo criterio que AdminDisputesPage
-                // (pago marcado por una parte pero no cerrado bilateralmente).
-                supabase
-                    .from('rides')
-                    .select('id', { count: 'exact', head: true })
-                    .is('payment_confirmed_at', null)
-                    .or('payment_reference.not.is.null,payment_confirmed_by_user.eq.true,payment_confirmed_by_driver.eq.true')
-            ]);
-
-            const totalRevenue = (revenue.data || []).reduce(
-                (sum, r) => sum + (Number(r.price) || 0),
-                0
-            );
-
-            setKpis({
-                driversOnline: drivers.count || 0,
-                ridesToday: rides.count || 0,
-                revenueToday: totalRevenue,
-                openDisputes: disputes.count || 0
-            });
-            setLoading(false);
-        })();
+        loadKpis();
+        const ch = supabase.channel('admin-kpi-watch')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'rides' }, loadKpis)
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, loadKpis)
+            .subscribe();
+        return () => supabase.removeChannel(ch);
     }, []);
 
     const handleLogout = async () => {
@@ -160,11 +167,13 @@ const AdminDashboardContent = () => {
 
                 <h2 className="text-lg font-bold mb-3">Accesos rápidos</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <NavTile to="/admin/drivers"  icon="directions_car" label="Conductores" description="Ver, activar, suspender y registrar drivers" />
-                    <NavTile to="/admin/users"    icon="group"          label="Usuarios"    description="Listado y gestión de pasajeros" />
-                    <NavTile to="/admin/pricing"  icon="payments"       label="Tarifas"     description="Precios base y por km por tipo de vehículo" />
-                    <NavTile to="/admin/promos"   icon="local_offer"    label="Promos"      description="Códigos promocionales y referidos" />
-                    <NavTile to="/admin/disputes" icon="report"         label="Disputas"    description="Conflictos de pago entre driver y pasajero" />
+                    <NavTile to="/admin/drivers"   icon="directions_car" label="Conductores" description="Ver, activar, suspender y registrar drivers" />
+                    <NavTile to="/admin/users"     icon="group"          label="Usuarios"    description="Listado y gestión de pasajeros" />
+                    <NavTile to="/admin/pricing"   icon="payments"       label="Tarifas"     description="Precios base y por km por tipo de vehículo" />
+                    <NavTile to="/admin/promos"    icon="local_offer"    label="Promos"      description="Códigos promocionales y referidos" />
+                    <NavTile to="/admin/disputes"  icon="report"         label="Disputas"    description="Conflictos de pago entre driver y pasajero" />
+                    <NavTile to="/admin/analytics" icon="bar_chart"      label="Analytics"   description="Viajes, ingresos y retención de usuarios" />
+                    <NavTile to="/admin/zones"     icon="place"          label="Zonas"       description="Áreas de cobertura geográfica de Higo" />
                 </div>
             </div>
         </div>
