@@ -53,7 +53,7 @@ const HigoPayPage = () => {
     const isPm = currentMethod?.mode === 'pm';
     const isTf = currentMethod?.mode === 'tf';
     const needsBankSelector = paymentType === 'pm_otros' || paymentType === 'tf_otros';
-    const refMaxLen = isPm ? 8 : 12;
+    const refMaxLen = isPm ? 6 : 12;
 
     useEffect(() => {
         const load = async () => {
@@ -197,7 +197,7 @@ const HigoPayPage = () => {
             receiptUrl = (await uploadReceipt(receiptFile)) || '';
         }
 
-        const r = await validateBanescoPayment({ reference, amount: amt, phone, date, bank: bankCode });
+        const r = await validateBanescoPayment({ reference, amount: amt, date, bank: bankCode });
 
         if (!r.ok && r.errorCode === 'BAD_TOKEN') {
             setResult({ kind: 'bad', msg: 'Tu sesión expiró. Volvé a iniciar sesión.' });
@@ -568,18 +568,6 @@ const HigoPayPage = () => {
                         </FormField>
                     )}
 
-                    {/* Teléfono (solo para pago móvil) */}
-                    {isPm && (
-                        <FormField label="Teléfono emisor (el tuyo)">
-                            <input
-                                value={phone}
-                                onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
-                                placeholder="04121234567"
-                                inputMode="numeric"
-                                className="w-full bg-[#0F1014] border border-white/10 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-cyan-500"
-                            />
-                        </FormField>
-                    )}
 
                     <div className="grid grid-cols-2 gap-3">
                         <FormField label={isPm ? 'Referencia (últimos 6–8)' : 'Referencia (hasta 12 dígitos)'}>

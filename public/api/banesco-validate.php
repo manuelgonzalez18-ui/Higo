@@ -253,13 +253,12 @@ if (!is_array($in)) {
 
 $reference = trim((string) ($in['reference'] ?? ''));
 $amountRaw = $in['amount'] ?? null;
-$phoneRaw  = trim((string) ($in['phone']     ?? ''));
 $date      = trim((string) ($in['date']      ?? date('Y-m-d')));
 $bank      = trim((string) ($in['bank']      ?? ''));
 
 $errors = [];
-if ($reference === '' || !preg_match('/^\d{1,8}$/', $reference)) {
-    $errors[] = 'reference debe ser numérica (1–8 dígitos).';
+if ($reference === '' || !preg_match('/^\d{1,12}$/', $reference)) {
+    $errors[] = 'reference debe ser numérica (1–12 dígitos).';
 }
 if (!is_numeric($amountRaw) || (float) $amountRaw <= 0) {
     $errors[] = 'amount debe ser un número > 0.';
@@ -270,13 +269,14 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
 if (!preg_match('/^\d{4}$/', $bank)) {
     $errors[] = 'bank debe ser código de 4 dígitos (0102, 0134, etc.).';
 }
-$phoneNorm = bl_normalize_phone($phoneRaw);
-if ($phoneNorm === false) {
-    $errors[] = 'phone inválido. Formatos: 04XXXXXXXXX, 58XXXXXXXXXX, o vacío si bank=0134.';
-}
 if ($errors) {
     bv_send_json(422, ['ok' => false, 'errorCode' => 'VALIDATION', 'errorMessage' => implode(' ', $errors)]);
 }
+
+// phoneNum para Banesco = teléfono RECEPTOR de Higo (no el del conductor emisor).
+// La API de Banesco identifica la transacción por: mi cuenta + mi teléfono + ref + banco origen.
+$receiverPhone = (string) ($cfg['HIGOPAY_RECEIVER_PHONE'] ?? '04120330315');
+$phoneNorm     = bl_normalize_phone($receiverPhone) ?? null;
 
 $amount = (float) $amountRaw;
 
