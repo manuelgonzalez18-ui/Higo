@@ -27,7 +27,9 @@ export default defineConfig({
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'supabase': ['@supabase/supabase-js'],
           'maps': ['@vis.gl/react-google-maps'],
-          'gemini': ['@google/genai'],
+          // gemini intencionalmente omitido del chunk separado:
+          // sin hash en los nombres, un gemini.js viejo en el server puede
+          // dejar exports minificados desincronizados con index.js del build nuevo.
           'capacitor': [
             '@capacitor/core',
             '@capacitor/app',
