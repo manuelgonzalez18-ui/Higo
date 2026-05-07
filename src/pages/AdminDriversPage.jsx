@@ -22,6 +22,7 @@ const AdminDriversPage = () => {
     const [showObjModal, setShowObjModal] = useState(false); // Action Modal
     const [selectedDriver, setSelectedDriver] = useState(null);
     const [actionType, setActionType] = useState('pago'); // 'pago', 'pago_activar', 'activar', 'desactivar', 'eliminar'
+    const [membershipPeriod, setMembershipPeriod] = useState('monthly');
 
     const [showRegisterModal, setShowRegisterModal] = useState(false);
     const [newDriver, setNewDriver] = useState({
@@ -110,16 +111,17 @@ const AdminDriversPage = () => {
 
     // Plan de membresía inferido del tipo de vehículo.
     const MEMBERSHIP_PLANS = {
-        moto: { plan: 'moto', amount: 10 },
-        standard: { plan: 'standard', amount: 20 },
-        carro: { plan: 'standard', amount: 20 },
-        van: { plan: 'van', amount: 25 },
-        camioneta: { plan: 'van', amount: 25 }
+        moto:      { plan: 'moto',     monthly: 10, weekly: 3 },
+        standard:  { plan: 'standard', monthly: 20, weekly: 5 },
+        carro:     { plan: 'standard', monthly: 20, weekly: 5 },
+        van:       { plan: 'van',      monthly: 25, weekly: 7 },
+        camioneta: { plan: 'van',      monthly: 25, weekly: 7 },
     };
 
     const registerMembership = async (driver, period = 'monthly') => {
         const vType = (driver.vehicle_type || 'standard').toLowerCase();
         const planInfo = MEMBERSHIP_PLANS[vType] || MEMBERSHIP_PLANS.standard;
+        const amount = period === 'weekly' ? planInfo.weekly : planInfo.monthly;
         const now = new Date();
         const expires = new Date(now);
         if (period === 'weekly') expires.setDate(expires.getDate() + 7);
@@ -129,7 +131,7 @@ const AdminDriversPage = () => {
         const { error } = await supabase.from('driver_memberships').insert({
             driver_id: driver.id,
             plan: planInfo.plan,
-            amount: planInfo.amount,
+            amount,
             period,
             paid_at: now.toISOString(),
             expires_at: expires.toISOString(),
@@ -148,7 +150,7 @@ const AdminDriversPage = () => {
             if (actionType === 'pago' || actionType === 'pago_activar') {
                 // El trigger sync_driver_subscription_status actualiza
                 // profiles.subscription_status y last_payment_date automáticamente.
-                const err = await registerMembership(selectedDriver, 'monthly');
+                const err = await registerMembership(selectedDriver, membershipPeriod);
                 if (err) throw err;
                 setMessage({ type: 'success', text: 'Membresía registrada. Conductor activo por 30 días.' });
             } else if (actionType === 'activar') {
@@ -429,6 +431,30 @@ const AdminDriversPage = () => {
                                 </button>
                             ))}
                         </div>
+                        {/* Selector de periodo — solo visible para acciones de pago */}
+                        {(actionType === 'pago' || actionType === 'pago_activar') && (() => {
+                            const vType = (selectedDriver.vehicle_type || 'standard').toLowerCase();
+                            const plan = MEMBERSHIP_PLANS[vType] || MEMBERSHIP_PLANS.standard;
+                            return (
+                                <div className="px-4 pb-2">
+                                    <p className="text-xs text-gray-500 uppercase font-bold mb-2">Periodo de membresía</p>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => setMembershipPeriod('weekly')}
+                                            className={`flex-1 py-2.5 rounded-xl text-sm font-bold border transition-all ${membershipPeriod === 'weekly' ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-[#0F1014] border-white/10 text-gray-400 hover:text-white'}`}
+                                        >
+                                            Semanal · ${plan.weekly}
+                                        </button>
+                                        <button
+                                            onClick={() => setMembershipPeriod('monthly')}
+                                            className={`flex-1 py-2.5 rounded-xl text-sm font-bold border transition-all ${membershipPeriod === 'monthly' ? 'bg-violet-600 border-violet-500 text-white' : 'bg-[#0F1014] border-white/10 text-gray-400 hover:text-white'}`}
+                                        >
+                                            Mensual · ${plan.monthly}
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })()}
                         <div className="p-4 border-t border-white/5 bg-[#151925]">
                             <button
                                 onClick={executeAction}

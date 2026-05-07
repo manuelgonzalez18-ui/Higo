@@ -31,6 +31,7 @@ const RequestRidePage = () => {
     const [showProhibitedModal, setShowProhibitedModal] = useState(false);
     const [showDeliveryForm, setShowDeliveryForm] = useState(false);
     const [deliveryData, setDeliveryData] = useState(null);
+    const [withinCoverage, setWithinCoverage] = useState(true);
 
     // Auto-set pickup to user location once found
     useEffect(() => {
@@ -38,6 +39,13 @@ const RequestRidePage = () => {
             setPickupCoords(userLocation);
         }
     }, [userLocation, pickup]);
+
+    // Verificar cobertura cuando se conoce la ubicación del usuario
+    useEffect(() => {
+        if (!userLocation?.lat || !userLocation?.lng) return;
+        supabase.rpc('is_within_coverage', { p_lat: userLocation.lat, p_lng: userLocation.lng })
+            .then(({ data }) => { if (data !== null) setWithinCoverage(data); });
+    }, [userLocation]);
 
     // Add a new empty stop
     const handleAddStop = () => {
@@ -307,6 +315,12 @@ const RequestRidePage = () => {
             <main className="absolute bottom-0 left-0 right-0 z-30 flex flex-col items-center pb-8 px-4 sm:px-0 pointer-events-none">
 
                 <div className="w-full max-w-md pointer-events-auto">
+                    {!withinCoverage && (
+                        <div className="mb-3 bg-amber-500/10 border border-amber-500/40 rounded-2xl px-4 py-3 flex items-center gap-3 text-amber-300 text-sm">
+                            <span className="material-symbols-outlined text-amber-400 text-base shrink-0">location_off</span>
+                            Tu ubicación está fuera de las zonas de cobertura de Higo.
+                        </div>
+                    )}
                     {!serviceType ? (
                         <ServiceSelection onSelect={setServiceType} />
                     ) : (

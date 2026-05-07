@@ -13,6 +13,8 @@ import AdminPromoCodesPage from './pages/AdminPromoCodesPage';
 import AdminDisputesPage from './pages/AdminDisputesPage';
 import AdminLoginPage from './pages/AdminLoginPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
+import AdminAnalyticsPage from './pages/AdminAnalyticsPage';
+import AdminZonesPage from './pages/AdminZonesPage';
 import AdminGuard from './components/AdminGuard';
 import DriverLandingPage from './pages/DriverLandingPage';
 import HigoPayPage from './pages/HigoPayPage';
@@ -141,6 +143,8 @@ const App = () => {
         <Route path="/admin/pricing" element={<AdminGuard><AdminPricingPage /></AdminGuard>} />
         <Route path="/admin/promos" element={<AdminGuard><AdminPromoCodesPage /></AdminGuard>} />
         <Route path="/admin/disputes" element={<AdminGuard><AdminDisputesPage /></AdminGuard>} />
+        <Route path="/admin/analytics" element={<AdminGuard><AdminAnalyticsPage /></AdminGuard>} />
+        <Route path="/admin/zones" element={<AdminGuard><AdminZonesPage /></AdminGuard>} />
         <Route path="/join" element={<DriverLandingPage />} />
       </Routes>
       <ChatWidget />
