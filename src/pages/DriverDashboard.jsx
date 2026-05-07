@@ -1084,6 +1084,11 @@ const DriverDashboard = () => {
             // ARRIVED AT DROPOFF (Terminating)
             await supabase.from('rides').update({ status: 'completed' }).eq('id', activeRide.id);
 
+            // Acreditar referido pendiente del pasajero (si aplica)
+            if (activeRide.user_id) {
+                supabase.rpc('credit_pending_referral', { p_user_id: activeRide.user_id }).catch(() => {});
+            }
+
             const isSenderPayer = isDelivery && (activeRide.delivery_info?.payer === 'sender' || activeRide.payer === 'sender');
 
             if (isSenderPayer) {
