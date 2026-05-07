@@ -589,7 +589,7 @@ const HigoPayPage = () => {
 
 
                     <div className="grid grid-cols-2 gap-3">
-                        <FormField label={isPm ? 'Referencia (últimos 6–8)' : 'Referencia (hasta 12 dígitos)'}>
+                        <FormField label={isPm ? 'Referencia (últimos 6 dígitos)' : 'Referencia (hasta 12 dígitos)'}>
                             <input
                                 value={reference}
                                 onChange={e => setReference(e.target.value.replace(/\D/g, '').slice(0, refMaxLen))}
