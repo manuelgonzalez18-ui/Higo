@@ -190,6 +190,13 @@ const HigoPayPage = () => {
         }
 
         const bankCode = paymentType === 'pm_banesco' ? '0134' : bank;
+
+        // Subir comprobante si se adjuntó (opcional en PM)
+        let receiptUrl = '';
+        if (receiptFile) {
+            receiptUrl = (await uploadReceipt(receiptFile)) || '';
+        }
+
         const r = await validateBanescoPayment({ reference, amount: amt, phone, date, bank: bankCode });
 
         if (!r.ok && r.errorCode === 'BAD_TOKEN') {
@@ -213,9 +220,10 @@ const HigoPayPage = () => {
                     status:           'rejected',
                     error_message:    r.errorMessage || 'Error desconocido',
                     raw_response:     r.raw || null,
+                    receipt_url:      receiptUrl || null,
                 });
             }
-            await notifyAdmin({ status: 'rejected', errorMessage: r.errorMessage });
+            await notifyAdmin({ status: 'rejected', errorMessage: r.errorMessage, receiptUrl });
             setResult({ kind: 'bad', msg: r.errorMessage || 'No se pudo validar.' });
             await refreshReports();
             return;
@@ -236,8 +244,9 @@ const HigoPayPage = () => {
                 status:          'rejected',
                 error_message:   `Monto insuficiente. Banesco recibió ${r.amountReal} Bs; el plan cuesta ${expected} Bs.`,
                 raw_response:    r.raw || null,
+                receipt_url:     receiptUrl || null,
             });
-            await notifyAdmin({ status: 'rejected', errorMessage: `Monto insuficiente: ${r.amountReal} Bs recibido` });
+            await notifyAdmin({ status: 'rejected', errorMessage: `Monto insuficiente: ${r.amountReal} Bs recibido`, receiptUrl });
             setResult({ kind: 'warn', msg: `Banesco confirmó el pago, pero el monto no alcanza: recibió ${fmtBs(r.amountReal)} y el plan cuesta ${fmtBs(expected)}.` });
             await refreshReports();
             return;
@@ -256,15 +265,24 @@ const HigoPayPage = () => {
 
         if (rpcErr) {
             const dup = (rpcErr.message || '').toLowerCase().includes('duplicate');
-            await notifyAdmin({ status: 'rejected', errorMessage: rpcErr.message });
+            await notifyAdmin({ status: 'rejected', errorMessage: rpcErr.message, receiptUrl });
             setResult({ kind: 'bad', msg: dup ? 'Esta referencia ya fue registrada como pago válido.' : `Error al registrar: ${rpcErr.message}` });
             return;
         }
 
+        // Guardar receipt_url en el report recién creado por el RPC (si lo hay)
+        if (receiptUrl && rpcData?.report_id) {
+            await supabase.from('payment_reports')
+                .update({ receipt_url: receiptUrl })
+                .eq('id', rpcData.report_id);
+        }
+
         const expires = rpcData?.expires_at ? new Date(rpcData.expires_at).toLocaleDateString('es-VE') : '—';
-        await notifyAdmin({ status: 'validated' });
+        await notifyAdmin({ status: 'validated', receiptUrl });
         setResult({ kind: 'ok', msg: `✓ Pago validado. Membresía activa hasta ${expires}.` });
         setReference('');
+        setReceiptFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
         await Promise.all([refreshProfile(), refreshReports(), refreshMembership()]);
     };
 
@@ -599,29 +617,26 @@ const HigoPayPage = () => {
                         />
                     </FormField>
 
-                    {/* Comprobante (solo transferencias) */}
-                    {isTf && (
-                        <FormField label="Comprobante de pago (imagen o PDF)">
-                            <label className={`flex items-center gap-3 w-full bg-[#0F1014] border rounded-xl px-4 py-3 cursor-pointer transition-colors ${
-                                receiptFile ? 'border-cyan-500/50 text-cyan-200' : 'border-white/10 text-gray-400 hover:border-white/20'
-                            }`}>
-                                <span className="material-symbols-outlined text-base shrink-0">
-                                    {receiptFile ? 'check_circle' : 'attach_file'}
-                                </span>
-                                <span className="text-sm truncate">
-                                    {receiptFile ? receiptFile.name : 'Seleccionar archivo…'}
-                                </span>
-                                <input
-                                    ref={fileInputRef}
-                                    type="file"
-                                    accept="image/*,application/pdf"
-                                    className="sr-only"
-                                    onChange={e => setReceiptFile(e.target.files?.[0] || null)}
-                                    required
-                                />
-                            </label>
-                        </FormField>
-                    )}
+                    {/* Comprobante (todos los métodos; requerido solo en transferencias) */}
+                    <FormField label={`Comprobante de pago${isTf ? ' *' : ' (opcional)'}`}>
+                        <label className={`flex items-center gap-3 w-full bg-[#0F1014] border rounded-xl px-4 py-3 cursor-pointer transition-colors ${
+                            receiptFile ? 'border-cyan-500/50 text-cyan-200' : 'border-white/10 text-gray-400 hover:border-white/20'
+                        }`}>
+                            <span className="material-symbols-outlined text-base shrink-0">
+                                {receiptFile ? 'check_circle' : 'attach_file'}
+                            </span>
+                            <span className="text-sm truncate">
+                                {receiptFile ? receiptFile.name : 'Seleccionar archivo…'}
+                            </span>
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*,application/pdf"
+                                className="sr-only"
+                                onChange={e => setReceiptFile(e.target.files?.[0] || null)}
+                            />
+                        </label>
+                    </FormField>
 
                     <button
                         type="submit"
