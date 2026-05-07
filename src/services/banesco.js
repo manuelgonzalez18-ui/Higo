@@ -43,7 +43,7 @@ export const VENEZUELAN_BANKS = [
  * Cuando ok=false:
  *   { ok:false, errorCode, errorMessage, statusCode?, raw? }
  */
-export async function validateBanescoPayment({ reference, amount, date, bank, phone = '' }) {
+export async function validateBanescoPayment({ reference, amount, phone, date, bank }) {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) {
         return { ok: false, errorCode: 'NO_SESSION', errorMessage: 'No hay sesión iniciada.' };

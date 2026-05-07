@@ -197,7 +197,12 @@ const HigoPayPage = () => {
             receiptUrl = (await uploadReceipt(receiptFile)) || '';
         }
 
-        const r = await validateBanescoPayment({ reference, amount: amt, date, bank: bankCode });
+        if (!phone) {
+            setResult({ kind: 'bad', msg: 'Ingresá tu teléfono emisor.' });
+            return;
+        }
+
+        const r = await validateBanescoPayment({ reference, amount: amt, phone, date, bank: bankCode });
 
         if (!r.ok && r.errorCode === 'BAD_TOKEN') {
             setResult({ kind: 'bad', msg: 'Tu sesión expiró. Volvé a iniciar sesión.' });
@@ -552,6 +557,20 @@ const HigoPayPage = () => {
                             className="w-full bg-[#0F1014]/60 border border-white/5 rounded-xl px-4 py-3 text-sm text-gray-400 cursor-not-allowed"
                         />
                     </FormField>
+
+                    {/* Teléfono emisor (solo para pago móvil) */}
+                    {isPm && (
+                        <FormField label="Teléfono emisor *">
+                            <input
+                                value={phone}
+                                onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                                placeholder="04121234567"
+                                inputMode="numeric"
+                                required
+                                className="w-full bg-[#0F1014] border border-white/10 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-cyan-500"
+                            />
+                        </FormField>
+                    )}
 
                     {/* Banco origen (solo para pm_otros y tf_otros) */}
                     {needsBankSelector && (
