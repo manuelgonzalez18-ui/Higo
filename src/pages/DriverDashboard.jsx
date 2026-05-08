@@ -1277,6 +1277,9 @@ const DriverDashboard = () => {
                         >
                             <span className="material-symbols-outlined text-white">{voiceEnabled ? 'volume_up' : 'volume_off'}</span>
                         </button>
+                        <button onClick={() => navigate('/higo-pay')} className="w-10 h-10 bg-[#0F172A]/90 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 shadow-lg hover:bg-cyan-500/20 transition-colors" title="Mi Membresía · Higo Pay">
+                            <span className="material-symbols-outlined text-cyan-400">wallet</span>
+                        </button>
                         <button onClick={() => navigate('/driver/stats')} className="w-10 h-10 bg-[#0F172A]/90 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 shadow-lg hover:bg-emerald-500/20 transition-colors" title="Mis estadísticas">
                             <span className="material-symbols-outlined text-white">bar_chart</span>
                         </button>
