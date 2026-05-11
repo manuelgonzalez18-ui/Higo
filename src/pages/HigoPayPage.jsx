@@ -1,9 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Capacitor } from '@capacitor/core';
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { supabase } from '../services/supabase';
 import { validateBanescoPayment, VENEZUELAN_BANKS } from '../services/banesco';
 import { getOfficialBcvRate } from '../services/bcv';
 import { useDriverMembership } from '../hooks/useDriverMembership';
+
+const isNative = Capacitor.isNativePlatform();
 
 const RECEIVER = {
     bank:          'BANESCO',
@@ -43,7 +47,10 @@ const HigoPayPage = () => {
     const [reference, setReference] = useState('');
     const [date, setDate]           = useState(today());
     const [amount, setAmount]       = useState('');
-    const [receiptFile, setReceiptFile] = useState(null);
+    const [receiptFile, setReceiptFile]           = useState(null);   // File (web)
+    const [receiptBase64, setReceiptBase64]       = useState(null);   // base64 (native)
+    const [receiptMimeType, setReceiptMimeType]   = useState('image/jpeg');
+    const [receiptPreview, setReceiptPreview]     = useState(null);   // data-URL preview
     const fileInputRef = useRef(null);
 
     const [submitting, setSubmitting] = useState(false);
@@ -129,14 +136,40 @@ const HigoPayPage = () => {
         setPaymentType(id);
         setReference('');
         setPhone('');
-        setReceiptFile(null);
+        clearReceipt();
         setResult(null);
-        if (fileInputRef.current) fileInputRef.current.value = '';
         const method = PAYMENT_METHODS.find(m => m.id === id);
         if (method?.id === 'pm_banesco' || method?.id === 'tf_banesco') {
             setBank('0134');
         } else {
             setBank('0102');
+        }
+    };
+
+    const clearReceipt = () => {
+        setReceiptFile(null);
+        setReceiptBase64(null);
+        setReceiptPreview(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const pickReceiptNative = async (source) => {
+        try {
+            const photo = await Camera.getPhoto({
+                resultType: CameraResultType.Base64,
+                source,
+                quality: 80,
+                allowEditing: false,
+                saveToGallery: false,
+            });
+            setReceiptBase64(photo.base64String);
+            setReceiptMimeType(photo.format === 'png' ? 'image/png' : 'image/jpeg');
+            setReceiptPreview(`data:image/${photo.format};base64,${photo.base64String}`);
+            setReceiptFile(null);
+        } catch (err) {
+            if (!String(err).includes('cancelled') && !String(err).includes('dismissed')) {
+                setResult({ kind: 'bad', msg: 'No se pudo obtener la foto.' });
+            }
         }
     };
 
@@ -165,12 +198,25 @@ const HigoPayPage = () => {
         } catch { /* fire and forget */ }
     };
 
-    const uploadReceipt = async (file) => {
-        const ext = file.name.split('.').pop().toLowerCase();
+    // Accepts either a File (web) or a base64 string from Capacitor Camera (native).
+    const uploadReceipt = async (fileOrBase64, mimeType = 'image/jpeg') => {
+        let blob;
+        let ext;
+        if (typeof fileOrBase64 === 'string') {
+            // base64 from Capacitor Camera
+            const byteChars = atob(fileOrBase64);
+            const byteArr = new Uint8Array(byteChars.length);
+            for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+            blob = new Blob([byteArr], { type: mimeType });
+            ext = mimeType === 'image/png' ? 'png' : 'jpg';
+        } else {
+            blob = fileOrBase64;
+            ext = fileOrBase64.name.split('.').pop().toLowerCase();
+        }
         const path = `${user.id}/${Date.now()}.${ext}`;
         const { error } = await supabase.storage
             .from('payment-receipts')
-            .upload(path, file, { upsert: false });
+            .upload(path, blob, { upsert: false, contentType: typeof fileOrBase64 === 'string' ? mimeType : undefined });
         if (error) return null;
         const { data } = await supabase.storage
             .from('payment-receipts')
@@ -193,7 +239,9 @@ const HigoPayPage = () => {
 
         // Subir comprobante si se adjuntó (opcional en PM)
         let receiptUrl = '';
-        if (receiptFile) {
+        if (receiptBase64) {
+            receiptUrl = (await uploadReceipt(receiptBase64, receiptMimeType)) || '';
+        } else if (receiptFile) {
             receiptUrl = (await uploadReceipt(receiptFile)) || '';
         }
 
@@ -286,13 +334,12 @@ const HigoPayPage = () => {
         await notifyAdmin({ status: 'validated', receiptUrl });
         setResult({ kind: 'ok', msg: `✓ Pago validado. Membresía activa hasta ${expires}.` });
         setReference('');
-        setReceiptFile(null);
-        if (fileInputRef.current) fileInputRef.current.value = '';
+        clearReceipt();
         await Promise.all([refreshProfile(), refreshReports(), refreshMembership()]);
     };
 
     const handleTransferencia = async () => {
-        if (!receiptFile) {
+        if (!receiptFile && !receiptBase64) {
             setResult({ kind: 'bad', msg: 'Debés adjuntar el comprobante de pago.' });
             return;
         }
@@ -308,7 +355,9 @@ const HigoPayPage = () => {
 
         const bankCode = paymentType === 'tf_banesco' ? '0134' : bank;
 
-        const receiptUrl = await uploadReceipt(receiptFile);
+        const receiptUrl = receiptBase64
+            ? await uploadReceipt(receiptBase64, receiptMimeType)
+            : await uploadReceipt(receiptFile);
         if (!receiptUrl) {
             setResult({ kind: 'bad', msg: 'No se pudo subir el comprobante. Intentá de nuevo.' });
             return;
@@ -335,8 +384,7 @@ const HigoPayPage = () => {
         await notifyAdmin({ status: 'pending', receiptUrl });
         setResult({ kind: 'warn', msg: '⏳ Transferencia registrada. Un administrador la revisará y activará tu membresía.' });
         setReference('');
-        setReceiptFile(null);
-        if (fileInputRef.current) fileInputRef.current.value = '';
+        clearReceipt();
         await refreshReports();
     };
 
@@ -626,23 +674,66 @@ const HigoPayPage = () => {
 
                     {/* Comprobante (todos los métodos; requerido solo en transferencias) */}
                     <FormField label={`Comprobante de pago${isTf ? ' *' : ' (opcional)'}`}>
-                        <label className={`flex items-center gap-3 w-full bg-[#0F1014] border rounded-xl px-4 py-3 cursor-pointer transition-colors ${
-                            receiptFile ? 'border-cyan-500/50 text-cyan-200' : 'border-white/10 text-gray-400 hover:border-white/20'
-                        }`}>
-                            <span className="material-symbols-outlined text-base shrink-0">
-                                {receiptFile ? 'check_circle' : 'attach_file'}
-                            </span>
-                            <span className="text-sm truncate">
-                                {receiptFile ? receiptFile.name : 'Seleccionar archivo…'}
-                            </span>
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*,application/pdf"
-                                className="sr-only"
-                                onChange={e => setReceiptFile(e.target.files?.[0] || null)}
-                            />
-                        </label>
+                        {isNative ? (
+                            <div className="space-y-2">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => pickReceiptNative(CameraSource.Camera)}
+                                        className="flex items-center justify-center gap-2 bg-[#0F1014] border border-white/10 rounded-xl px-3 py-3 text-sm text-gray-300 hover:border-cyan-500/50 active:scale-95 transition-all"
+                                    >
+                                        <span className="material-symbols-outlined text-base text-cyan-400">photo_camera</span>
+                                        Tomar foto
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => pickReceiptNative(CameraSource.Photos)}
+                                        className="flex items-center justify-center gap-2 bg-[#0F1014] border border-white/10 rounded-xl px-3 py-3 text-sm text-gray-300 hover:border-cyan-500/50 active:scale-95 transition-all"
+                                    >
+                                        <span className="material-symbols-outlined text-base text-cyan-400">photo_library</span>
+                                        Galería
+                                    </button>
+                                </div>
+                                {receiptPreview && (
+                                    <div className="relative">
+                                        <img
+                                            src={receiptPreview}
+                                            alt="Comprobante"
+                                            className="w-full rounded-xl border border-cyan-500/30 max-h-48 object-cover"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={clearReceipt}
+                                            className="absolute top-2 right-2 w-7 h-7 bg-black/70 rounded-full flex items-center justify-center"
+                                        >
+                                            <span className="material-symbols-outlined text-white text-sm">close</span>
+                                        </button>
+                                        <p className="text-[10px] text-cyan-400 mt-1 flex items-center gap-1">
+                                            <span className="material-symbols-outlined text-[12px]">check_circle</span>
+                                            Foto seleccionada
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <label className={`flex items-center gap-3 w-full bg-[#0F1014] border rounded-xl px-4 py-3 cursor-pointer transition-colors ${
+                                receiptFile ? 'border-cyan-500/50 text-cyan-200' : 'border-white/10 text-gray-400 hover:border-white/20'
+                            }`}>
+                                <span className="material-symbols-outlined text-base shrink-0">
+                                    {receiptFile ? 'check_circle' : 'attach_file'}
+                                </span>
+                                <span className="text-sm truncate">
+                                    {receiptFile ? receiptFile.name : 'Seleccionar archivo…'}
+                                </span>
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/*,application/pdf"
+                                    className="sr-only"
+                                    onChange={e => setReceiptFile(e.target.files?.[0] || null)}
+                                />
+                            </label>
+                        )}
                     </FormField>
 
                     <button
