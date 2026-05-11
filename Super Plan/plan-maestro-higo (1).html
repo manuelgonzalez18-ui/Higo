@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan Maestro Higo v3.2</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#080C18;color:#E0E6F0;font-family:'Outfit',sans-serif;min-height:100vh}
+.mono{font-family:'JetBrains Mono',monospace}
+.header{background:linear-gradient(135deg,#0052CC 0%,#002966 60%,#00132E 100%);padding:24px 20px 18px;position:relative;overflow:hidden}
+.header::before{content:'';position:absolute;top:-60px;right:-40px;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,.03)}
+.header-inner{position:relative;display:flex;align-items:center;gap:10px}
+.header img{width:40px;height:40px;border-radius:10px;object-fit:cover}
+.header h1{font-size:22px;font-weight:900;letter-spacing:-.02em}
+.header p{font-size:11px;opacity:.6}
+.tabs{display:flex;background:#0B1024;border-bottom:1px solid rgba(255,255,255,.06);overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tab{flex:1;min-width:54px;padding:10px 6px;border:none;cursor:pointer;background:transparent;color:#4A5578;text-align:center;transition:.15s;border-bottom:2px solid transparent;font-family:'Outfit',sans-serif}
+.tab.active{background:rgba(255,255,255,.05);color:#fff;border-bottom-color:#448AFF}
+.tab-icon{font-size:16px}
+.tab-label{font-size:8px;font-weight:700;letter-spacing:.05em;margin-top:1px;font-family:'JetBrains Mono',monospace}
+.content{padding:16px 14px 40px}
+.card{background:#111628;border-radius:14px;padding:16px 14px;margin-bottom:12px;border:1px solid rgba(255,255,255,.05)}
+.section-title{font-size:13px;font-weight:600;margin-bottom:8px}
+.row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.03);font-size:12px}
+.row-key{color:#7A84A0}.row-val{color:#D0D8F0;font-weight:500;text-align:right;max-width:60%}
+.tag{padding:4px 10px;border-radius:8px;font-size:11px;font-weight:600;display:inline-block;margin:3px}
+.feat{font-size:12px;color:#A0AAC0;padding:3px 0;display:flex;gap:6px}
+.feat-icon{flex-shrink:0}
+.gap{font-size:12px;color:#FF8A80;padding:4px 0;display:flex;gap:6px;line-height:1.5}
+.gap-icon{color:#FF1744;flex-shrink:0}
+.plan-card{position:relative;overflow:hidden}
+.plan-price{font-size:28px;font-weight:900;color:#fff;font-family:'JetBrains Mono',monospace}
+.plan-price span{font-size:12px;color:#7A84A0;font-weight:400}
+.plan-feat{font-size:12px;color:#C0C8E0;display:flex;gap:8px;margin-bottom:6px}
+.plan-roi{padding:6px 10px;border-radius:8px;font-size:11px;font-weight:500;margin-top:10px}
+.proj-row{display:flex;justify-content:space-between;padding:8px 0;align-items:center}
+.proj-total{font-size:16px;font-weight:900;color:#00E676;font-family:'JetBrains Mono',monospace}
+.city-row{padding:8px 0;cursor:pointer}
+.city-row:not(:first-child){border-top:1px solid rgba(255,255,255,.04)}
+.priority{padding:2px 6px;border-radius:8px;font-size:9px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.phase-btn{flex:none;padding:8px 12px;border:none;border-radius:10px;cursor:pointer;text-align:center;transition:.15s;font-family:'Outfit',sans-serif}
+.phase-btn .icon{font-size:16px}
+.phase-btn .label{font-size:8px;font-weight:700;font-family:'JetBrains Mono',monospace;margin-top:1px}
+.progress-bar{height:4px;background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden;margin-top:3px}
+.progress-fill{height:100%;border-radius:2px;transition:width .3s}
+.task{display:flex;gap:8px;padding:7px 0;cursor:pointer;align-items:flex-start;transition:opacity .2s}
+.task:not(:first-child){border-top:1px solid rgba(255,255,255,.03)}
+.task.done{opacity:.35}
+.checkbox{width:16px;height:16px;border-radius:4px;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;transition:.2s;font-size:10px;color:#fff}
+.task-text{font-size:11px;line-height:1.5;color:#A0AAC0;flex:1}
+.task.done .task-text{color:#4A5578;text-decoration:line-through}
+.badge{display:inline-block;margin-left:5px;padding:1px 4px;border-radius:3px;font-size:7px;font-weight:700;font-family:'JetBrains Mono',monospace;vertical-align:middle}
+.claude-group{margin-bottom:12px}
+.claude-phase{font-size:10px;font-weight:700;font-family:'JetBrains Mono',monospace;margin-bottom:6px;padding:3px 8px;border-radius:6px;display:inline-block}
+.claude-task{display:flex;gap:6px;margin-bottom:4px;font-size:11px;color:#A0AAC0;line-height:1.5}
+.claude-task span{flex-shrink:0}
+.strategy-item{display:flex;gap:6px;margin-bottom:5px;font-size:11px;line-height:1.5;color:#A0AAC0}
+.strategy-item span{flex-shrink:0}
+.summary-row{display:flex;gap:8px;margin-bottom:8px;align-items:flex-start}
+.summary-tool{font-size:11px;font-weight:700;min-width:130px;font-family:'JetBrains Mono',monospace}
+.summary-desc{font-size:11px;color:#A0AAC0;line-height:1.5}
+.dispatch-item{display:flex;gap:6px;margin-bottom:6px;font-size:11px;color:#C0AAE0;line-height:1.5}
+.footer{padding:10px 16px 16px;text-align:center;border-top:1px solid rgba(255,255,255,.03)}
+.footer p{font-size:9px;color:#1E2640;font-family:'JetBrains Mono',monospace}
+.hidden{display:none}
+.comp-text{font-size:12px;color:#A0AAC0;line-height:1.6;margin-bottom:8px}
+.comp-text strong{color:#D0D8F0}
+.city-tag{padding:2px 8px;border-radius:6px;background:rgba(255,23,68,.08);font-size:10px;color:#FF8A80;display:inline-block;margin:2px}
+.expand-detail{margin-top:6px;padding:6px 8px;background:rgba(255,255,255,.03);border-radius:6px;font-size:11px;color:#A0AAC0}
+.payment-card{font-size:12px;color:#A0AAC0;line-height:1.7}
+.payment-card p{margin:0 0 8px}
+.payment-card strong{color:#00E676}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <img src="./higo-logo.jpeg" alt="Higo">
+    <div>
+      <h1>Plan Maestro Higo</h1>
+      <p class="mono">BASADO EN DATA REAL · ABRIL 2026</p>
+    </div>
+  </div>
+</div>
+
+<div class="tabs" id="tabs"></div>
+<div class="content" id="content"></div>
+<div class="footer"><p>HIGO APP · PLAN MAESTRO v3.3 · EQUIPO + CLAUDE CODE + COWORK · ABRIL 2026</p></div>
+
+<script>
+const DATA = {
+  profile: {
+    info: [["Nombre","Higo App"],["Paquete","com.higoapp.ve"],["Web","higodriver.com"],["Estado","Testing en Google Play (no publicada aún)"],["Zona inicial","Higuerote, Municipio Brión, Estado Miranda"],["Lanzamiento","~14 días para publicación en Play Store"],["Pagos","Pago Móvil (QR del conductor al finalizar viaje) + Efectivo (cash)"]],
+    stack: "React + Vite + Capacitor (Android) · Supabase (auth + DB) · Firebase (push notifications) · Google Maps · Google Gemini AI",
+    servicios: ["Higo Moto","Higo Carro","Higo Camioneta","Higo Envíos","Higo Mandado"],
+    funcionalidades: ["Solicitar / Confirmar / Aceptar viaje","QR de Pago Móvil del conductor al finalizar (pago directo)","Chat pasajero ↔ conductor","Llamar al conductor","Botón SOS + Compartir ubicación","Calificación de viajes","Panel Admin (/admin/drivers)","Registro de pago de flota / membresía","Geolocalización en tiempo real","Push notifications (Firebase)","Viajes programados (/schedule)","Higo Envíos + Higo Mandado con detalles de envío"],
+    gaps: ["Landing (higodriver.com) es SPA pura — Google no puede indexarla para SEO","Cero presencia en redes sociales — Instagram, TikTok, Facebook sin crear","App solo en Android (Play Store) — sin iOS aún","Sin plan semanal de membresía — puede ser barrera para conductores de bajos ingresos","Falta confirmación de pago bilateral (pasajero + conductor) para tener data de transacciones","Evaluar agregar Zelle/Binance como opciones adicionales de cobro para conductores (para pagos en USD)"]
+  },
+  plans: [
+    {name:"Higo Moto",icon:"🏍️",price:10,color:"#00E676",includes:"Viajes en moto + Higo Envíos + perfil verificado + soporte WhatsApp",target:"Mototaxistas independientes o de línea",roi:"Recupera membresía en 1-2 días de trabajo"},
+    {name:"Higo Carro",icon:"🚗",price:20,color:"#448AFF",includes:"Todo Moto + viajes en carro + inter-ciudad + prioridad turistas + badge verificado",target:"Taxistas, conductores particulares, choferes independientes",roi:"Un conductor activo genera $15-30/día"},
+    {name:"Higo Camioneta",icon:"🚐",price:25,color:"#FF6D00",includes:"Todo Carro + grupos hasta 8 pasajeros + mudanzas + cargas + rutas turísticas + prioridad máxima",target:"Dueños de camionetas, Van, SUV",roi:"Pueden generar $30-50/día en temporada alta"}
+  ],
+  projections: [
+    {t:"Mes 1 — Higuerote",c:"50",total:"$800/mes"},
+    {t:"Mes 3 — Todo Miranda",c:"200",total:"$3,600/mes"},
+    {t:"Mes 8 — 8 ciudades",c:"1,000",total:"$16,000/mes"},
+    {t:"Mes 12 — Nacional",c:"3,000",total:"$48,000/mes"}
+  ],
+  ciudadesComp: ["Caracas","Maracay","Valencia","Barquisimeto","Maracaibo","Margarita/Porlamar","Puerto La Cruz","El Tigre","Puerto Ordaz","Mérida","Barinas","San Cristóbal"],
+  sinCobertura: [
+    {zona:"Higuerote / Barlovento",estado:"Miranda",pop:"~120K",turismo:"ALTO — 46,000+ turistas en temporada",p:1},
+    {zona:"Guarenas / Guatire",estado:"Miranda",pop:"~600K",turismo:"Bajo — ciudades dormitorio",p:2},
+    {zona:"Valles del Tuy (Ocumare, Cúa, Charallave, Sta. Teresa)",estado:"Miranda",pop:"~400K",turismo:"Bajo — residencial",p:2},
+    {zona:"Los Teques / San Antonio",estado:"Miranda",pop:"~350K",turismo:"Bajo — residencial",p:3},
+    {zona:"Caucagua / Santa Lucía",estado:"Miranda",pop:"~80K",turismo:"Medio",p:3},
+    {zona:"Cumaná",estado:"Sucre",pop:"~380K",turismo:"Alto — playas",p:4},
+    {zona:"Coro / Punto Fijo",estado:"Falcón",pop:"~280K",turismo:"Alto — Médanos",p:4},
+    {zona:"Acarigua / Araure",estado:"Portuguesa",pop:"~350K",turismo:"Bajo",p:4},
+    {zona:"Ciudad Ojeda / Cabimas",estado:"Zulia",pop:"~450K",turismo:"Bajo — petrolera",p:5},
+    {zona:"San Fernando de Apure",estado:"Apure",pop:"~200K",turismo:"Medio — llanos",p:5},
+    {zona:"Guanare",estado:"Portuguesa",pop:"~180K",turismo:"Medio — religioso",p:5},
+    {zona:"Tucupita",estado:"Delta Amacuro",pop:"~100K",turismo:"Medio — Delta",p:5}
+  ],
+  phases: [
+    {id:1,title:"PRE-LANZAMIENTO",time:"HOY → Día 14",color:"#0066FF",icon:"🚀",goal:"Preparar todo para que el día que la app salga de testing, haya conductores listos, contenido publicado, y alianzas cerradas.",sections:[
+      {h:"🔧 Producto — Lo Urgente",tasks:[{t:"Mejorar landing higodriver.com: meta tags + contenido estático para SEO",p:"alta"},{t:"Crear listing completo en Play Store: capturas, descripción, keywords",p:"alta"},{t:"Asegurar sistema de membresía/pago de flota en panel admin",p:"alta"},{t:"Verificar flujo QR Pago Móvil: ¿pasajero ve QR claro? ¿hay confirmación bilateral?",p:"alta"},{t:"Agregar múltiples métodos de cobro: Pago Móvil (QR) + Zelle + efectivo",p:"media"},{t:"Implementar 'Ya pagué' (pasajero) + 'Pago recibido' (conductor)",p:"alta"},{t:"Probar app en 3G — Barlovento no siempre tiene 4G estable",p:"media"},{t:"Usar QR de testeo en todos los materiales impresos",p:"media"}]},
+      {h:"👥 Captación de Conductores",tasks:[{t:"Crear grupo WhatsApp 'Conductores Higo Higuerote'",p:"alta"},{t:"Visitar paradas de taxi/moto en Higuerote, Carenero, Río Chico",p:"alta"},{t:"Pitch: 'Sin comisión. El pasajero te paga DIRECTO a tu Pago Móvil. Solo pagas membresía fija.'",p:"alta"},{t:"Volantes con QR + tabla de precios ($10/$20/$25) + sistema de pago directo",p:"alta"},{t:"PRIMER MES GRATIS para los primeros 50 conductores",p:"alta"},{t:"Requisito: tener Pago Móvil activo para recibir pagos vía QR",p:"alta"},{t:"Contactar conductores informales de WhatsApp/Facebook",p:"media"},{t:"Meta: 40 conductores (20 motos, 12 carros, 8 camionetas)",p:"alta"}]},
+      {h:"📱 Presencia Digital DESDE CERO",tasks:[{t:"Crear Instagram @higoapp.ve — 1 post/día: countdown, features, precios",p:"alta"},{t:"Crear TikTok @higoapp.ve — 'Así funciona Higo', '¿Tienes moto? Gana sin comisión'",p:"alta"},{t:"Crear Facebook 'Higo App Venezuela'",p:"media"},{t:"WhatsApp Business: catálogo de planes, respuestas automáticas",p:"alta"},{t:"Video demo 60 seg de la app funcionando en vivo",p:"alta"}]},
+      {h:"🤝 Alianzas en Higuerote",tasks:[{t:"10+ posadas/hoteles — código descuento para huéspedes",p:"alta"},{t:"Restaurantes de playa en Los Totumos, Chirimena, Puerto Francés",p:"media"},{t:"Comercios para Higo Envíos (farmacias, panaderías, ferreterías)",p:"media"},{t:"Alcaldía de Brión — respaldo institucional",p:"baja"}]}
+    ]},
+    {id:2,title:"LANZAMIENTO",time:"Día 15 → 30",color:"#00E676",icon:"🎯",goal:"App en Play Store. Activación en Higuerote. Primeros viajes reales.",sections:[
+      {h:"🎉 Día de Lanzamiento",tasks:[{t:"Publicar app en Play Store — salir de testing a producción",p:"alta"},{t:"Evento en Plaza Bolívar o Playa Los Totumos — descargas en vivo",p:"alta"},{t:"WiFi portátil para instalar la app in situ",p:"alta"},{t:"Stickers de Higo para vehículos de conductores",p:"alta"},{t:"Grabar TODO para reels, TikToks, stories",p:"alta"},{t:"Franelas/gorras para primeros 50 usuarios",p:"media"}]},
+      {h:"💰 Promociones",tasks:[{t:"Primer viaje GRATIS (tope $3)",p:"alta"},{t:"Código 'HIGUEROTE' → 50% descuento en 3 viajes",p:"alta"},{t:"Referidos: invita amigo → ambos ganan $1",p:"alta"},{t:"Higo Envíos: primer envío gratis para comercios",p:"media"}]},
+      {h:"📊 Métricas",tasks:[{t:"Meta: 500 descargas en 15 días",p:"alta"},{t:"Meta: 50 conductores pagando = ~$750/mes",p:"alta"},{t:"Meta: espera < 10 min",p:"alta"},{t:"Responder CADA reseña en Play Store",p:"alta"},{t:"Monitorear crashes — primeros días son críticos",p:"alta"}]}
+    ]},
+    {id:3,title:"DOMINAR MIRANDA",time:"Mes 2 → 3",color:"#FF6D00",icon:"🏗️",goal:"Expandir a Barlovento + ciudades dormitorio. Ser la app #1 del estado Miranda.",sections:[
+      {h:"🗺️ Expansión Miranda",tasks:[{t:"Barlovento completo: Río Chico, Curiepe, Tacarigua, Caucagua → 15/zona",p:"alta"},{t:"Guarenas/Guatire — 600K hab → 30+ conductores",p:"alta"},{t:"Valles del Tuy: Ocumare, Cúa, Charallave, Sta. Teresa — 400K hab",p:"alta"},{t:"Los Teques / San Antonio — evaluar demanda",p:"media"},{t:"Ruta Higuerote ↔ Caracas inter-ciudad",p:"media"}]},
+      {h:"📦 Higo Envíos + Mandados",tasks:[{t:"20+ comercios con entregas recurrentes",p:"alta"},{t:"Higo Mandados: supermercado, farmacia, ferretería",p:"media"},{t:"Estandarizar tarifas por distancia",p:"alta"}]},
+      {h:"💳 Iterar Membresía",tasks:[{t:"Encuesta a conductores: ¿vale la pena?",p:"alta"},{t:"Plan semanal ($3-7) como alternativa",p:"media"},{t:"Auto-renovación + recordatorio 3 días antes",p:"alta"},{t:"Plan anual: paga 10, obtén 12",p:"baja"}]},
+      {h:"📈 Meta Mes 3",tasks:[{t:"200+ conductores = ~$3,000-4,000/mes",p:"alta"},{t:"2,000+ pasajeros registrados",p:"alta"},{t:"Rating ≥ 4.3 con 50+ reseñas",p:"media"}]}
+    ]},
+    {id:4,title:"EXPANSIÓN NACIONAL",time:"Mes 4 → 8",color:"#AA00FF",icon:"🇻🇪",goal:"Ciudades medianas sin Yummy/Ridery. Primera app de movilidad en cada una.",sections:[
+      {h:"🏙️ Ciudades Sin Competencia",tasks:[{t:"Cumaná (380K, turismo) → 30 conductores antes de activar",p:"alta"},{t:"Coro / Punto Fijo (Falcón) — Médanos + zona petrolera",p:"alta"},{t:"Acarigua / Araure (350K, cero cobertura)",p:"alta"},{t:"Ciudad Ojeda / Cabimas (Zulia, petrolera)",p:"media"},{t:"Modelo: reclutar 30 → mes gratis → evento lanzamiento",p:"alta"}]},
+      {h:"📢 Marketing Nacional",tasks:[{t:"Meta Ads por ciudad: $300-500/mes",p:"alta"},{t:"Pitch: 'Sin comisión. Pago DIRECTO. Membresía desde $10.'",p:"alta"},{t:"5-10 influencers de viajes/lifestyle",p:"media"},{t:"PR: El Nacional, Efecto Cocuyo, Caraota Digital",p:"media"},{t:"'Historias Higo': mini-docs de conductores",p:"media"}]},
+      {h:"⚙️ Producto",tasks:[{t:"Versión iOS (App Store)",p:"alta"},{t:"Binance Pay como opción de cobro",p:"media"},{t:"Dashboard conductor: viajes, ganancias, historial",p:"media"},{t:"Historial de pagos recibidos con monto/método",p:"media"},{t:"Mejorar Gemini AI: rutas, demanda",p:"baja"}]},
+      {h:"📈 Meta Mes 8",tasks:[{t:"1,000+ conductores = ~$15,000-20,000/mes",p:"alta"},{t:"15,000+ descargas pasajeros",p:"alta"},{t:"8+ ciudades activas",p:"alta"}]}
+    ]},
+    {id:5,title:"COMPETIR EN LAS GRANDES",time:"Mes 9 → 12",color:"#FF1744",icon:"🏆",goal:"Caracas, Valencia, Maracaibo — competir con Yummy/Ridery con membresía fija + pago directo.",sections:[
+      {h:"⚔️ Ciudades con Competencia",tasks:[{t:"CARACAS — 'Con Yummy pagas $100/mes comisión. Con Higo pagas $20 y cobras DIRECTO.'",p:"alta"},{t:"Valencia, Maracaibo, Barquisimeto — mismo mensaje",p:"alta"},{t:"NO exigir exclusividad — estar en Higo + otras apps",p:"alta"},{t:"Campaña: 'Cambia tu comisión. Cobra directo. Lo que ganas es tuyo. HOY.'",p:"alta"}]},
+      {h:"💼 Nuevos Ingresos",tasks:[{t:"Higo Business: cuentas empresariales",p:"media"},{t:"Higo Publicidad: banners in-app",p:"baja"},{t:"Inversión semilla $50K-100K",p:"alta"}]},
+      {h:"📈 Meta Año 1",tasks:[{t:"3,000+ conductores = ~$45,000-60,000/mes",p:"alta"},{t:"50,000+ descargas pasajeros",p:"alta"},{t:"15+ ciudades activas",p:"alta"},{t:"Rating ≥ 4.3 con 1,000+ reseñas",p:"media"}]}
+    ]}
+  ],
+  claudeCode: [
+    {fase:"F1 · Pre-Lanzamiento",tasks:["Confirmación bilateral de pago: 'Ya pagué' + 'Pago recibido'","Soporte múltiples métodos de cobro (QR + Zelle + efectivo)","SEO higodriver.com: meta tags, Open Graph, pre-rendering","Optimizar para 3G (lazy loading mapa, compresión assets)","Sistema de códigos promocionales ('HIGUEROTE')","Sistema de referidos con tracking","Testing automatizado de flujos críticos"]},
+    {fase:"F2 · Lanzamiento",tasks:["Corregir bugs reportados en producción","Analytics: descargas, viajes, conversión, retención","Panel de métricas en /admin con KPIs en tiempo real","Optimizar push notifications Firebase"]},
+    {fase:"F3 · Miranda",tasks:["Auto-renovación membresía + recordatorio 3 días","Plan semanal de membresía ($3-7)","Dashboard conductor: viajes, ganancias, historial","Geofencing para zonas de cobertura","API de reportes por zona"]},
+    {fase:"F4 · Nacional",tasks:["Versión iOS con Capacitor","Binance Pay para conductores","Onboarding automatizado para ciudades nuevas","Gemini AI: rutas, estimación demanda","Higo Business: cuentas empresariales"]},
+    {fase:"F5 · Grandes",tasks:["Escalar Supabase para volumen Caracas/Valencia","Sistema publicidad in-app (Higo Ads)","API pública para integraciones terceros","Pricing dinámico por demanda/distancia"]}
+  ],
+  claudeCowork: [
+    {fase:"F1 · Pre-Lanzamiento",tasks:["Listing Play Store: descripción, keywords, textos","Calendario 14 días de posts Instagram/TikTok","Volantes para conductores (PDF con QR + planes)","Pitch deck para alianzas con hoteles","Plantillas WhatsApp Business: bienvenida, FAQ","Lista de contactos: posadas, hoteles, restaurantes","Guía de onboarding para conductores (PDF)"]},
+    {fase:"F2 · Lanzamiento",tasks:["Reportes diarios de métricas en spreadsheets","Comunicados de prensa para medios digitales","Templates de respuesta para reseñas Play Store","Spreadsheet seguimiento conductores","Compilar contenido post-evento organizado"]},
+    {fase:"F3 · Miranda",tasks:["Plan expansión por ciudad con datos y contactos","Reportes mensuales de ingresos (spreadsheet)","Encuesta satisfacción + compilar resultados","Material marketing por zona nueva","Investigar competidores locales por zona"]},
+    {fase:"F4 · Nacional",tasks:["Media kit profesional de Higo","Propuestas personalizadas para influencers","Base datos medios digitales con contactos","Market research por ciudad","Presentación para inversores con métricas","Reportes semanales automatizados de KPIs"]},
+    {fase:"F5 · Grandes",tasks:["Análisis competitivo: Higo vs Yummy vs Ridery","Propuesta inversión semilla con modelo financiero","Reportes unit economics: CAC, LTV, churn","Playbook replicable de lanzamiento en ciudad nueva","Organizar documentación año 1 en carpetas"]}
+  ],
+  dispatch: ["Evento de lanzamiento → 'Compila fotos y crea 3 posts para Instagram'","Visitando conductores → 'Actualiza spreadsheet con 5 nuevos registros'","Reunión con hotel → 'Genera propuesta para Hotel Aguamarina'","Manejando → 'Revisa reseñas Play Store y redacta respuestas'","De noche → 'Programa reporte semanal cada lunes'"],
+  team: [
+    {
+      fase:"FASE 1-2 · Pre-Lanzamiento + Lanzamiento",faseColor:"#0066FF",time:"Mes 0-1",personas:"2-3 personas (incluyéndote)",costoMes:"$150-300/mes",
+      roles:[
+        {titulo:"🧑‍💼 Tú — CEO / Fundador",cant:1,tipo:"Fundador",salario:"—",color:"#FFD600",
+        funciones:["Dirección estratégica y toma de decisiones","Desarrollo técnico de la app (Claude Code como asistente)","Gestionar panel admin: aprobar conductores, monitorear viajes","Relaciones con aliados: hoteles, comercios, alcaldía","Supervisar todo el equipo y resolver problemas críticos"]},
+        {titulo:"📣 Captador de Conductores / Operaciones (Higuerote)",cant:1,tipo:"Medio tiempo / Freelance",salario:"$100-150/mes",color:"#00E676",
+        funciones:["Ir a la calle TODOS LOS DÍAS a reclutar conductores: paradas de taxi, mototaxistas, plazas","Entregar volantes, explicar la app, ayudar a descargar e instalar","Registrar conductores nuevos en el spreadsheet de seguimiento","Verificar documentos de conductores: licencia, placa, Pago Móvil activo","Ser el contacto directo de los conductores por WhatsApp — resolver dudas y problemas","Organizar y ejecutar el evento de lanzamiento en Higuerote","Cobrar membresías de conductores y reportar pagos"]},
+        {titulo:"📱 Community Manager (RRSS)",cant:1,tipo:"Medio tiempo / Freelance remoto",salario:"$50-150/mes",color:"#448AFF",
+        funciones:["Crear y gestionar Instagram @higoapp.ve, TikTok, Facebook","Publicar 1 post/día + 3-5 stories diarias","Grabar y editar videos cortos de la app funcionando","Responder comentarios y DMs en todas las plataformas","Crear contenido del evento de lanzamiento (reels, TikToks)","Gestionar WhatsApp Business: responder consultas de pasajeros y conductores"]}
+      ],
+      nota:"En esta fase el equipo es mínimo y TÚ haces múltiples roles. Claude Code y Claude Cowork reemplazan lo que normalmente harían un diseñador, un copywriter y un analista."
+    },
+    {
+      fase:"FASE 3 · Dominar Miranda",faseColor:"#FF6D00",time:"Mes 2-3",personas:"4-5 personas",costoMes:"$500-800/mes",
+      roles:[
+        {titulo:"🧑‍💼 Tú — CEO / Producto",cant:1,tipo:"Fundador",salario:"—",color:"#FFD600",
+        funciones:["Estrategia de expansión: decidir qué zonas activar y cuándo","Desarrollo técnico con Claude Code: nuevas features, bugs, optimización","Análisis de métricas y toma de decisiones basada en data","Relaciones con aliados estratégicos de nuevas zonas","Gestión financiera: membresías, costos, proyecciones"]},
+        {titulo:"📣 Coordinador de Operaciones Miranda",cant:1,tipo:"Tiempo completo",salario:"$150-200/mes",color:"#00E676",
+        funciones:["Coordinar captación de conductores en TODAS las zonas de Miranda","Capacitar y supervisar a los captadores de zona","Resolver conflictos: quejas de pasajeros, disputas de pago, conductores problemáticos","Monitorear calidad del servicio: tiempos de espera, ratings, cancelaciones","Reportar métricas operativas semanales al CEO","Gestionar relación con comercios de Higo Envíos"]},
+        {titulo:"🏍️ Captadores de Zona (Barlovento + Guarenas + Tuy)",cant:"2",tipo:"Medio tiempo / Por zona",salario:"$80-120/mes c/u",color:"#FF6D00",
+        funciones:["Reclutar conductores en su zona asignada (meta: 15-30 por zona)","Entregar material promocional y ayudar con instalación de la app","Ser el punto de contacto local de Higo en esa ciudad/zona","Reportar conductores registrados y activos al Coordinador","Identificar comercios locales interesados en Higo Envíos","Organizar mini-eventos de lanzamiento en cada zona nueva"]},
+        {titulo:"📱 Community Manager",cant:1,tipo:"Medio tiempo → Tiempo completo",salario:"$100-200/mes",color:"#448AFF",
+        funciones:["Gestionar RRSS con contenido adaptado a cada zona nueva","Crear campañas locales: 'Higo ya llegó a Guarenas', 'Higo en los Valles del Tuy'","Responder reseñas de Play Store (CADA una, positiva o negativa)","Gestionar WhatsApp Business con volumen creciente de consultas","Crear y publicar testimonios reales de conductores y pasajeros","Coordinar con influencers locales de cada zona"]}
+      ],
+      nota:"El Coordinador de Operaciones es la contratación más importante de esta fase. Esta persona te libera de la operación diaria para que puedas enfocarte en producto y estrategia."
+    },
+    {
+      fase:"FASE 4 · Expansión Nacional",faseColor:"#AA00FF",time:"Mes 4-8",personas:"8-12 personas",costoMes:"$1,500-3,000/mes",
+      roles:[
+        {titulo:"🧑‍💼 Tú — CEO",cant:1,tipo:"Fundador",salario:"—",color:"#FFD600",
+        funciones:["Estrategia de expansión nacional: priorizar ciudades, presupuesto por zona","Buscar inversión: pitch a inversores, networking, propuestas","Producto y roadmap técnico: iOS, nuevas features, integraciones","Representar a Higo en medios de comunicación y eventos","Decisiones de pricing: ajustar membresías según data de mercado"]},
+        {titulo:"⚙️ Desarrollador Full-Stack Jr.",cant:1,tipo:"Tiempo completo / Remoto",salario:"$300-500/mes",color:"#FF6D00",
+        funciones:["Desarrollar versión iOS de la app","Implementar nuevas features: dashboard conductor, historial pagos, Binance Pay","Corregir bugs y optimizar rendimiento","Mantener infraestructura de Supabase y Firebase","Trabajar con Claude Code para acelerar desarrollo","Implementar analytics y sistema de reportes automatizados"]},
+        {titulo:"📣 Gerente de Operaciones Nacional",cant:1,tipo:"Tiempo completo",salario:"$250-400/mes",color:"#00E676",
+        funciones:["Coordinar TODOS los Coordinadores de Ciudad del país","Estandarizar procesos de onboarding de conductores (playbook)","Definir metas operativas por ciudad: conductores, viajes, retención","Resolver escalaciones: problemas que los coordinadores locales no pueden manejar","Reportar KPIs nacionales semanales al CEO","Gestionar presupuesto operativo de cada ciudad"]},
+        {titulo:"🏙️ Coordinadores de Ciudad",cant:"3-4",tipo:"Medio tiempo / Por ciudad",salario:"$100-150/mes c/u",color:"#AA00FF",
+        funciones:["Replicar el modelo de Higuerote en su ciudad asignada","Reclutar 30+ conductores antes de la activación de la zona","Organizar evento de lanzamiento local","Ser la cara de Higo en esa ciudad: alianzas, comercios, prensa local","Gestionar grupo de WhatsApp de conductores de su ciudad","Reportar al Gerente de Operaciones Nacional"]},
+        {titulo:"📱 Jefe de Marketing Digital",cant:1,tipo:"Tiempo completo / Remoto",salario:"$200-350/mes",color:"#448AFF",
+        funciones:["Gestionar campañas de Meta Ads por ciudad ($300-500/mes de presupuesto)","Coordinar influencers: selección, negociación, seguimiento de resultados","Estrategia de contenido nacional + adaptaciones locales por ciudad","Gestionar equipo de RRSS (community managers)","PR: relación con medios digitales venezolanos","Medir ROI de cada canal de adquisición y optimizar"]},
+        {titulo:"💬 Soporte al Usuario",cant:1,tipo:"Medio tiempo",salario:"$80-120/mes",color:"#00B0FF",
+        funciones:["Atender consultas de pasajeros y conductores por WhatsApp","Resolver disputas de pago (pasajero dice que pagó, conductor dice que no)","Gestionar reseñas de Play Store y responder todas","Escalar problemas técnicos al desarrollador","Mantener FAQ actualizada y base de conocimiento","Recopilar feedback de usuarios para mejoras del producto"]}
+      ],
+      nota:"Esta es la fase donde dejas de ser un 'one-man show'. El Desarrollador y el Gerente de Operaciones son las contrataciones que te permiten escalar sin quemarte. Los Coordinadores de Ciudad son tu ejército de expansión."
+    },
+    {
+      fase:"FASE 5 · Competir en las Grandes",faseColor:"#FF1744",time:"Mes 9-12",personas:"15-20 personas",costoMes:"$4,000-7,000/mes",
+      roles:[
+        {titulo:"🧑‍💼 Tú — CEO",cant:1,tipo:"Fundador",salario:"Según inversión",color:"#FFD600",
+        funciones:["Liderar ronda de inversión semilla ($50K-100K)","Estrategia competitiva vs Yummy/Ridery en ciudades grandes","Relaciones institucionales: gobierno, cámaras de comercio, gremios","Visión de producto a largo plazo: Higo Business, Higo Ads","Cultura de empresa y retención de talento clave"]},
+        {titulo:"⚙️ Equipo de Desarrollo",cant:"2-3",tipo:"Tiempo completo",salario:"$300-600/mes c/u",color:"#FF6D00",
+        funciones:["Desarrollador Sr. / Lead: arquitectura, escalabilidad, pricing dinámico","Desarrollador Jr. / Mobile: mantenimiento iOS + Android","Desarrollador Backend (si el volumen lo requiere): APIs, Supabase, performance","Implementar Higo Business, Higo Ads, integraciones con terceros","Seguridad: proteger datos de usuarios y conductores"]},
+        {titulo:"📣 Director de Operaciones (COO)",cant:1,tipo:"Tiempo completo",salario:"$400-600/mes",color:"#00E676",
+        funciones:["Gestionar toda la operación nacional: 15+ ciudades","Definir y estandarizar procesos: onboarding, calidad, soporte","Contratar y capacitar Coordinadores de Ciudad nuevos","Gestionar presupuesto operativo total","Crear sistema de incentivos para conductores de alto rendimiento","Reportar directamente al CEO con dashboard de KPIs"]},
+        {titulo:"🏙️ Coordinadores de Ciudad",cant:"6-8",tipo:"Medio tiempo",salario:"$100-150/mes c/u",color:"#AA00FF",
+        funciones:["Uno por cada ciudad/zona activa","Mismas funciones que en Fase 4 pero en ciudades más grandes y competitivas","En Caracas/Valencia/Maracaibo: enfoque en captar conductores de Yummy/Ridery","Gestionar eventos y activaciones locales recurrentes"]},
+        {titulo:"📱 Equipo de Marketing",cant:"2-3",tipo:"Mixto",salario:"$150-300/mes c/u",color:"#448AFF",
+        funciones:["Jefe de Marketing: estrategia nacional, presupuesto, medición","Community Manager Sr.: RRSS, contenido, influencers","Content Creator / Videógrafo: producción de video para TikTok, reels, YouTube","Campañas agresivas en ciudades con competencia: 'Cambia a Higo'","PR y medios: cobertura en prensa nacional"]},
+        {titulo:"💬 Equipo de Soporte",cant:"2",tipo:"Tiempo completo",salario:"$100-150/mes c/u",color:"#00B0FF",
+        funciones:["Soporte 12-16 horas al día (turnos rotativos)","Atender WhatsApp, email, redes sociales, reseñas Play Store","Resolver disputas de pago y problemas de servicio","Moderar conductores: suspender por mal rating, reactivar tras corrección","Crear reportes de incidencias para el equipo de producto"]},
+        {titulo:"📊 Analista de Datos (Opcional)",cant:1,tipo:"Medio tiempo / Remoto",salario:"$200-300/mes",color:"#FFD600",
+        funciones:["Crear dashboards de métricas por ciudad","Analizar retención de conductores y pasajeros (churn)","Calcular unit economics: CAC, LTV por ciudad","Identificar patrones: horarios pico, zonas de alta demanda","Preparar reportes para inversores con data real"]}
+      ],
+      nota:"Con inversión de $50K-100K puedes sostener este equipo 6-12 meses. El COO es la contratación más importante — te libera completamente de la operación para enfocarte en crecimiento e inversión. Si los $48K/mes en membresías se cumplen, el equipo se paga solo."
+    }
+  ],
+  strategy: [
+    {title:"💰 Membresía + Pago Directo",color:"#00E676",items:["DOBLE VENTAJA: membresía fija + pago directo al conductor vía QR","INGRESOS PREDECIBLES: sabes cuánto entra cada mes en membresías","DINERO INSTANTÁNEO: conductor cobra al terminar, no espera liquidación","ATRACTIVO: $10 fijo + cobro directo vs $54-60 en comisiones + esperar días","ESCALABLE: cada conductor nuevo = ingreso garantizado","SIN FRICCIÓN BANCARIA: sin pasarelas complejas ni bancos venezolanos","LEALTAD: conductor que paga y cobra directo se siente dueño"]},
+    {title:"🎯 Océano Azul",color:"#448AFF",items:["335 municipios en Venezuela. Yummy ~20, Ridery ~19. CIENTOS sin servicio","Boca a boca en ciudades pequeñas > cualquier campaña paga","Cuando llegue la competencia, tú ya tendrás conductores fidelizados","Tu app ya tiene: moto, carro, camioneta, envíos, mandados, chat, SOS"]},
+    {title:"🔓 Conductores Independientes",color:"#FF6D00",items:["Miles hacen taxi/moto informal sin línea — buscan carreras por WhatsApp","Yummy/Ridery: requisitos estrictos + comisión por viaje","Higo: regístrate, paga membresía, empieza. Cualquiera con vehículo","Tu admin ya maneja: pending → verified → active"]},
+    {title:"⚠️ Riesgos",color:"#FF1744",items:["Pocos viajes → primer mes gratis + activar con 15+ conductores","Conectividad → probar en 3G, optimizar mapa","Solo Android → iOS para mes 4-5","Disputa de pago → confirmación bilateral + historial QR","Turistas sin PM → efectivo como respaldo + Zelle/Binance","Competencia → 'NUNCA comisión. Pago DIRECTO. Punto.'"]},
+    {title:"🚀 Growth Hacking",color:"#AA00FF",items:["$0.50 por referido — más barato que anuncios","Stickers en vehículos = publicidad 24/7","Temporada alta: activación en playas con WiFi","#MuéveteConHigo — concurso mensual","Alianza estaciones de servicio: volante con cada carga"]}
+  ]
+};
+
+const TABS = [
+  {id:"perfil",label:"TU APP",icon:"📱"},
+  {id:"membresia",label:"PLANES",icon:"💳"},
+  {id:"mercado",label:"MERCADO",icon:"🗺️"},
+  {id:"plan",label:"PLAN",icon:"📋"},
+  {id:"equipo",label:"EQUIPO",icon:"👥"},
+  {id:"claude",label:"CLAUDE",icon:"🤖"},
+  {id:"estrategia",label:"TIPS",icon:"💡"}
+];
+
+let activeTab = "perfil";
+let activePhase = 0;
+let completed = {};
+let expandedCity = null;
+
+function setTab(id) { activeTab = id; render(); }
+function setPhase(i) { activePhase = i; render(); }
+function toggleTask(k) { completed[k] = !completed[k]; render(); }
+function toggleCity(i) { expandedCity = expandedCity === i ? null : i; render(); }
+
+function getProgress(ph) {
+  let t=0,d=0;
+  ph.sections.forEach((s,si) => s.tasks.forEach((_,ti) => { t++; if(completed[`${ph.id}-${si}-${ti}`]) d++; }));
+  return t ? Math.round(d/t*100) : 0;
+}
+
+function pColor(p) { return p==="alta"?"#FF1744":p==="media"?"#FF9100":"#00B0FF"; }
+function prioColor(p) { return p<=2?"#FF1744":p<=3?"#FF9100":"#448AFF"; }
+function prioBg(p) { return p<=2?"rgba(255,23,68,.12)":p<=3?"rgba(255,145,0,.12)":"rgba(68,138,255,.12)"; }
+
+function render() {
+  // Tabs
+  document.getElementById("tabs").innerHTML = TABS.map(t =>
+    `<button class="tab ${activeTab===t.id?'active':''}" onclick="setTab('${t.id}')">
+      <div class="tab-icon">${t.icon}</div>
+      <div class="tab-label">${t.label}</div>
+    </button>`
+  ).join("");
+
+  const C = document.getElementById("content");
+  let h = "";
+
+  if (activeTab === "perfil") {
+    h += `<h2 style="font-size:18px;font-weight:800;margin-bottom:12px">Radiografía de tu App</h2>`;
+    h += `<div class="card"><div class="section-title" style="color:#448AFF">INFORMACIÓN GENERAL</div>`;
+    DATA.profile.info.forEach(([k,v]) => h += `<div class="row"><span class="row-key">${k}</span><span class="row-val">${v}</span></div>`);
+    h += `</div>`;
+    h += `<div class="card"><div class="section-title" style="color:#00E676">STACK TÉCNICO</div><p style="font-size:12px;color:#A0AAC0;line-height:1.6">${DATA.profile.stack}</p></div>`;
+    h += `<div class="card"><div class="section-title" style="color:#FF6D00">SERVICIOS</div><div style="display:flex;flex-wrap:wrap;gap:6px">${DATA.profile.servicios.map(s=>`<span class="tag" style="background:rgba(255,109,0,.1);color:#FF6D00">${s}</span>`).join("")}</div></div>`;
+    h += `<div class="card"><div class="section-title" style="color:#AA00FF">FUNCIONALIDADES</div>${DATA.profile.funcionalidades.map(f=>`<div class="feat"><span class="feat-icon" style="color:#AA00FF">✓</span>${f}</div>`).join("")}</div>`;
+    h += `<div class="card"><div class="section-title" style="color:#00E676">💳 SISTEMA DE PAGO — VENTAJA COMPETITIVA</div><div class="payment-card"><p><strong>Cómo funciona:</strong> Al finalizar el viaje, la app muestra el QR con los datos de Pago Móvil del conductor. El pasajero escanea y paga directo. También acepta efectivo.</p><p><strong>Por qué es superior:</strong> En Yummy/Ridery el dinero pasa por la plataforma, que retiene 18-20% y tarda días en liquidar. Con Higo, el conductor recibe el 100% al instante.</p><p style="margin:0"><strong>El pitch:</strong> "El pasajero te paga a TI. Directo a tu cuenta. Al terminar el viaje. No retenemos tu dinero."</p></div></div>`;
+    h += `<div class="card"><div class="section-title" style="color:#FF1744">⚠️ GAPS IDENTIFICADOS</div>${DATA.profile.gaps.map(g=>`<div class="gap"><span class="gap-icon">!</span>${g}</div>`).join("")}</div>`;
+  }
+
+  else if (activeTab === "membresia") {
+    h += `<h2 style="font-size:18px;font-weight:800;margin-bottom:4px">Modelo de Membresía</h2><p style="font-size:12px;color:#7A84A0;margin-bottom:14px">Sin comisión por viaje. Tarifa fija. Lo que ganas es tuyo.</p>`;
+    DATA.plans.forEach(p => {
+      h += `<div class="card plan-card" style="border-color:${p.color}20"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><span style="font-size:32px">${p.icon}</span><div><h3 style="font-size:16px;font-weight:800;color:${p.color}">${p.name}</h3><div class="plan-price">$${p.price}<span>/mes</span></div></div></div><div style="font-size:12px;color:#A0AAC0;margin-bottom:6px"><strong style="color:#D0D8F0">Incluye:</strong> ${p.includes}</div><div style="font-size:12px;color:#A0AAC0;margin-bottom:6px"><strong style="color:#D0D8F0">Ideal para:</strong> ${p.target}</div><div class="plan-roi" style="background:${p.color}15;color:${p.color}">💰 ${p.roi}</div></div>`;
+    });
+    h += `<div class="card"><div class="section-title" style="color:#FFD600">📊 PROYECCIÓN DE INGRESOS</div>`;
+    DATA.projections.forEach((r,i) => h += `<div class="proj-row" style="${i?'border-top:1px solid rgba(255,255,255,.04)':''}"><div><div style="font-size:12px;font-weight:600;color:#D0D8F0">${r.t}</div><div style="font-size:10px;color:#6B7394">${r.c} conductores</div></div><div class="proj-total">${r.total}</div></div>`);
+    h += `</div>`;
+    h += `<div class="card"><div class="section-title" style="color:#448AFF">💡 VS COMPETENCIA — DOBLE VENTAJA</div><div class="comp-text"><p><strong style="color:#FF6D00">Yummy:</strong> ~20% comisión + retiene pago. $500 → <strong style="color:#FF1744">~$400 después de días</strong>.</p><p><strong style="color:#FF6D00">Ridery:</strong> ~18% comisión + retiene pago. $500 → <strong style="color:#FF1744">~$410 después de días</strong>.</p><p><strong style="color:#00E676">Higo Carro:</strong> $20 fijo + pago DIRECTO. $500 → <strong style="color:#00E676">$480 AL INSTANTE</strong>.</p><p style="color:#FFD600;font-weight:500;margin:0">Ahorra $70-80/mes Y recibe dinero inmediatamente. Doble ventaja.</p></div></div>`;
+  }
+
+  else if (activeTab === "mercado") {
+    h += `<h2 style="font-size:18px;font-weight:800;margin-bottom:12px">Mapa de Oportunidad</h2>`;
+    h += `<div class="card"><div class="section-title" style="color:#FF1744">🔴 DONDE ESTÁ LA COMPETENCIA</div><div style="font-size:12px;color:#A0AAC0;line-height:1.5;margin-bottom:8px"><strong>Ridery:</strong> 45,000+ conductores en 19 ciudades. Comisión ~18%</div><div style="font-size:12px;color:#A0AAC0;line-height:1.5;margin-bottom:8px"><strong>Yummy:</strong> 23,000+ conductores en 20+ ciudades. Comisión ~20%</div><div style="display:flex;flex-wrap:wrap;gap:4px">${DATA.ciudadesComp.map(c=>`<span class="city-tag">${c}</span>`).join("")}</div></div>`;
+    h += `<div class="card" style="border-color:rgba(0,230,118,.15)"><div class="section-title" style="color:#00E676">🟢 SIN COBERTURA — Tu territorio</div>`;
+    DATA.sinCobertura.forEach((c,i) => {
+      h += `<div class="city-row" onclick="toggleCity(${i})"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:12px;font-weight:600;color:#D0D8F0">${c.zona}</div><div style="font-size:10px;color:#6B7394">${c.estado} · ${c.pop}</div></div><span class="priority" style="background:${prioBg(c.p)};color:${prioColor(c.p)}">P${c.p}</span></div>${expandedCity===i?`<div class="expand-detail">Turismo: ${c.turismo}</div>`:''}</div>`;
+    });
+    h += `</div>`;
+  }
+
+  else if (activeTab === "plan") {
+    h += `<div style="display:flex;gap:5px;overflow-x:auto;margin-bottom:14px">`;
+    DATA.phases.forEach((p,i) => {
+      const prog = getProgress(p);
+      h += `<button class="phase-btn" style="background:${i===activePhase?p.color+'18':'#111628'};color:${i===activePhase?p.color:'#4A5578'}" onclick="setPhase(${i})"><div class="icon">${p.icon}</div><div class="label">F${p.id}</div>${prog>0?`<div style="font-size:8px;color:${p.color}">${prog}%</div>`:''}</button>`;
+    });
+    h += `</div>`;
+    const p = DATA.phases[activePhase];
+    const prog = getProgress(p);
+    h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px"><span style="font-size:24px">${p.icon}</span><div><h2 style="font-size:18px;font-weight:800;color:${p.color}">${p.title}</h2><span class="mono" style="font-size:10px;color:#6B7394">${p.time}</span></div></div>`;
+    h += `<p style="font-size:12px;color:#8892B0;margin:6px 0 12px;line-height:1.5;font-style:italic">${p.goal}</p>`;
+    h += `<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span class="mono" style="font-size:9px;color:#6B7394">PROGRESO</span><span class="mono" style="font-size:9px;color:${p.color};font-weight:700">${prog}%</span></div><div class="progress-bar"><div class="progress-fill" style="width:${prog}%;background:${p.color}"></div></div><div style="height:14px"></div>`;
+    p.sections.forEach((s,si) => {
+      h += `<div class="card"><h3 style="font-size:12px;font-weight:700;margin-bottom:8px;color:#C0C8E0">${s.h}</h3>`;
+      s.tasks.forEach((task,ti) => {
+        const k = `${p.id}-${si}-${ti}`;
+        const d = completed[k];
+        h += `<div class="task ${d?'done':''}" onclick="toggleTask('${k}')"><div class="checkbox" style="${d?`background:${p.color}`:`border:2px solid ${p.color}35`}">${d?'✓':''}</div><div style="flex:1"><span class="task-text">${task.t}</span><span class="badge" style="color:${pColor(task.p)};background:${pColor(task.p)}10">${task.p.toUpperCase()}</span></div></div>`;
+      });
+      h += `</div>`;
+    });
+  }
+
+  else if (activeTab === "equipo") {
+    h += `<h2 style="font-size:18px;font-weight:800;margin-bottom:4px">Equipo por Fase</h2><p style="font-size:12px;color:#7A84A0;margin-bottom:16px">Personal necesario, funciones y costos estimados en cada etapa de crecimiento</p>`;
+
+    DATA.team.forEach(fase => {
+      h += `<div class="card" style="border-color:${fase.faseColor}20;padding-bottom:8px">`;
+      h += `<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;flex-wrap:wrap;gap:6px"><div><h3 style="font-size:14px;font-weight:800;color:${fase.faseColor};margin-bottom:2px">${fase.fase}</h3><span class="mono" style="font-size:10px;color:#6B7394">${fase.time}</span></div><div style="text-align:right"><div style="font-size:12px;font-weight:700;color:#FFD600">${fase.personas}</div><div class="mono" style="font-size:10px;color:#7A84A0">${fase.costoMes}</div></div></div>`;
+
+      fase.roles.forEach(role => {
+        h += `<div style="background:rgba(255,255,255,.02);border-radius:10px;padding:12px;margin-bottom:8px;border-left:3px solid ${role.color}">`;
+        h += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:4px"><div style="font-size:13px;font-weight:700;color:${role.color}">${role.titulo}</div><div style="display:flex;gap:6px;flex-wrap:wrap">`;
+        h += `<span class="mono" style="font-size:9px;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,.05);color:#A0AAC0">${typeof role.cant === 'number' ? role.cant + ' persona' + (role.cant > 1 ? 's':'') : role.cant + ' personas'}</span>`;
+        h += `<span class="mono" style="font-size:9px;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,.05);color:#A0AAC0">${role.tipo}</span>`;
+        if(role.salario !== "—" && role.salario !== "Según inversión") h += `<span class="mono" style="font-size:9px;padding:2px 6px;border-radius:4px;background:rgba(0,230,118,.08);color:#00E676">${role.salario}</span>`;
+        h += `</div></div>`;
+        role.funciones.forEach(f => {
+          h += `<div style="display:flex;gap:6px;margin-bottom:3px;font-size:11px;color:#A0AAC0;line-height:1.5"><span style="color:${role.color};flex-shrink:0">›</span>${f}</div>`;
+        });
+        h += `</div>`;
+      });
+
+      if(fase.nota) h += `<div style="margin-top:4px;padding:8px 10px;background:rgba(255,214,0,.05);border-radius:8px;font-size:11px;color:#D4C47A;line-height:1.5">💡 ${fase.nota}</div>`;
+      h += `</div>`;
+    });
+
+    // Summary table
+    h += `<div class="card" style="border-color:rgba(255,255,255,.08)"><h3 style="font-size:14px;font-weight:700;margin-bottom:10px;color:#FFD600">📊 Resumen de Crecimiento del Equipo</h3>`;
+    [{f:"F1-2",t:"Mes 0-1",p:"2-3",c:"$150-300",i:"$750-800",r:"Viable desde membresías"},{f:"F3",t:"Mes 2-3",p:"4-5",c:"$500-800",i:"$3,000-4,000",r:"Equipo se paga con membresías"},{f:"F4",t:"Mes 4-8",p:"8-12",c:"$1,500-3,000",i:"$15,000-20,000",r:"Margen de ganancia amplio"},{f:"F5",t:"Mes 9-12",p:"15-20",c:"$4,000-7,000",i:"$45,000-60,000",r:"Escala + inversión"}].forEach((r,i) => {
+      h += `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;${i?'border-top:1px solid rgba(255,255,255,.04)':''}"><div><div style="font-size:12px;font-weight:600;color:#D0D8F0">${r.f} · ${r.t}</div><div style="font-size:10px;color:#6B7394">${r.p} personas · Costo: ${r.c}/mes</div></div><div style="text-align:right"><div class="mono" style="font-size:13px;font-weight:700;color:#00E676">${r.i}/mes</div><div style="font-size:9px;color:#7A84A0">${r.r}</div></div></div>`;
+    });
+    h += `</div>`;
+
+    // Key insight
+    h += `<div class="card" style="background:linear-gradient(135deg,#111628,#0D1628);border-color:rgba(255,255,255,.08)"><h3 style="font-size:14px;font-weight:700;margin-bottom:8px;color:#00E676">⚡ Contrataciones Clave en Orden de Prioridad</h3>`;
+    [{n:"1º Captador de Conductores",w:"Desde el día 1",why:"Sin conductores no hay app. Esta persona va a la calle a reclutar mientras tú desarrollas."},{n:"2º Community Manager",w:"Semana 1",why:"Las RRSS deben existir antes del lanzamiento. Sin presencia digital, no generas confianza."},{n:"3º Coordinador de Operaciones",w:"Mes 2",why:"Te libera de la operación diaria para enfocarte en producto y estrategia."},{n:"4º Desarrollador Full-Stack",w:"Mes 4",why:"Para iOS, nuevas features y escalar. Claude Code ayuda pero necesitas alguien dedicado."},{n:"5º COO (Director Operaciones)",w:"Mes 9",why:"Gestiona toda la operación nacional. Tú te enfocas 100% en crecimiento e inversión."}].forEach((c,i) => {
+      h += `<div style="padding:8px 0;${i?'border-top:1px solid rgba(255,255,255,.04)':''}"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:12px;font-weight:700;color:#D0D8F0">${c.n}</span><span class="mono" style="font-size:10px;color:#448AFF">${c.w}</span></div><div style="font-size:11px;color:#8892B0;line-height:1.4">${c.why}</div></div>`;
+    });
+    h += `</div>`;
+  }
+
+  else if (activeTab === "claude") {
+    h += `<h2 style="font-size:18px;font-weight:800;margin-bottom:4px">Herramientas Claude para Higo</h2><p style="font-size:12px;color:#7A84A0;margin-bottom:16px">Cómo usar Claude Code y Claude Cowork para acelerar cada fase</p>`;
+    // Claude Code
+    h += `<div class="card" style="border-color:rgba(255,109,0,.15)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><div style="width:32px;height:32px;border-radius:8px;background:#FF6D00;display:flex;align-items:center;justify-content:center;font-size:16px">⌨️</div><div><h3 style="font-size:16px;font-weight:800;color:#FF6D00">Claude Code</h3><p class="mono" style="font-size:10px;color:#7A84A0">DESARROLLO · TERMINAL</p></div></div><p style="font-size:11px;color:#8892B0;margin-bottom:12px;line-height:1.5">Herramienta de línea de comandos. Lee tu codebase, escribe archivos, ejecuta comandos y hace debugging desde la terminal.</p><div style="font-size:12px;font-weight:600;color:#FF6D00;margin-bottom:8px">Tareas para Higo:</div>`;
+    DATA.claudeCode.forEach(g => {
+      h += `<div class="claude-group"><div class="claude-phase" style="color:#FF6D00;background:#FF6D0010">${g.fase}</div>`;
+      g.tasks.forEach(t => h += `<div class="claude-task"><span style="color:#FF6D00">›</span>${t}</div>`);
+      h += `</div>`;
+    });
+    h += `</div>`;
+    // Claude Cowork
+    h += `<div class="card" style="border-color:rgba(68,138,255,.15)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><div style="width:32px;height:32px;border-radius:8px;background:#448AFF;display:flex;align-items:center;justify-content:center;font-size:16px">🖥️</div><div><h3 style="font-size:16px;font-weight:800;color:#448AFF">Claude Cowork</h3><p class="mono" style="font-size:10px;color:#7A84A0">CONOCIMIENTO · DESKTOP</p></div></div><p style="font-size:11px;color:#8892B0;margin-bottom:12px;line-height:1.5">Herramienta de escritorio para trabajo de conocimiento. Accede a archivos locales, crea documentos, spreadsheets, presentaciones. Trabaja autónomo vía Dispatch desde el celular.</p><div style="font-size:12px;font-weight:600;color:#448AFF;margin-bottom:8px">Tareas para Higo:</div>`;
+    DATA.claudeCowork.forEach(g => {
+      h += `<div class="claude-group"><div class="claude-phase" style="color:#448AFF;background:#448AFF10">${g.fase}</div>`;
+      g.tasks.forEach(t => h += `<div class="claude-task"><span style="color:#448AFF">›</span>${t}</div>`);
+      h += `</div>`;
+    });
+    h += `</div>`;
+    // Dispatch
+    h += `<div class="card" style="border-color:rgba(170,0,255,.15)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><div style="width:32px;height:32px;border-radius:8px;background:#AA00FF;display:flex;align-items:center;justify-content:center;font-size:16px">📲</div><div><h3 style="font-size:16px;font-weight:800;color:#AA00FF">Dispatch (Cowork Mobile)</h3><p class="mono" style="font-size:10px;color:#7A84A0">TAREAS DESDE EL CELULAR</p></div></div><p style="font-size:11px;color:#8892B0;margin-bottom:12px;line-height:1.5">Envía tareas a Claude desde tu teléfono mientras estás reclutando conductores, en un evento, o viajando.</p>`;
+    DATA.dispatch.forEach(ex => h += `<div class="dispatch-item"><span style="color:#AA00FF">📱</span>${ex}</div>`);
+    h += `</div>`;
+    // Summary
+    h += `<div class="card" style="background:linear-gradient(135deg,#111628,#0D1628);border-color:rgba(255,255,255,.08)"><h3 style="font-size:14px;font-weight:700;margin-bottom:10px;color:#FFD600">⚡ Resumen: Quién Hace Qué</h3>`;
+    [{t:"Claude Code ⌨️",c:"#FF6D00",d:"Todo CÓDIGO: features, bugs, APIs, iOS, analytics, infraestructura"},{t:"Claude Cowork 🖥️",c:"#448AFF",d:"Todo CONTENIDO: marketing, reportes, spreadsheets, presentaciones, investigación"},{t:"Dispatch 📲",c:"#AA00FF",d:"SOBRE LA MARCHA: tareas desde el celular mientras trabajas en la calle"},{t:"Claude Chat 💬",c:"#00E676",d:"Estrategia, brainstorming, análisis — como esta conversación"}].forEach(i => h += `<div class="summary-row"><span class="summary-tool" style="color:${i.c}">${i.t}</span><span class="summary-desc">${i.d}</span></div>`);
+    h += `</div>`;
+  }
+
+  else if (activeTab === "estrategia") {
+    h += `<h2 style="font-size:18px;font-weight:800;margin-bottom:12px">Estrategia y Tácticas</h2>`;
+    DATA.strategy.forEach(n => {
+      h += `<div class="card" style="border-color:${n.color}12"><h3 style="font-size:13px;font-weight:700;margin-bottom:8px;color:${n.color}">${n.title}</h3>`;
+      n.items.forEach(i => h += `<div class="strategy-item"><span style="color:${n.color}">▸</span>${i}</div>`);
+      h += `</div>`;
+    });
+  }
+
+  C.innerHTML = h;
+}
+
+render();
+</script>
+</body>
+</html>

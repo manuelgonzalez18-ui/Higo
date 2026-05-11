@@ -1099,7 +1099,10 @@ const DriverDashboard = () => {
 
                 // Acreditar referido pendiente del pasajero (si aplica)
                 if (activeRide.user_id) {
-                    supabase.rpc('credit_pending_referral', { p_user_id: activeRide.user_id }).catch(() => {});
+                    supabase.rpc('credit_pending_referral', { p_user_id: activeRide.user_id }).then(
+                        ({ error }) => { if (error) console.warn("Referral credit warning:", error); },
+                        (err) => console.error("Referral credit error:", err)
+                    );
                 }
 
                 const isSenderPayer = isDelivery && (activeRide.delivery_info?.payer === 'sender' || activeRide.payer === 'sender');

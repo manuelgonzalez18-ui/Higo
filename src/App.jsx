@@ -28,8 +28,11 @@ import { initGlobalAudio } from './services/notificationService';
 import { ensureFcmRegistration, subscribeForegroundMessages } from './services/pushNotifications';
 import DriverRequestCard from './components/DriverRequestCard';
 import { supabase } from './services/supabase';
+import { useGeolocation } from './hooks/useGeolocation';
+import LocationDisclosure from './components/LocationDisclosure';
 
 const App = () => {
+  const { showDisclosure, handleAcceptDisclosure } = useGeolocation();
   const [incomingRequest, setIncomingRequest] = useState(null);
 
   // --- GLOBAL SESSION LOCKING ---
@@ -148,6 +151,8 @@ const App = () => {
         <Route path="/join" element={<DriverLandingPage />} />
       </Routes>
       <ChatWidget />
+
+      {showDisclosure && <LocationDisclosure onAccept={handleAcceptDisclosure} />}
 
       {/* Driver Request Overlay */}
       <DriverRequestCard
