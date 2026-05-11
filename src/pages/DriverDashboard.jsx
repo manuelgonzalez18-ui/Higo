@@ -90,6 +90,7 @@ const DriverDashboard = () => {
     const [showPaymentQR, setShowPaymentQR] = useState(false);
     const [showTripDetails, setShowTripDetails] = useState(false); // Floating Info State
     const [isCardMinimized, setIsCardMinimized] = useState(false); // New: Card Minimized State
+    const [completing, setCompleting] = useState(false); // Terminar Viaje in-flight
     const lastLocationRef = React.useRef(null);
     const profileRef = React.useRef(null);
     const headingRef = React.useRef(0);
@@ -1082,23 +1083,35 @@ const DriverDashboard = () => {
 
         } else if (navStep === 2) {
             // ARRIVED AT DROPOFF (Terminating)
-            await supabase.from('rides').update({ status: 'completed' }).eq('id', activeRide.id);
+            if (completing) return;
+            setCompleting(true);
+            try {
+                const { error: completeErr } = await supabase
+                    .from('rides')
+                    .update({ status: 'completed' })
+                    .eq('id', activeRide.id);
 
-            // Acreditar referido pendiente del pasajero (si aplica)
-            if (activeRide.user_id) {
-                supabase.rpc('credit_pending_referral', { p_user_id: activeRide.user_id }).catch(() => {});
-            }
+                if (completeErr) {
+                    alert(`No se pudo completar el viaje: ${completeErr.message}`);
+                    return;
+                }
 
-            const isSenderPayer = isDelivery && (activeRide.delivery_info?.payer === 'sender' || activeRide.payer === 'sender');
+                // Acreditar referido pendiente del pasajero (si aplica)
+                if (activeRide.user_id) {
+                    supabase.rpc('credit_pending_referral', { p_user_id: activeRide.user_id }).catch(() => {});
+                }
 
-            if (isSenderPayer) {
-                // Already paid at start, just finish
-                speak("Entrega finalizada. Gracias.");
-                closeRide();
-            } else {
-                // Receiver Pays or Standard Passenger (Always Pay at End)
-                speak(`Viaje completado. Muestre el código QR para el pago.`);
-                setShowPaymentQR(true);
+                const isSenderPayer = isDelivery && (activeRide.delivery_info?.payer === 'sender' || activeRide.payer === 'sender');
+
+                if (isSenderPayer) {
+                    speak("Entrega finalizada. Gracias.");
+                    closeRide();
+                } else {
+                    speak(`Viaje completado. Muestre el código QR para el pago.`);
+                    setShowPaymentQR(true);
+                }
+            } finally {
+                setCompleting(false);
             }
         }
     };
@@ -1130,12 +1143,8 @@ const DriverDashboard = () => {
             speak(`Pago confirmado. Iniciando viaje al destino.`);
             await supabase.from('rides').update({ status: 'in_progress' }).eq('id', activeRide.id);
         } else {
-            // If we were at Step 2 (Receiver Paid), finish
-            setActiveRide(null);
-            setNavStep(0);
-            setRequests([]);
-            stopLoopingRequestAlert();
-            window.location.reload();
+            // navStep 2: ride is already 'completed' in DB — just clean up local state
+            closeRide();
         }
     };
 
@@ -1431,11 +1440,20 @@ const DriverDashboard = () => {
 
                             <button
                                 onClick={handleCompleteStep}
-                                disabled={navStep === 1 && !arrivalTime}
+                                disabled={(navStep === 1 && !arrivalTime) || completing}
                                 className={`w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-[20px] font-bold text-lg shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 active:scale-95 transition-all ${isCardMinimized ? 'py-3 text-base' : 'py-4'}`}
                             >
-                                <span>{navStep === 1 ? "Iniciar Viaje" : "Terminar Viaje"}</span>
-                                <span className="material-symbols-outlined">arrow_forward</span>
+                                {completing ? (
+                                    <>
+                                        <span className="material-symbols-outlined animate-spin text-xl">progress_activity</span>
+                                        <span>Completando…</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span>{navStep === 1 ? "Iniciar Viaje" : "Terminar Viaje"}</span>
+                                        <span className="material-symbols-outlined">arrow_forward</span>
+                                    </>
+                                )}
                             </button>
                         </div>
                     </div>
