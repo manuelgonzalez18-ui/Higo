@@ -1093,6 +1093,7 @@ const DriverDashboard = () => {
 
                 if (completeErr) {
                     alert(`No se pudo completar el viaje: ${completeErr.message}`);
+                    setCompleting(false);
                     return;
                 }
 
@@ -1103,6 +1104,10 @@ const DriverDashboard = () => {
 
                 const isSenderPayer = isDelivery && (activeRide.delivery_info?.payer === 'sender' || activeRide.payer === 'sender');
 
+                // Reset completing BEFORE showing QR / closing — so the button is reset
+                // even if a re-render happens before we finish.
+                setCompleting(false);
+
                 if (isSenderPayer) {
                     speak("Entrega finalizada. Gracias.");
                     closeRide();
@@ -1110,7 +1115,9 @@ const DriverDashboard = () => {
                     speak(`Viaje completado. Muestre el código QR para el pago.`);
                     setShowPaymentQR(true);
                 }
-            } finally {
+            } catch (err) {
+                console.error('Error completando viaje:', err);
+                alert(`Error inesperado al completar el viaje: ${err?.message || err}`);
                 setCompleting(false);
             }
         }
