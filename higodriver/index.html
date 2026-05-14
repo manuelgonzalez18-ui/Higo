@@ -65,12 +65,21 @@
             font-family: inherit;
             outline: none;
             transition: border-color .15s, background .15s;
+            color-scheme: dark;
         }
         .register-form input:focus,
         .register-form select:focus,
         .register-form textarea:focus {
             border-color: #60A5FA;
             background: rgba(255,255,255,0.09);
+        }
+        .register-form select option {
+            background: #0A1330;
+            color: #fff;
+        }
+        .register-form input::placeholder,
+        .register-form textarea::placeholder {
+            color: #64748b;
         }
         .register-form input[type="file"] {
             padding: 10px;
