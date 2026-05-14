@@ -40,6 +40,15 @@ const AdminDriversPage = () => {
     });
 
     const [message, setMessage] = useState(null);
+    const [avatarFile, setAvatarFile] = useState(null);
+    const [avatarPreview, setAvatarPreview] = useState(null);
+
+    const handleAvatarChange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setAvatarFile(file);
+        setAvatarPreview(URL.createObjectURL(file));
+    };
 
     // Fetch Drivers
     const fetchDrivers = async () => {
@@ -184,9 +193,22 @@ const AdminDriversPage = () => {
         try {
             const fakeUUID = crypto.randomUUID();
 
-            // Insert Profile
+            // Upload avatar photo if selected
+            let avatarUrl = processGoogleDriveLink(newDriver.avatar_url);
+            if (avatarFile) {
+                const ext = avatarFile.name.split('.').pop().toLowerCase();
+                const path = `${fakeUUID}/avatar.${ext}`;
+                const { error: uploadErr } = await supabase.storage
+                    .from('avatars')
+                    .upload(path, avatarFile, { upsert: true });
+                if (!uploadErr) {
+                    const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+                    avatarUrl = data.publicUrl;
+                }
+            }
+
             const { error } = await supabase.from('profiles').insert([{
-                id: fakeUUID, // Ideally this comes from auth.signUp()
+                id: fakeUUID,
                 full_name: newDriver.full_name,
                 phone: newDriver.phone,
                 role: 'driver',
@@ -196,7 +218,7 @@ const AdminDriversPage = () => {
                 vehicle_model: newDriver.vehicle_model,
                 vehicle_color: newDriver.vehicle_color,
                 license_plate: newDriver.license_plate,
-                avatar_url: processGoogleDriveLink(newDriver.avatar_url),
+                avatar_url: avatarUrl,
                 payment_qr_url: processGoogleDriveLink(newDriver.payment_qr_url),
                 subscription_status: 'active',
                 last_payment_date: new Date().toISOString()
@@ -204,8 +226,10 @@ const AdminDriversPage = () => {
 
             if (error) throw error;
 
-            setMessage({ type: 'success', text: `Driver registered!(Fake UUID: ${fakeUUID})` });
+            setMessage({ type: 'success', text: 'Conductor registrado exitosamente.' });
             setShowRegisterModal(false);
+            setAvatarFile(null);
+            setAvatarPreview(null);
             fetchDrivers();
         } catch (error) {
             setMessage({ type: 'error', text: error.message });
@@ -477,12 +501,29 @@ const AdminDriversPage = () => {
                                 <span className="material-symbols-outlined text-violet-500">person_add</span>
                                 Nuevo Conductor
                             </h2>
-                            <button onClick={() => setShowRegisterModal(false)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all">
+                            <button onClick={() => { setShowRegisterModal(false); setAvatarFile(null); setAvatarPreview(null); }} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all">
                                 <span className="material-symbols-outlined text-sm">close</span>
                             </button>
                         </div>
 
                         <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                            {/* Avatar picker */}
+                            <div className="flex flex-col items-center gap-3 mb-2">
+                                <div className="relative">
+                                    <div className="w-24 h-24 rounded-full bg-[#0F1014] border-2 border-white/10 overflow-hidden flex items-center justify-center">
+                                        {avatarPreview
+                                            ? <img src={avatarPreview} className="w-full h-full object-cover" alt="preview" />
+                                            : <span className="material-symbols-outlined text-4xl text-gray-500">person</span>
+                                        }
+                                    </div>
+                                    <label className="absolute -bottom-1 -right-1 w-8 h-8 bg-violet-600 rounded-full flex items-center justify-center cursor-pointer hover:bg-violet-500 transition-colors border-2 border-[#1A1F2E]">
+                                        <span className="material-symbols-outlined text-white text-sm">photo_camera</span>
+                                        <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+                                    </label>
+                                </div>
+                                <p className="text-xs text-gray-500">Foto del conductor (opcional)</p>
+                            </div>
+
                             <div>
                                 <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Nombre Completo</label>
                                 <input
@@ -610,4 +651,3 @@ const AdminDriversPage = () => {
 };
 
 export default AdminDriversPage;
-
