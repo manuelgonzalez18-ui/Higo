@@ -187,49 +187,78 @@ const AdminDriversPage = () => {
         }
     };
 
-    // Handle Registration (Simulation of Auth + DB)
+    // Handle Registration: crea auth user + profile + envía email de bienvenida.
+    // Todo lo hace public/api/welcome-driver.php (backend con service_role).
+    // La foto se sube aparte una vez que tenemos el user_id real del auth user.
     const handleRegister = async () => {
+        if (!newDriver.full_name || !newDriver.email || !newDriver.password) {
+            setMessage({ type: 'error', text: 'Nombre, correo y contraseña son obligatorios.' });
+            return;
+        }
         setLoading(true);
         try {
-            const fakeUUID = crypto.randomUUID();
+            const { data: sessionData } = await supabase.auth.getSession();
+            const accessToken = sessionData?.session?.access_token;
+            if (!accessToken) throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
 
-            // Upload avatar photo if selected
-            let avatarUrl = processGoogleDriveLink(newDriver.avatar_url);
+            const res = await fetch('/api/welcome-driver.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({
+                    full_name: newDriver.full_name,
+                    email: newDriver.email,
+                    password: newDriver.password,
+                    phone: newDriver.phone,
+                    vehicle_type: newDriver.vehicle_type,
+                    vehicle_brand: newDriver.vehicle_brand,
+                    vehicle_model: newDriver.vehicle_model,
+                    vehicle_color: newDriver.vehicle_color,
+                    license_plate: newDriver.license_plate,
+                    payment_qr_url: processGoogleDriveLink(newDriver.payment_qr_url),
+                }),
+            });
+            const result = await res.json().catch(() => ({}));
+            if (!res.ok || !result.ok) {
+                const detail = result.detail || result.error || `HTTP ${res.status}`;
+                throw new Error(`No se pudo registrar al conductor: ${detail}`);
+            }
+
+            const userId = result.user_id;
+
+            // Sube la foto y actualiza el perfil con la URL pública.
             if (avatarFile) {
                 const ext = avatarFile.name.split('.').pop().toLowerCase();
-                const path = `${fakeUUID}/avatar.${ext}`;
+                const path = `${userId}/avatar.${ext}`;
                 const { error: uploadErr } = await supabase.storage
                     .from('avatars')
                     .upload(path, avatarFile, { upsert: true });
                 if (!uploadErr) {
                     const { data } = supabase.storage.from('avatars').getPublicUrl(path);
-                    avatarUrl = data.publicUrl;
+                    await supabase.from('profiles')
+                        .update({ avatar_url: data.publicUrl })
+                        .eq('id', userId);
                 }
+            } else if (newDriver.avatar_url) {
+                await supabase.from('profiles')
+                    .update({ avatar_url: processGoogleDriveLink(newDriver.avatar_url) })
+                    .eq('id', userId);
             }
 
-            const { error } = await supabase.from('profiles').insert([{
-                id: fakeUUID,
-                full_name: newDriver.full_name,
-                phone: newDriver.phone,
-                role: 'driver',
-                status: 'offline',
-                vehicle_type: newDriver.vehicle_type,
-                vehicle_brand: newDriver.vehicle_brand,
-                vehicle_model: newDriver.vehicle_model,
-                vehicle_color: newDriver.vehicle_color,
-                license_plate: newDriver.license_plate,
-                avatar_url: avatarUrl,
-                payment_qr_url: processGoogleDriveLink(newDriver.payment_qr_url),
-                subscription_status: 'active',
-                last_payment_date: new Date().toISOString()
-            }]);
-
-            if (error) throw error;
-
-            setMessage({ type: 'success', text: 'Conductor registrado exitosamente.' });
+            const emailNote = result.email_sent
+                ? 'Correo de bienvenida enviado.'
+                : 'Conductor creado, pero falló el envío del correo de bienvenida.';
+            setMessage({ type: 'success', text: `Conductor registrado exitosamente. ${emailNote}` });
             setShowRegisterModal(false);
             setAvatarFile(null);
             setAvatarPreview(null);
+            setNewDriver({
+                full_name: '', phone: '', vehicle_type: 'Carro',
+                vehicle_brand: '', vehicle_model: '', vehicle_color: '', license_plate: '',
+                email: '', password: '', avatar_url: '', payment_qr_url: ''
+            });
             fetchDrivers();
         } catch (error) {
             setMessage({ type: 'error', text: error.message });
