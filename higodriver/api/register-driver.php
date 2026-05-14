@@ -115,7 +115,7 @@ $planLabel = [
 ][$plan];
 
 $to      = 'admin@higodriver.com';
-$subject = '=?UTF-8?B?' . base64_encode("Nueva solicitud Higo Driver — {$fullName}") . '?=';
+$subject = '=?UTF-8?B?' . base64_encode("Nueva solicitud Higo App — {$fullName}") . '?=';
 
 $safe = fn(string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 
@@ -154,7 +154,7 @@ $html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head>'
     . '<p style="margin:18px 0 0;font-size:13px;color:#6b7280;">Las 4 fotos están adjuntas en este correo.</p>'
     . '</td></tr>'
     . '<tr><td style="padding:14px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:12px;color:#6b7280;text-align:center;">'
-    . 'Higo Driver · higodriver.com'
+    . 'Higo App · higodriver.com'
     . '</td></tr>'
     . '</table></td></tr></table></body></html>';
 

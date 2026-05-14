@@ -222,7 +222,7 @@ $html = '<!DOCTYPE html>
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);">
     <tr><td style="background:linear-gradient(135deg,#7c3aed,#c026d3);padding:28px 24px;color:#fff;text-align:center;">
         <h1 style="margin:0;font-size:22px;font-weight:800;">¡Bienvenido a Higo, ' . $safeName . '!</h1>
-        <p style="margin:8px 0 0;font-size:14px;opacity:.9;">Ya eres parte de la flota Higo Driver</p>
+        <p style="margin:8px 0 0;font-size:14px;opacity:.9;">Ya eres parte de la flota Higo App</p>
     </td></tr>
 
     <tr><td style="padding:24px;color:#1f2937;font-size:14px;line-height:1.6;">
@@ -244,12 +244,12 @@ $html = '<!DOCTYPE html>
 
         <p style="margin:0 0 12px;font-weight:700;color:#111827;">1. Descarga la app</p>
         <p style="margin:0 0 16px;">
-            Instala Higo Driver desde Google Play:
+            Instala Higo App desde Google Play:
         </p>
         <p style="text-align:center;margin:0 0 24px;">
             <a href="' . $playStoreUrl . '"
                style="display:inline-block;background:#7c3aed;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px;">
-                📱 Descargar Higo Driver
+                📱 Descargar Higo App
             </a>
         </p>
 
@@ -313,7 +313,7 @@ $body  = "--{$boundary}\r\n"
        . $html . "\r\n"
        . "--{$boundary}--\r\n";
 
-$subject = "=?UTF-8?B?" . base64_encode("Bienvenido a Higo Driver — {$fullName}") . "?=";
+$subject = "=?UTF-8?B?" . base64_encode("Bienvenido a Higo App — {$fullName}") . "?=";
 $headers  = "From: noreply@higoapp.com\r\n";
 $headers .= "Reply-To: admin@higoapp.com\r\n";
 $headers .= "MIME-Version: 1.0\r\n";
