@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Higo Driver · Gana sin comisión. Cobra directo.</title>
+    <meta name="description" content="Higo es la app de movilidad y envíos de Venezuela sin comisiones por viaje. Paga una membresía mensual fija, recibe el pago directo del pasajero a tu Pago Móvil. Únete como conductor de moto, carro o camioneta.">
+    <meta name="keywords" content="taxi venezuela, mototaxi venezuela, conductor higo, app de taxi sin comisión, higuerote taxi, higo app, trabajar conduciendo venezuela, pago móvil conductor">
+    <meta name="author" content="Higo App">
+    <meta name="theme-color" content="#0A1330">
+
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Higo Driver · Gana sin comisión. Cobra directo.">
+    <meta property="og:description" content="Paga una membresía mensual fija. El pasajero te paga directo a tu Pago Móvil. Únete como conductor de moto, carro o camioneta.">
+    <meta property="og:url" content="https://higodriver.com/">
+    <meta property="og:image" content="https://higodriver.com/assets/logo.svg">
+    <meta property="og:locale" content="es_VE">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Higo Driver · Gana sin comisión. Cobra directo.">
+    <meta name="twitter:description" content="La app de movilidad y envíos de Venezuela. Membresía fija. Pago directo.">
+
+    <link rel="canonical" href="https://higodriver.com/">
+    <link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
+    <link rel="stylesheet" href="/assets/style.css">
+
+    <style>
+        /* ── Formulario de registro de conductor ───────────────────── */
+        .register-form {
+            max-width: 720px;
+            margin: 24px auto 0;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 28px 24px;
+            text-align: left;
+        }
+        .register-form .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+        @media (max-width: 600px) {
+            .register-form .row { grid-template-columns: 1fr; }
+        }
+        .register-form .field { display: flex; flex-direction: column; }
+        .register-form label {
+            font-size: 12px;
+            font-weight: 700;
+            color: #cbd5e1;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            margin-bottom: 6px;
+        }
+        .register-form input,
+        .register-form select,
+        .register-form textarea {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 10px;
+            padding: 12px 14px;
+            color: #fff;
+            font-size: 15px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color .15s, background .15s;
+        }
+        .register-form input:focus,
+        .register-form select:focus,
+        .register-form textarea:focus {
+            border-color: #60A5FA;
+            background: rgba(255,255,255,0.09);
+        }
+        .register-form input[type="file"] {
+            padding: 10px;
+            cursor: pointer;
+        }
+        .register-form input[type="file"]::file-selector-button {
+            background: #60A5FA;
+            color: #0A1330;
+            border: 0;
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 13px;
+            margin-right: 12px;
+            cursor: pointer;
+        }
+        .register-form .hint {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+        .register-form .docs-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #cbd5e1;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            margin: 12px 0 10px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+        }
+        .register-form .submit-row {
+            margin-top: 18px;
+            text-align: center;
+        }
+        .register-form .submit-btn {
+            width: 100%;
+            padding: 14px 22px;
+            font-size: 16px;
+            font-weight: 800;
+            border: 0;
+            border-radius: 12px;
+            cursor: pointer;
+            background: linear-gradient(135deg, #60A5FA, #3B82F6);
+            color: #0A1330;
+            transition: transform .15s, box-shadow .15s, opacity .15s;
+        }
+        .register-form .submit-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(96,165,250,.3); }
+        .register-form .submit-btn:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+        .register-form .status {
+            margin-top: 14px;
+            padding: 12px 14px;
+            border-radius: 10px;
+            font-size: 14px;
+            display: none;
+        }
+        .register-form .status.ok {
+            display: block;
+            background: rgba(34,197,94,0.12);
+            border: 1px solid rgba(34,197,94,0.3);
+            color: #86efac;
+        }
+        .register-form .status.err {
+            display: block;
+            background: rgba(239,68,68,0.12);
+            border: 1px solid rgba(239,68,68,0.3);
+            color: #fca5a5;
+        }
+        .alt-cta {
+            margin-top: 22px;
+            font-size: 13px;
+            color: #94a3b8;
+            text-align: center;
+        }
+        .alt-cta a { color: #60A5FA; }
+    </style>
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Higo",
+      "url": "https://higodriver.com",
+      "logo": "https://higodriver.com/assets/logo.svg",
+      "description": "App de movilidad y envíos en Venezuela con modelo de membresía para conductores.",
+      "areaServed": "VE",
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "contactType": "customer support",
+        "availableLanguage": ["Spanish"]
+      }
+    }
+    </script>
+</head>
+<body>
+
+<header>
+    <nav class="nav" aria-label="Navegación principal">
+        <a class="brand" href="/">
+            <img src="/assets/logo.svg" alt="Logo Higo">
+            <strong>Higo <span style="color:#60A5FA">Driver</span></strong>
+        </a>
+        <div class="nav-links">
+            <a href="#planes">Planes</a>
+            <a href="#como-funciona">Cómo funciona</a>
+            <a href="#unirme">Unirme</a>
+        </div>
+    </nav>
+</header>
+
+<main>
+    <section class="hero">
+        <h1>Gana sin comisión.<br><span>Cobra directo.</span></h1>
+        <p class="lead">Higo es la app de movilidad y envíos de Venezuela donde el pasajero te paga directo a tu Pago Móvil. Pagas una membresía mensual fija y todo lo que ganas es tuyo.</p>
+        <div class="cta-row">
+            <a class="btn btn-primary" href="#unirme">Unirme como conductor</a>
+            <a class="btn btn-ghost" href="#como-funciona">Cómo funciona</a>
+        </div>
+    </section>
+
+    <section id="ventajas">
+        <h2>¿Por qué Higo?</h2>
+        <p class="sub">Tres cosas que hacemos distinto a Yummy y Ridery.</p>
+        <div class="grid">
+            <div class="card">
+                <div class="ico">💰</div>
+                <h3>Cero comisión por viaje</h3>
+                <p>No te quitamos un porcentaje de cada carrera. Pagas una membresía fija al mes y el resto es tuyo.</p>
+            </div>
+            <div class="card">
+                <div class="ico">⚡</div>
+                <h3>Pago directo e instantáneo</h3>
+                <p>Al terminar el viaje, el pasajero escanea tu QR de Pago Móvil y te paga al momento. Sin esperar liquidaciones bancarias.</p>
+            </div>
+            <div class="card">
+                <div class="ico">📍</div>
+                <h3>Ciudades sin cobertura</h3>
+                <p>Empezamos en Higuerote y expandimos a zonas donde las apps grandes no llegan. Tu clientela local, sin saturación.</p>
+            </div>
+            <div class="card">
+                <div class="ico">🚀</div>
+                <h3>Moto, carro y camioneta</h3>
+                <p>Elige el plan que se ajuste a tu vehículo. Haz viajes, envíos (Higo Envíos) y mandados (Higo Mandados).</p>
+            </div>
+            <div class="card">
+                <div class="ico">🛡️</div>
+                <h3>Botón SOS + chat</h3>
+                <p>Chat con el pasajero, llamada directa, botón de emergencia y compartir ubicación en tiempo real.</p>
+            </div>
+            <div class="card">
+                <div class="ico">📱</div>
+                <h3>Disponible en Android</h3>
+                <p>Descarga la app desde Google Play. Versión para iOS en camino.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="planes">
+        <h2>Planes de membresía</h2>
+        <p class="sub">Paga una vez al mes y trabaja sin comisiones. Primer mes gratis para los primeros 50 conductores de Higuerote.</p>
+        <div class="plans">
+            <div class="plan">
+                <div class="plan-name">Higo Moto</div>
+                <div class="plan-price">$10<small>/mes</small></div>
+                <ul>
+                    <li>Viajes en moto</li>
+                    <li>Higo Envíos</li>
+                    <li>Perfil verificado</li>
+                    <li>Soporte por WhatsApp</li>
+                </ul>
+            </div>
+            <div class="plan featured">
+                <div class="plan-name">Higo Carro</div>
+                <div class="plan-price">$20<small>/mes</small></div>
+                <ul>
+                    <li>Todo lo del plan Moto</li>
+                    <li>Viajes en carro</li>
+                    <li>Inter-ciudad</li>
+                    <li>Prioridad turistas</li>
+                    <li>Badge verificado</li>
+                </ul>
+            </div>
+            <div class="plan">
+                <div class="plan-name">Higo Camioneta</div>
+                <div class="plan-price">$25<small>/mes</small></div>
+                <ul>
+                    <li>Todo lo del plan Carro</li>
+                    <li>Grupos hasta 8 pasajeros</li>
+                    <li>Mudanzas y carga</li>
+                    <li>Rutas turísticas</li>
+                    <li>Prioridad máxima</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <section id="comparacion">
+        <h2>Higo vs. la competencia</h2>
+        <p class="sub">Números en base a una semana de trabajo con $500 en viajes.</p>
+        <div class="compare">
+            <table>
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Yummy</th>
+                        <th>Ridery</th>
+                        <th>Higo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Comisión por viaje</strong></td>
+                        <td class="no">~20 %</td>
+                        <td class="no">~18 %</td>
+                        <td class="yes">0 %</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Membresía mensual</strong></td>
+                        <td>—</td>
+                        <td>—</td>
+                        <td>$10 – $25</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Pago al conductor</strong></td>
+                        <td class="no">Liquidación en días</td>
+                        <td class="no">Liquidación en días</td>
+                        <td class="yes">Directo al instante</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Si facturas $500</strong></td>
+                        <td class="no">~$400</td>
+                        <td class="no">~$410</td>
+                        <td class="yes">~$480</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section id="como-funciona">
+        <h2>Cómo funciona</h2>
+        <p class="sub">De la solicitud a tu primer viaje en 24 horas.</p>
+        <div class="grid">
+            <div class="card">
+                <div class="ico">1️⃣</div>
+                <h3>Llena el formulario</h3>
+                <p>Completa tus datos y sube las 4 fotos: foto tuya, cédula, certificado de salud y carnet de circulación del vehículo. Toma menos de 5 minutos.</p>
+            </div>
+            <div class="card">
+                <div class="ico">2️⃣</div>
+                <h3>Te enviamos tus credenciales</h3>
+                <p>Verificamos tus documentos en menos de 24 horas y te enviamos por correo tu usuario, contraseña y el enlace para descargar la app Higo Driver.</p>
+            </div>
+            <div class="card">
+                <div class="ico">3️⃣</div>
+                <h3>Paga tu membresía</h3>
+                <p>Dentro de la app, abre <strong>Higo Pay</strong>, elige tu plan (semanal o mensual) y transfiere por Pago Móvil. La validación es automática.</p>
+            </div>
+            <div class="card">
+                <div class="ico">4️⃣</div>
+                <h3>Conéctate y trabaja</h3>
+                <p>Pulsa "En línea" y empieza a recibir solicitudes de viajes y envíos en tu zona. Al terminar, el pasajero te paga directo a tu QR de Pago Móvil.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="unirme">
+        <h2 style="text-align:center;">Regístrate como conductor</h2>
+        <p class="sub" style="text-align:center;">Llena el formulario con tus datos y sube las 4 fotos requeridas. Te respondemos por correo en menos de 24 horas.</p>
+
+        <form id="driverRegisterForm" class="register-form" enctype="multipart/form-data" novalidate>
+            <div class="row">
+                <div class="field">
+                    <label for="full_name">Nombre y apellido</label>
+                    <input id="full_name" name="full_name" type="text" required autocomplete="name" placeholder="Juan Pérez">
+                </div>
+                <div class="field">
+                    <label for="cedula">Cédula</label>
+                    <input id="cedula" name="cedula" type="text" required inputmode="numeric" placeholder="V-12345678">
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="field">
+                    <label for="phone">Teléfono (WhatsApp)</label>
+                    <input id="phone" name="phone" type="tel" required inputmode="tel" autocomplete="tel" placeholder="0412-3334455">
+                </div>
+                <div class="field">
+                    <label for="email">Correo</label>
+                    <input id="email" name="email" type="email" required autocomplete="email" placeholder="tu@correo.com">
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="field">
+                    <label for="city">Ciudad / zona</label>
+                    <input id="city" name="city" type="text" required placeholder="Higuerote">
+                </div>
+                <div class="field">
+                    <label for="plan">Plan</label>
+                    <select id="plan" name="plan" required>
+                        <option value="">Selecciona…</option>
+                        <option value="moto">Higo Moto · $10/mes</option>
+                        <option value="carro">Higo Carro · $20/mes</option>
+                        <option value="camioneta">Higo Camioneta · $25/mes</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="field">
+                    <label for="vehicle_brand">Marca del vehículo</label>
+                    <input id="vehicle_brand" name="vehicle_brand" type="text" required placeholder="Chevrolet">
+                </div>
+                <div class="field">
+                    <label for="vehicle_model">Modelo</label>
+                    <input id="vehicle_model" name="vehicle_model" type="text" required placeholder="Grand Vitara">
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="field">
+                    <label for="vehicle_color">Color</label>
+                    <input id="vehicle_color" name="vehicle_color" type="text" required placeholder="Rojo">
+                </div>
+                <div class="field">
+                    <label for="license_plate">Placa</label>
+                    <input id="license_plate" name="license_plate" type="text" required placeholder="ABC123" style="text-transform:uppercase;">
+                </div>
+            </div>
+
+            <div class="docs-title">Fotos requeridas</div>
+
+            <div class="row">
+                <div class="field">
+                    <label for="photo_driver">Foto del conductor</label>
+                    <input id="photo_driver" name="photo_driver" type="file" accept="image/*" capture="user" required>
+                    <span class="hint">Cara visible, buena iluminación.</span>
+                </div>
+                <div class="field">
+                    <label for="photo_cedula">Foto de la cédula</label>
+                    <input id="photo_cedula" name="photo_cedula" type="file" accept="image/*" capture="environment" required>
+                    <span class="hint">Que se lean los datos.</span>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="field">
+                    <label for="photo_health">Certificado de salud</label>
+                    <input id="photo_health" name="photo_health" type="file" accept="image/*,application/pdf" capture="environment" required>
+                    <span class="hint">Vigente.</span>
+                </div>
+                <div class="field">
+                    <label for="photo_circulation">Carnet de circulación del vehículo</label>
+                    <input id="photo_circulation" name="photo_circulation" type="file" accept="image/*,application/pdf" capture="environment" required>
+                    <span class="hint">A tu nombre o con autorización.</span>
+                </div>
+            </div>
+
+            <div class="submit-row">
+                <button type="submit" class="submit-btn" id="submitBtn">Enviar solicitud</button>
+                <div id="formStatus" class="status" role="status" aria-live="polite"></div>
+            </div>
+        </form>
+
+        <p class="alt-cta">
+            ¿Ya tienes credenciales? <a href="https://play.google.com/store/apps/details?id=com.higoapp.ve" rel="noopener">Descargar Higo Driver en Google Play</a><br>
+            ¿Prefieres registrarte por WhatsApp? <a href="https://wa.me/584120330315?text=Hola%2C%20quiero%20registrarme%20como%20conductor%20Higo" rel="noopener">Escríbenos aquí</a>.
+        </p>
+    </section>
+</main>
+
+<footer>
+    <div class="footer-inner">
+        <div>
+            <div class="brand" style="margin-bottom:8px;">
+                <img src="/assets/logo.svg" alt="Logo Higo" style="width:28px;height:28px;">
+                <strong style="font-size:16px;">Higo Driver</strong>
+            </div>
+            <small>© 2026 Higo App · Higuerote, Venezuela</small>
+        </div>
+        <div class="links">
+            <a href="/privacy/">Privacidad</a>
+            <a href="/terms-and-conditions/">Términos</a>
+            <a href="/privacys/">Eliminar cuenta</a>
+            <a href="https://play.google.com/store/apps/details?id=com.higoapp.ve" rel="noopener">Google Play</a>
+        </div>
+    </div>
+</footer>
+
+<script>
+(function () {
+    var form = document.getElementById('driverRegisterForm');
+    if (!form) return;
+    var btn = document.getElementById('submitBtn');
+    var status = document.getElementById('formStatus');
+
+    var MAX_BYTES = 8 * 1024 * 1024;
+
+    function setStatus(kind, msg) {
+        status.className = 'status ' + kind;
+        status.textContent = msg;
+    }
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        status.className = 'status';
+        status.textContent = '';
+
+        var files = ['photo_driver', 'photo_cedula', 'photo_health', 'photo_circulation'];
+        for (var i = 0; i < files.length; i++) {
+            var input = form.querySelector('input[name="' + files[i] + '"]');
+            var f = input && input.files && input.files[0];
+            if (!f) { setStatus('err', 'Falta subir: ' + input.previousElementSibling.textContent); return; }
+            if (f.size > MAX_BYTES) { setStatus('err', 'El archivo "' + f.name + '" supera 8 MB.'); return; }
+        }
+
+        btn.disabled = true;
+        var originalLabel = btn.textContent;
+        btn.textContent = 'Enviando…';
+
+        var fd = new FormData(form);
+
+        fetch('/api/register-driver.php', { method: 'POST', body: fd })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+            .then(function (res) {
+                if (res.ok && res.body && res.body.ok) {
+                    setStatus('ok', '¡Solicitud enviada! Te respondemos a tu correo en menos de 24 horas.');
+                    form.reset();
+                } else {
+                    var msg = (res.body && (res.body.error || res.body.detail)) || 'No pudimos enviar la solicitud. Intenta de nuevo o escríbenos por WhatsApp.';
+                    setStatus('err', msg);
+                }
+            })
+            .catch(function () {
+                setStatus('err', 'Error de red. Verifica tu conexión e intenta de nuevo.');
+            })
+            .finally(function () {
+                btn.disabled = false;
+                btn.textContent = originalLabel;
+            });
+    });
+})();
+</script>
+</body>
+</html>
