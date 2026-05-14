@@ -95,6 +95,8 @@ $vehicleModel = (string) ($data['vehicle_model'] ?? '');
 $vehicleColor = (string) ($data['vehicle_color'] ?? '');
 $licensePlate = (string) ($data['license_plate'] ?? '');
 $avatarUrl    = (string) ($data['avatar_url']    ?? '');
+$avatarB64    = (string) ($data['avatar_base64'] ?? '');
+$avatarExt    = strtolower((string) ($data['avatar_ext'] ?? 'jpg'));
 $paymentQrUrl = (string) ($data['payment_qr_url']?? '');
 
 // ═══ Verificar caller es admin ═══════════════════════════════════════════
@@ -159,6 +161,42 @@ if ($cStatus < 200 || $cStatus >= 300 || !isset($created['id'])) {
     wd_send($code, ['ok' => false, 'error' => 'auth_create_failed', 'detail' => $msg]);
 }
 $userId = (string) $created['id'];
+
+// ═══ Subir foto del conductor (Supabase Storage, bypass RLS) ═════════════
+// Se hace antes del insert para guardar la URL en el mismo profile.
+if ($avatarB64 !== '') {
+    $bin = base64_decode($avatarB64, true);
+    if ($bin !== false && strlen($bin) > 0 && strlen($bin) <= 12 * 1024 * 1024) {
+        $ext  = preg_replace('/[^a-z0-9]/', '', $avatarExt) ?: 'jpg';
+        if (!in_array($ext, ['jpg','jpeg','png','webp','heic','heif'], true)) $ext = 'jpg';
+        $mime = $ext === 'png'  ? 'image/png'
+              : ($ext === 'webp' ? 'image/webp'
+              : ($ext === 'heic' || $ext === 'heif' ? 'image/' . $ext
+              : 'image/jpeg'));
+        $objectPath = $userId . '/avatar.' . $ext;
+
+        $ch = curl_init($supaUrl . '/storage/v1/object/avatars/' . $objectPath);
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_POSTFIELDS     => $bin,
+            CURLOPT_HTTPHEADER     => [
+                'apikey: ' . $supaKey,
+                'Authorization: Bearer ' . $supaKey,
+                'Content-Type: ' . $mime,
+                'x-upsert: true',
+            ],
+        ]);
+        @curl_exec($ch);
+        $upStat = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($upStat >= 200 && $upStat < 300) {
+            $avatarUrl = $supaUrl . '/storage/v1/object/public/avatars/' . $objectPath;
+        }
+    }
+}
 
 // ═══ Insertar profile ════════════════════════════════════════════════════
 

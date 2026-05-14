@@ -187,9 +187,21 @@ const AdminDriversPage = () => {
         }
     };
 
-    // Handle Registration: crea auth user + profile + envía email de bienvenida.
-    // Todo lo hace public/api/welcome-driver.php (backend con service_role).
-    // La foto se sube aparte una vez que tenemos el user_id real del auth user.
+    // Lee el File como base64 puro (sin el prefijo "data:...;base64,").
+    const fileToBase64 = (file) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = String(reader.result || '');
+            const idx = result.indexOf(',');
+            resolve(idx >= 0 ? result.slice(idx + 1) : result);
+        };
+        reader.onerror = () => reject(reader.error || new Error('read_failed'));
+        reader.readAsDataURL(file);
+    });
+
+    // Handle Registration: crea auth user + profile + sube foto + envía email
+    // de bienvenida. Todo lo hace public/api/welcome-driver.php con service_role
+    // (la subida de foto en cliente fallaba por RLS del bucket avatars).
     const handleRegister = async () => {
         if (!newDriver.full_name || !newDriver.email || !newDriver.password) {
             setMessage({ type: 'error', text: 'Nombre, correo y contraseña son obligatorios.' });
@@ -200,6 +212,13 @@ const AdminDriversPage = () => {
             const { data: sessionData } = await supabase.auth.getSession();
             const accessToken = sessionData?.session?.access_token;
             if (!accessToken) throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
+
+            let avatarBase64 = '';
+            let avatarExt = '';
+            if (avatarFile) {
+                avatarBase64 = await fileToBase64(avatarFile);
+                avatarExt = (avatarFile.name.split('.').pop() || 'jpg').toLowerCase();
+            }
 
             const res = await fetch('/api/welcome-driver.php', {
                 method: 'POST',
@@ -217,6 +236,9 @@ const AdminDriversPage = () => {
                     vehicle_model: newDriver.vehicle_model,
                     vehicle_color: newDriver.vehicle_color,
                     license_plate: newDriver.license_plate,
+                    avatar_url: newDriver.avatar_url ? processGoogleDriveLink(newDriver.avatar_url) : '',
+                    avatar_base64: avatarBase64,
+                    avatar_ext: avatarExt,
                     payment_qr_url: processGoogleDriveLink(newDriver.payment_qr_url),
                 }),
             });
@@ -224,27 +246,6 @@ const AdminDriversPage = () => {
             if (!res.ok || !result.ok) {
                 const detail = result.detail || result.error || `HTTP ${res.status}`;
                 throw new Error(`No se pudo registrar al conductor: ${detail}`);
-            }
-
-            const userId = result.user_id;
-
-            // Sube la foto y actualiza el perfil con la URL pública.
-            if (avatarFile) {
-                const ext = avatarFile.name.split('.').pop().toLowerCase();
-                const path = `${userId}/avatar.${ext}`;
-                const { error: uploadErr } = await supabase.storage
-                    .from('avatars')
-                    .upload(path, avatarFile, { upsert: true });
-                if (!uploadErr) {
-                    const { data } = supabase.storage.from('avatars').getPublicUrl(path);
-                    await supabase.from('profiles')
-                        .update({ avatar_url: data.publicUrl })
-                        .eq('id', userId);
-                }
-            } else if (newDriver.avatar_url) {
-                await supabase.from('profiles')
-                    .update({ avatar_url: processGoogleDriveLink(newDriver.avatar_url) })
-                    .eq('id', userId);
             }
 
             const emailNote = result.email_sent
