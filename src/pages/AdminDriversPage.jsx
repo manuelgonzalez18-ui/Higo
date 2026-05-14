@@ -187,21 +187,10 @@ const AdminDriversPage = () => {
         }
     };
 
-    // Lee el File como base64 puro (sin el prefijo "data:...;base64,").
-    const fileToBase64 = (file) => new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const result = String(reader.result || '');
-            const idx = result.indexOf(',');
-            resolve(idx >= 0 ? result.slice(idx + 1) : result);
-        };
-        reader.onerror = () => reject(reader.error || new Error('read_failed'));
-        reader.readAsDataURL(file);
-    });
-
     // Handle Registration: crea auth user + profile + sube foto + envía email
-    // de bienvenida. Todo lo hace public/api/welcome-driver.php con service_role
-    // (la subida de foto en cliente fallaba por RLS del bucket avatars).
+    // de bienvenida. Todo lo hace public/api/welcome-driver.php con service_role.
+    // Se usa multipart/form-data (no JSON con base64) para que el WAF de
+    // Hostinger no bloquee el request con 403 por payloads grandes.
     const handleRegister = async () => {
         if (!newDriver.full_name || !newDriver.email || !newDriver.password) {
             setMessage({ type: 'error', text: 'Nombre, correo y contraseña son obligatorios.' });
@@ -213,34 +202,24 @@ const AdminDriversPage = () => {
             const accessToken = sessionData?.session?.access_token;
             if (!accessToken) throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
 
-            let avatarBase64 = '';
-            let avatarExt = '';
-            if (avatarFile) {
-                avatarBase64 = await fileToBase64(avatarFile);
-                avatarExt = (avatarFile.name.split('.').pop() || 'jpg').toLowerCase();
-            }
+            const fd = new FormData();
+            fd.append('full_name', newDriver.full_name);
+            fd.append('email', newDriver.email);
+            fd.append('password', newDriver.password);
+            fd.append('phone', newDriver.phone || '');
+            fd.append('vehicle_type', newDriver.vehicle_type || '');
+            fd.append('vehicle_brand', newDriver.vehicle_brand || '');
+            fd.append('vehicle_model', newDriver.vehicle_model || '');
+            fd.append('vehicle_color', newDriver.vehicle_color || '');
+            fd.append('license_plate', newDriver.license_plate || '');
+            fd.append('avatar_url', newDriver.avatar_url ? processGoogleDriveLink(newDriver.avatar_url) : '');
+            fd.append('payment_qr_url', processGoogleDriveLink(newDriver.payment_qr_url || ''));
+            if (avatarFile) fd.append('avatar_file', avatarFile, avatarFile.name);
 
             const res = await fetch('/api/welcome-driver.php', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-                body: JSON.stringify({
-                    full_name: newDriver.full_name,
-                    email: newDriver.email,
-                    password: newDriver.password,
-                    phone: newDriver.phone,
-                    vehicle_type: newDriver.vehicle_type,
-                    vehicle_brand: newDriver.vehicle_brand,
-                    vehicle_model: newDriver.vehicle_model,
-                    vehicle_color: newDriver.vehicle_color,
-                    license_plate: newDriver.license_plate,
-                    avatar_url: newDriver.avatar_url ? processGoogleDriveLink(newDriver.avatar_url) : '',
-                    avatar_base64: avatarBase64,
-                    avatar_ext: avatarExt,
-                    payment_qr_url: processGoogleDriveLink(newDriver.payment_qr_url),
-                }),
+                headers: { 'Authorization': `Bearer ${accessToken}` },
+                body: fd,
             });
             const result = await res.json().catch(() => ({}));
             if (!res.ok || !result.ok) {
