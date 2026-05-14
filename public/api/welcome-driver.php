@@ -67,11 +67,21 @@ if ($supaUrl === '' || $supaKey === '') {
 }
 
 // ═══ Payload ═════════════════════════════════════════════════════════════
+// Acepta multipart/form-data (preferido, para incluir el archivo del avatar)
+// o JSON. Multipart evita que el WAF/ModSecurity de Hostinger bloquee el
+// request por el tamaño/contenido del base64 (devolvía 403).
 
-$raw  = file_get_contents('php://input');
-$data = json_decode((string) $raw, true);
-if (!is_array($data)) {
-    wd_send(400, ['ok' => false, 'error' => 'bad_request']);
+$ct = (string) ($_SERVER['CONTENT_TYPE'] ?? '');
+$isMultipart = stripos($ct, 'multipart/form-data') !== false;
+
+if ($isMultipart) {
+    $data = $_POST;
+} else {
+    $raw  = file_get_contents('php://input');
+    $data = json_decode((string) $raw, true);
+    if (!is_array($data)) {
+        wd_send(400, ['ok' => false, 'error' => 'bad_request']);
+    }
 }
 
 $fullName = trim((string) ($data['full_name'] ?? ''));
@@ -95,9 +105,23 @@ $vehicleModel = (string) ($data['vehicle_model'] ?? '');
 $vehicleColor = (string) ($data['vehicle_color'] ?? '');
 $licensePlate = (string) ($data['license_plate'] ?? '');
 $avatarUrl    = (string) ($data['avatar_url']    ?? '');
-$avatarB64    = (string) ($data['avatar_base64'] ?? '');
-$avatarExt    = strtolower((string) ($data['avatar_ext'] ?? 'jpg'));
 $paymentQrUrl = (string) ($data['payment_qr_url']?? '');
+
+// Avatar como archivo (multipart) o base64 (fallback JSON).
+$avatarBin = '';
+$avatarExt = 'jpg';
+if ($isMultipart && !empty($_FILES['avatar_file']) && ($_FILES['avatar_file']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+    $tmp = $_FILES['avatar_file']['tmp_name'] ?? '';
+    if (is_uploaded_file($tmp)) {
+        $avatarBin = (string) file_get_contents($tmp);
+        $origExt = strtolower(pathinfo((string) $_FILES['avatar_file']['name'], PATHINFO_EXTENSION));
+        if ($origExt !== '') $avatarExt = $origExt;
+    }
+} elseif (!empty($data['avatar_base64'])) {
+    $decoded = base64_decode((string) $data['avatar_base64'], true);
+    if ($decoded !== false) $avatarBin = $decoded;
+    if (!empty($data['avatar_ext'])) $avatarExt = strtolower((string) $data['avatar_ext']);
+}
 
 // ═══ Verificar caller es admin ═══════════════════════════════════════════
 
@@ -164,37 +188,34 @@ $userId = (string) $created['id'];
 
 // ═══ Subir foto del conductor (Supabase Storage, bypass RLS) ═════════════
 // Se hace antes del insert para guardar la URL en el mismo profile.
-if ($avatarB64 !== '') {
-    $bin = base64_decode($avatarB64, true);
-    if ($bin !== false && strlen($bin) > 0 && strlen($bin) <= 12 * 1024 * 1024) {
-        $ext  = preg_replace('/[^a-z0-9]/', '', $avatarExt) ?: 'jpg';
-        if (!in_array($ext, ['jpg','jpeg','png','webp','heic','heif'], true)) $ext = 'jpg';
-        $mime = $ext === 'png'  ? 'image/png'
-              : ($ext === 'webp' ? 'image/webp'
-              : ($ext === 'heic' || $ext === 'heif' ? 'image/' . $ext
-              : 'image/jpeg'));
-        $objectPath = $userId . '/avatar.' . $ext;
+if ($avatarBin !== '' && strlen($avatarBin) <= 12 * 1024 * 1024) {
+    $ext = preg_replace('/[^a-z0-9]/', '', $avatarExt) ?: 'jpg';
+    if (!in_array($ext, ['jpg','jpeg','png','webp','heic','heif'], true)) $ext = 'jpg';
+    $mime = $ext === 'png'  ? 'image/png'
+          : ($ext === 'webp' ? 'image/webp'
+          : ($ext === 'heic' || $ext === 'heif' ? 'image/' . $ext
+          : 'image/jpeg'));
+    $objectPath = $userId . '/avatar.' . $ext;
 
-        $ch = curl_init($supaUrl . '/storage/v1/object/avatars/' . $objectPath);
-        curl_setopt_array($ch, [
-            CURLOPT_POST           => true,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 30,
-            CURLOPT_POSTFIELDS     => $bin,
-            CURLOPT_HTTPHEADER     => [
-                'apikey: ' . $supaKey,
-                'Authorization: Bearer ' . $supaKey,
-                'Content-Type: ' . $mime,
-                'x-upsert: true',
-            ],
-        ]);
-        @curl_exec($ch);
-        $upStat = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+    $ch = curl_init($supaUrl . '/storage/v1/object/avatars/' . $objectPath);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_POSTFIELDS     => $avatarBin,
+        CURLOPT_HTTPHEADER     => [
+            'apikey: ' . $supaKey,
+            'Authorization: Bearer ' . $supaKey,
+            'Content-Type: ' . $mime,
+            'x-upsert: true',
+        ],
+    ]);
+    @curl_exec($ch);
+    $upStat = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
 
-        if ($upStat >= 200 && $upStat < 300) {
-            $avatarUrl = $supaUrl . '/storage/v1/object/public/avatars/' . $objectPath;
-        }
+    if ($upStat >= 200 && $upStat < 300) {
+        $avatarUrl = $supaUrl . '/storage/v1/object/public/avatars/' . $objectPath;
     }
 }
 
