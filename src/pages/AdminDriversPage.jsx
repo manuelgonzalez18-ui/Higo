@@ -153,6 +153,26 @@ const AdminDriversPage = () => {
         camioneta: { plan: 'van',      monthly: 25, weekly: 7 },
     };
 
+    const openSupportChat = async (driver) => {
+        const { data: existing } = await supabase
+            .from('support_threads')
+            .select('id')
+            .eq('user_id', driver.id)
+            .maybeSingle();
+
+        let threadId = existing?.id;
+        if (!threadId) {
+            const { data: created, error } = await supabase
+                .from('support_threads')
+                .insert({ user_id: driver.id })
+                .select('id')
+                .single();
+            if (error) { setMessage({ type: 'error', text: error.message }); return; }
+            threadId = created.id;
+        }
+        navigate(`/admin/support?thread=${threadId}`);
+    };
+
     const registerMembership = async (driver, period = 'monthly') => {
         const vType = (driver.vehicle_type || 'standard').toLowerCase();
         const planInfo = MEMBERSHIP_PLANS[vType] || MEMBERSHIP_PLANS.standard;
@@ -432,7 +452,14 @@ const AdminDriversPage = () => {
                         </div>
 
                         {/* Actions Button */}
-                        <div className="w-full md:w-auto flex justify-end">
+                        <div className="w-full md:w-auto flex justify-end items-center gap-1">
+                            <button
+                                onClick={() => openSupportChat(driver)}
+                                className="w-10 h-10 flex items-center justify-center hover:bg-fuchsia-600/20 rounded-full transition-colors text-gray-400 hover:text-fuchsia-400"
+                                title="Chat de soporte"
+                            >
+                                <span className="material-symbols-outlined">chat</span>
+                            </button>
                             <button
                                 onClick={() => { setSelectedDriver(driver); setShowObjModal(true); }}
                                 className="w-10 h-10 flex items-center justify-center hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white"

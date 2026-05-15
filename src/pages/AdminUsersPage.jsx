@@ -50,6 +50,27 @@ const AdminUsersPage = () => {
         setLoading(false);
     };
 
+    const openSupportChat = async (user) => {
+        // Buscar el hilo existente; si no, crearlo (admin tiene RLS para insert).
+        const { data: existing } = await supabase
+            .from('support_threads')
+            .select('id')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+        let threadId = existing?.id;
+        if (!threadId) {
+            const { data: created, error } = await supabase
+                .from('support_threads')
+                .insert({ user_id: user.id })
+                .select('id')
+                .single();
+            if (error) { setMessage({ type: 'error', text: error.message }); return; }
+            threadId = created.id;
+        }
+        navigate(`/admin/support?thread=${threadId}`);
+    };
+
     const changeRole = async (user, newRole) => {
         if (user.id === me?.id && newRole !== 'admin') {
             setMessage({ type: 'error', text: 'No podés quitarte a vos mismo el rol de admin desde acá.' });
@@ -175,7 +196,15 @@ const AdminUsersPage = () => {
                                 <p className="font-mono text-sm text-gray-300">${(u.referral_credit_balance ?? 0).toFixed(2)}</p>
                             </div>
 
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 flex-wrap items-center">
+                                <button
+                                    onClick={() => openSupportChat(u)}
+                                    className="px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1 bg-[#0F1014] text-gray-300 hover:bg-fuchsia-600 hover:text-white border border-white/10 transition-all"
+                                    title="Abrir chat de soporte con este usuario"
+                                >
+                                    <span className="material-symbols-outlined text-[14px]">chat</span>
+                                    Chat
+                                </button>
                                 {ROLES.map(r => (
                                     <button
                                         key={r.id}
