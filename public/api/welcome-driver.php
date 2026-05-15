@@ -219,28 +219,65 @@ if ($avatarBin === '') {
           : 'image/jpeg'));
     $objectPath = $userId . '/avatar.' . $ext;
 
-    $ch = curl_init($supaUrl . '/storage/v1/object/avatars/' . $objectPath);
-    curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 30,
-        CURLOPT_POSTFIELDS     => $avatarBin,
-        CURLOPT_HTTPHEADER     => [
-            'apikey: ' . $supaKey,
-            'Authorization: Bearer ' . $supaKey,
-            'Content-Type: ' . $mime,
-            'x-upsert: true',
-        ],
-    ]);
-    $upResp = (string) @curl_exec($ch);
-    $upStat = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $upErr  = curl_error($ch);
-    curl_close($ch);
+    // Closure para subir el binario al bucket 'avatars'.
+    $doUpload = function () use ($supaUrl, $supaKey, $objectPath, $avatarBin, $mime) {
+        $ch = curl_init($supaUrl . '/storage/v1/object/avatars/' . $objectPath);
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_POSTFIELDS     => $avatarBin,
+            CURLOPT_HTTPHEADER     => [
+                'apikey: ' . $supaKey,
+                'Authorization: Bearer ' . $supaKey,
+                'Content-Type: ' . $mime,
+                'x-upsert: true',
+            ],
+        ]);
+        $resp = (string) @curl_exec($ch);
+        $stat = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err  = curl_error($ch);
+        curl_close($ch);
+        return [$stat, $resp, $err];
+    };
+
+    [$upStat, $upResp, $upErr] = $doUpload();
+
+    // Si el bucket no existe, intentar crearlo (público) y reintentar la subida.
+    // Supabase Storage devuelve 400 con body {"statusCode":"404","error":"Bucket not found"}.
+    if ($upStat >= 400 && stripos($upResp, 'Bucket not found') !== false) {
+        $ch = curl_init($supaUrl . '/storage/v1/bucket');
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 15,
+            CURLOPT_POSTFIELDS     => json_encode([
+                'id'     => 'avatars',
+                'name'   => 'avatars',
+                'public' => true,
+            ], JSON_UNESCAPED_SLASHES),
+            CURLOPT_HTTPHEADER     => [
+                'apikey: ' . $supaKey,
+                'Authorization: Bearer ' . $supaKey,
+                'Content-Type: application/json',
+            ],
+        ]);
+        $bResp = (string) @curl_exec($ch);
+        $bStat = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        // 200/201 = creado; 409 = ya existía (otra request lo creó en paralelo).
+        if (($bStat >= 200 && $bStat < 300) || $bStat === 409) {
+            [$upStat, $upResp, $upErr] = $doUpload();
+        } else {
+            $avatarDetail = 'bucket_create_' . $bStat . ' ' . substr($bResp, 0, 200);
+        }
+    }
 
     if ($upStat >= 200 && $upStat < 300) {
         $avatarUrl = $supaUrl . '/storage/v1/object/public/avatars/' . $objectPath;
         $avatarUploaded = true;
-    } else {
+    } elseif ($avatarDetail === '') {
         $avatarDetail = 'storage_' . $upStat . ($upErr !== '' ? ' ' . $upErr : '') . ' ' . substr($upResp, 0, 200);
     }
 }
