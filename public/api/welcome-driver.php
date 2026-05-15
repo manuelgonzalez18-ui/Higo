@@ -188,7 +188,29 @@ $userId = (string) $created['id'];
 
 // ═══ Subir foto del conductor (Supabase Storage, bypass RLS) ═════════════
 // Se hace antes del insert para guardar la URL en el mismo profile.
-if ($avatarBin !== '' && strlen($avatarBin) <= 12 * 1024 * 1024) {
+$avatarUploaded = false;
+$avatarDetail   = '';
+
+if ($avatarBin === '') {
+    // Diagnóstico: distinguir "no llegó archivo" de "llegó pero falló".
+    if ($isMultipart) {
+        $fileErr = $_FILES['avatar_file']['error'] ?? UPLOAD_ERR_NO_FILE;
+        $errMap = [
+            UPLOAD_ERR_INI_SIZE   => 'ini_size_exceeded',
+            UPLOAD_ERR_FORM_SIZE  => 'form_size_exceeded',
+            UPLOAD_ERR_PARTIAL    => 'partial_upload',
+            UPLOAD_ERR_NO_FILE    => 'no_file',
+            UPLOAD_ERR_NO_TMP_DIR => 'no_tmp_dir',
+            UPLOAD_ERR_CANT_WRITE => 'cant_write',
+            UPLOAD_ERR_EXTENSION  => 'extension_blocked',
+        ];
+        $avatarDetail = $errMap[$fileErr] ?? ('upload_err_' . (int) $fileErr);
+    } else {
+        $avatarDetail = 'no_avatar';
+    }
+} elseif (strlen($avatarBin) > 12 * 1024 * 1024) {
+    $avatarDetail = 'too_large_' . strlen($avatarBin);
+} else {
     $ext = preg_replace('/[^a-z0-9]/', '', $avatarExt) ?: 'jpg';
     if (!in_array($ext, ['jpg','jpeg','png','webp','heic','heif'], true)) $ext = 'jpg';
     $mime = $ext === 'png'  ? 'image/png'
@@ -210,12 +232,16 @@ if ($avatarBin !== '' && strlen($avatarBin) <= 12 * 1024 * 1024) {
             'x-upsert: true',
         ],
     ]);
-    @curl_exec($ch);
+    $upResp = (string) @curl_exec($ch);
     $upStat = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $upErr  = curl_error($ch);
     curl_close($ch);
 
     if ($upStat >= 200 && $upStat < 300) {
         $avatarUrl = $supaUrl . '/storage/v1/object/public/avatars/' . $objectPath;
+        $avatarUploaded = true;
+    } else {
+        $avatarDetail = 'storage_' . $upStat . ($upErr !== '' ? ' ' . $upErr : '') . ' ' . substr($upResp, 0, 200);
     }
 }
 
@@ -381,7 +407,9 @@ $headers .= "Content-Type: multipart/alternative; boundary=\"{$boundary}\"\r\n";
 $emailSent = @mail($email, $subject, $body, $headers);
 
 wd_send(200, [
-    'ok'         => true,
-    'user_id'    => $userId,
-    'email_sent' => (bool) $emailSent,
+    'ok'              => true,
+    'user_id'         => $userId,
+    'email_sent'      => (bool) $emailSent,
+    'avatar_uploaded' => $avatarUploaded,
+    'avatar_detail'   => $avatarDetail,
 ]);

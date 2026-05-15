@@ -50,6 +50,32 @@ const AdminDriversPage = () => {
         setAvatarPreview(URL.createObjectURL(file));
     };
 
+    // Comprime la imagen del avatar para no exceder upload_max_filesize de
+    // Hostinger (típicamente 2-8 MB). Redimensiona a máx 1024px y reencode
+    // a JPEG ~85%. Una foto de móvil de 6 MB queda en ~200-400 KB.
+    const compressImage = (file, maxSize = 1024, quality = 0.85) => new Promise((resolve, reject) => {
+        if (!file || !file.type.startsWith('image/')) { resolve(file); return; }
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            const ratio = Math.min(maxSize / img.width, maxSize / img.height, 1);
+            const w = Math.max(1, Math.round(img.width * ratio));
+            const h = Math.max(1, Math.round(img.height * ratio));
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            canvas.toBlob((blob) => {
+                if (!blob) { reject(new Error('compression_failed')); return; }
+                const baseName = (file.name || 'avatar').replace(/\.[^.]+$/, '');
+                resolve(new File([blob], baseName + '.jpg', { type: 'image/jpeg' }));
+            }, 'image/jpeg', quality);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image_load_failed')); };
+        img.src = url;
+    });
+
     // Fetch Drivers
     const fetchDrivers = async () => {
         setLoading(true);
@@ -214,7 +240,11 @@ const AdminDriversPage = () => {
             fd.append('license_plate', newDriver.license_plate || '');
             fd.append('avatar_url', newDriver.avatar_url ? processGoogleDriveLink(newDriver.avatar_url) : '');
             fd.append('payment_qr_url', processGoogleDriveLink(newDriver.payment_qr_url || ''));
-            if (avatarFile) fd.append('avatar_file', avatarFile, avatarFile.name);
+            if (avatarFile) {
+                let toSend = avatarFile;
+                try { toSend = await compressImage(avatarFile, 1024, 0.85); } catch (_) { toSend = avatarFile; }
+                fd.append('avatar_file', toSend, toSend.name);
+            }
 
             const res = await fetch('/api/welcome-driver.php', {
                 method: 'POST',
@@ -230,7 +260,12 @@ const AdminDriversPage = () => {
             const emailNote = result.email_sent
                 ? 'Correo de bienvenida enviado.'
                 : 'Conductor creado, pero falló el envío del correo de bienvenida.';
-            setMessage({ type: 'success', text: `Conductor registrado exitosamente. ${emailNote}` });
+            const avatarNote = avatarFile
+                ? (result.avatar_uploaded
+                    ? 'Foto cargada.'
+                    : `Foto NO cargada (${result.avatar_detail || 'desconocido'}).`)
+                : '';
+            setMessage({ type: 'success', text: `Conductor registrado. ${emailNote} ${avatarNote}`.trim() });
             setShowRegisterModal(false);
             setAvatarFile(null);
             setAvatarPreview(null);
