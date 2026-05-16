@@ -5,6 +5,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { vibrateIntense, playAlertSound } from '../services/notificationService';
 import { triggerSupportPush } from '../services/supportPush';
 import { compressImage } from '../utils/imageCompression';
+import { useSupportTyping } from '../hooks/useSupportTyping';
 
 // Chat 1-a-1 entre el usuario logueado (pasajero o conductor) y el equipo
 // Higo (admins). Un hilo único por usuario (tabla support_threads).
@@ -28,6 +29,8 @@ const SupportChatWidget = () => {
     const [lightbox, setLightbox] = useState(null);   // URL ampliada
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
+
+    const { otherIsTyping, broadcastTyping } = useSupportTyping(thread?.id, 'user');
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -266,7 +269,18 @@ const SupportChatWidget = () => {
                             <span className="material-symbols-outlined">support_agent</span>
                             <div>
                                 <h3 className="font-bold leading-tight">Soporte Higo</h3>
-                                <p className="text-[11px] opacity-90 leading-tight">Te respondemos lo antes posible</p>
+                                {otherIsTyping ? (
+                                    <p className="text-[11px] opacity-90 leading-tight flex items-center gap-1">
+                                        <span className="inline-flex gap-0.5">
+                                            <span className="w-1 h-1 rounded-full bg-white animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                                            <span className="w-1 h-1 rounded-full bg-white animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                                            <span className="w-1 h-1 rounded-full bg-white animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                                        </span>
+                                        Escribiendo…
+                                    </p>
+                                ) : (
+                                    <p className="text-[11px] opacity-90 leading-tight">Te respondemos lo antes posible</p>
+                                )}
                             </div>
                         </div>
                         <button onClick={() => setIsOpen(false)} className="text-white/80 hover:text-white">
@@ -340,7 +354,7 @@ const SupportChatWidget = () => {
                             className="flex-1 bg-gray-100 dark:bg-[#0f1c1c] border-none outline-none rounded-lg text-sm px-3 py-2 focus:ring-1 focus:ring-violet-600 text-gray-800 dark:text-white"
                             placeholder={uploading ? 'Subiendo imagen…' : 'Escribe un mensaje…'}
                             value={inputValue}
-                            onChange={(e) => setInputValue(e.target.value)}
+                            onChange={(e) => { setInputValue(e.target.value); if (e.target.value) broadcastTyping(); }}
                             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                             disabled={uploading}
                         />

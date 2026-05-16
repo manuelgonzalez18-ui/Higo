@@ -4,6 +4,7 @@ import { supabase, getUserProfile } from '../services/supabase';
 import AdminNav from '../components/AdminNav';
 import { triggerSupportPush } from '../services/supportPush';
 import { compressImage } from '../utils/imageCompression';
+import { useSupportTyping } from '../hooks/useSupportTyping';
 
 const SIGNED_URL_TTL = 3600;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -36,6 +37,8 @@ const AdminSupportPage = () => {
     const [lightbox, setLightbox] = useState(null);
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
+
+    const { otherIsTyping, broadcastTyping } = useSupportTyping(selectedId, 'admin');
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -391,9 +394,20 @@ const AdminSupportPage = () => {
                                         <p className="font-bold text-white truncate">
                                             {selectedProfile?.full_name || 'Sin nombre'}
                                         </p>
-                                        <p className="text-xs text-gray-400 truncate">
-                                            {selectedProfile?.phone || '—'} · {roleBadge(selectedProfile?.role).label}
-                                        </p>
+                                        {otherIsTyping ? (
+                                            <p className="text-xs text-violet-300 truncate flex items-center gap-1">
+                                                <span className="inline-flex gap-0.5">
+                                                    <span className="w-1 h-1 rounded-full bg-violet-300 animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                                                    <span className="w-1 h-1 rounded-full bg-violet-300 animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                                                    <span className="w-1 h-1 rounded-full bg-violet-300 animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                                                </span>
+                                                Escribiendo…
+                                            </p>
+                                        ) : (
+                                            <p className="text-xs text-gray-400 truncate">
+                                                {selectedProfile?.phone || '—'} · {roleBadge(selectedProfile?.role).label}
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                                 <button
@@ -469,7 +483,7 @@ const AdminSupportPage = () => {
                                 <input
                                     type="text"
                                     value={inputValue}
-                                    onChange={(e) => setInputValue(e.target.value)}
+                                    onChange={(e) => { setInputValue(e.target.value); if (e.target.value) broadcastTyping(); }}
                                     onKeyDown={(e) => e.key === 'Enter' && sendReply()}
                                     placeholder={uploading ? 'Subiendo imagen…' : 'Escribir respuesta…'}
                                     disabled={uploading}
