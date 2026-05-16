@@ -106,7 +106,7 @@ $threadUserId = (string) $thread['user_id'];
 
 [$mStatus, $mBody] = bl_http_get(
     $supaUrl . '/rest/v1/support_messages?thread_id=eq.' . $threadId
-        . '&select=id,sender_id,sender_role,content,created_at'
+        . '&select=id,sender_id,sender_role,content,attachment_path,attachment_mime,created_at'
         . '&order=created_at.desc&limit=1',
     ['apikey: ' . $supaKey, 'Authorization: Bearer ' . $supaKey]
 );
@@ -121,9 +121,14 @@ if (($lastMsg['sender_id'] ?? '') !== $callerId) {
     ssp_send(409, ['ok' => false, 'error' => 'sender_mismatch']);
 }
 
-$senderRole = (string) $lastMsg['sender_role'];
-$content    = (string) $lastMsg['content'];
-$preview    = mb_substr($content, 0, 140);
+$senderRole     = (string) $lastMsg['sender_role'];
+$content        = (string) ($lastMsg['content'] ?? '');
+$attachmentPath = (string) ($lastMsg['attachment_path'] ?? '');
+$hasAttachment  = $attachmentPath !== '';
+// Preview con fallback a "📎 Imagen" si vino sin texto.
+$preview = $content !== ''
+    ? mb_substr($content, 0, 140)
+    : ($hasAttachment ? '📎 Imagen' : '');
 
 // ═══ Resolver destinatarios ═════════════════════════════════════════════
 $recipients = [];   // [{id, full_name, fcm_token}]
@@ -314,6 +319,30 @@ foreach ($recipients as $rcpt) {
 // no generan email (sería el equipo enviándose correos a sí mismo).
 $emailSent = false;
 if ($senderRole === 'user') {
+    // Si el mensaje vino con imagen, generamos una signed URL larga (7 días)
+    // contra el bucket privado support-attachments. La imagen viaja como
+    // <img src> remoto — Gmail la proxea y cachea al abrir el correo.
+    $attachmentSignedUrl = '';
+    if ($hasAttachment) {
+        [$sigStatus, $sigBody] = bl_http_post(
+            $supaUrl . '/storage/v1/object/sign/support-attachments/' . $attachmentPath,
+            (string) json_encode(['expiresIn' => 7 * 24 * 3600]),
+            [
+                'apikey: ' . $supaKey,
+                'Authorization: Bearer ' . $supaKey,
+                'Content-Type: application/json',
+            ],
+            10
+        );
+        if ($sigStatus >= 200 && $sigStatus < 300) {
+            $sigResp = json_decode((string) $sigBody, true);
+            $relUrl = $sigResp['signedURL'] ?? $sigResp['signedUrl'] ?? '';
+            if ($relUrl !== '') {
+                $attachmentSignedUrl = $supaUrl . '/storage/v1' . $relUrl;
+            }
+        }
+    }
+
     $supportUrl = 'https://higoapp.com/#/admin/support?thread=' . $threadId;
     $roleLabel  = $senderRoleDb === 'driver' ? 'Conductor' : 'Pasajero';
 
@@ -321,9 +350,23 @@ if ($senderRole === 'user') {
     $safeEmail = htmlspecialchars($senderEmail, ENT_QUOTES);
     $safePhone = htmlspecialchars($senderPhone !== '' ? $senderPhone : '—', ENT_QUOTES);
     $safeRole  = htmlspecialchars($roleLabel, ENT_QUOTES);
-    $safeMsg   = nl2br(htmlspecialchars($content, ENT_QUOTES));
-    $safePrev  = htmlspecialchars(mb_substr($content, 0, 80), ENT_QUOTES);
+    $hasText   = $content !== '';
+    $safeMsg   = $hasText ? nl2br(htmlspecialchars($content, ENT_QUOTES)) : '';
+    $safePrev  = htmlspecialchars(
+        $hasText ? mb_substr($content, 0, 80) : ($hasAttachment ? '📎 Imagen' : ''),
+        ENT_QUOTES
+    );
     $sentTs    = htmlspecialchars(gmdate('Y-m-d H:i:s') . ' UTC', ENT_QUOTES);
+
+    $attachmentHtml = '';
+    if ($attachmentSignedUrl !== '') {
+        $safeAttach = htmlspecialchars($attachmentSignedUrl, ENT_QUOTES);
+        $attachmentHtml =
+              '<p style="margin:0 0 8px;color:#6b7280;font-size:12px;text-transform:uppercase;font-weight:700;letter-spacing:.5px;">Imagen adjunta</p>'
+            . '<a href="' . $safeAttach . '" target="_blank" style="display:block;margin-bottom:18px;">'
+            . '<img src="' . $safeAttach . '" alt="Adjunto" style="max-width:100%;max-height:400px;border-radius:10px;border:1px solid #e5e7eb;display:block;" />'
+            . '</a>';
+    }
 
     $html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head>'
         . '<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">'
@@ -341,10 +384,14 @@ if ($senderRole === 'user') {
         . '<tr><td style="padding:10px 14px;font-size:12px;color:#6b7280;"><b>Hilo:</b> #' . $threadId . ' · ' . $sentTs . '</td></tr>'
         . '</table>'
 
-        . '<p style="margin:0 0 8px;color:#6b7280;font-size:12px;text-transform:uppercase;font-weight:700;letter-spacing:.5px;">Mensaje</p>'
-        . '<div style="background:#f3f4f6;border-left:3px solid #7c3aed;padding:12px 16px;border-radius:6px;color:#111827;font-size:14px;white-space:pre-wrap;">'
-        . $safeMsg
-        . '</div>'
+        . $attachmentHtml
+        . ($hasText
+            ? '<p style="margin:0 0 8px;color:#6b7280;font-size:12px;text-transform:uppercase;font-weight:700;letter-spacing:.5px;">Mensaje</p>'
+              . '<div style="background:#f3f4f6;border-left:3px solid #7c3aed;padding:12px 16px;border-radius:6px;color:#111827;font-size:14px;white-space:pre-wrap;">'
+              . $safeMsg
+              . '</div>'
+            : '<p style="margin:0;color:#6b7280;font-size:13px;font-style:italic;">(El usuario solo envió una imagen, sin texto.)</p>'
+          )
 
         . '<p style="text-align:center;margin:24px 0 0;">'
         . '<a href="' . htmlspecialchars($supportUrl, ENT_QUOTES) . '" style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;">'
@@ -358,13 +405,16 @@ if ($senderRole === 'user') {
         . '</td></tr>'
         . '</table></td></tr></table></body></html>';
 
+    $plainBody = $hasText ? "Mensaje:\n{$content}\n\n" : "(Mensaje sin texto, solo imagen adjunta.)\n\n";
+    $plainAttach = $attachmentSignedUrl !== '' ? "Imagen adjunta: {$attachmentSignedUrl}\n\n" : '';
     $plain = "Soporte Higo · {$roleLabel}\n"
         . str_repeat('-', 50) . "\n"
         . "De: {$senderName} <{$senderEmail}>\n"
         . "Teléfono: " . ($senderPhone !== '' ? $senderPhone : '—') . "\n"
         . "Hilo: #{$threadId}\n"
         . "Fecha: " . gmdate('Y-m-d H:i:s') . " UTC\n\n"
-        . "Mensaje:\n{$content}\n\n"
+        . $plainBody
+        . $plainAttach
         . "Responder en el panel: {$supportUrl}\n";
 
     $boundary = '=_higo_' . bin2hex(random_bytes(8));
@@ -378,7 +428,8 @@ if ($senderRole === 'user') {
            . $html . "\r\n"
            . "--{$boundary}--\r\n";
 
-    $subject = "=?UTF-8?B?" . base64_encode("[Soporte] {$senderName} — {$safePrev}") . "?=";
+    $subjectPreview = $hasText ? mb_substr($content, 0, 80) : ($hasAttachment ? '📎 Imagen' : '');
+    $subject = "=?UTF-8?B?" . base64_encode("[Soporte] {$senderName} — {$subjectPreview}") . "?=";
     $headers  = "From: noreply@higoapp.com\r\n";
     $headers .= "Reply-To: admin@higoapp.com\r\n";
     $headers .= "MIME-Version: 1.0\r\n";

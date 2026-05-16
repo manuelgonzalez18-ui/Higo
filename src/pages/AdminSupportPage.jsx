@@ -3,6 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase, getUserProfile } from '../services/supabase';
 import AdminNav from '../components/AdminNav';
 import { triggerSupportPush } from '../services/supportPush';
+import { compressImage } from '../utils/imageCompression';
+
+const SIGNED_URL_TTL = 3600;
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 // Bandeja de soporte: lista de hilos a la izquierda + conversación a la derecha.
 // Cada hilo es un usuario (pasajero o conductor) que escribió al equipo Higo.
@@ -27,7 +31,11 @@ const AdminSupportPage = () => {
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
     const [sending, setSending] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [attachUrls, setAttachUrls] = useState({}); // msgId → signed URL
+    const [lightbox, setLightbox] = useState(null);
     const messagesEndRef = useRef(null);
+    const fileInputRef = useRef(null);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -144,25 +152,90 @@ const AdminSupportPage = () => {
         return () => { supabase.removeChannel(channel); };
     }, [selectedId]);
 
-    const sendReply = async () => {
-        const content = inputValue.trim();
-        if (!content || !selectedId || !me?.id) return;
-        setSending(true);
-        const { error } = await supabase
-            .from('support_messages')
-            .insert({
-                thread_id:   selectedId,
-                sender_id:   me.id,
-                sender_role: 'admin',
-                content
-            });
-        setSending(false);
+    // ─── Resolver signed URLs para los adjuntos del hilo abierto ───────
+    useEffect(() => {
+        const pending = messages.filter(m => m.attachment_path && !attachUrls[m.id]);
+        if (pending.length === 0) return;
+        let cancelled = false;
+        (async () => {
+            const updates = {};
+            for (const m of pending) {
+                const { data, error } = await supabase
+                    .storage
+                    .from('support-attachments')
+                    .createSignedUrl(m.attachment_path, SIGNED_URL_TTL);
+                if (!error && data?.signedUrl) updates[m.id] = data.signedUrl;
+            }
+            if (!cancelled && Object.keys(updates).length) {
+                setAttachUrls(prev => ({ ...prev, ...updates }));
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [messages, attachUrls]);
+
+    const insertAdminMessage = async ({ content, attachment }) => {
+        if (!selectedId || !me?.id) return false;
+        const payload = {
+            thread_id:   selectedId,
+            sender_id:   me.id,
+            sender_role: 'admin',
+            content:     content || null,
+        };
+        if (attachment) {
+            payload.attachment_path = attachment.path;
+            payload.attachment_mime = attachment.mime;
+            payload.attachment_size = attachment.size;
+        }
+        const { error } = await supabase.from('support_messages').insert(payload);
         if (error) {
             alert(`Error al enviar: ${error.message}`);
+            return false;
+        }
+        triggerSupportPush(selectedId);
+        return true;
+    };
+
+    const sendReply = async () => {
+        const content = inputValue.trim();
+        if (!content) return;
+        setSending(true);
+        const ok = await insertAdminMessage({ content });
+        setSending(false);
+        if (ok) setInputValue('');
+    };
+
+    const handleFilePick = async (e) => {
+        const raw = e.target.files?.[0];
+        e.target.value = '';
+        if (!raw || !selectedId || !me?.id) return;
+        if (!raw.type.startsWith('image/')) {
+            alert('Solo se admiten imágenes por ahora.');
             return;
         }
-        setInputValue('');
-        triggerSupportPush(selectedId);
+        if (raw.size > MAX_UPLOAD_BYTES) {
+            alert('La imagen pesa más de 10 MB.');
+            return;
+        }
+        setUploading(true);
+        try {
+            const file = await compressImage(raw, 1600, 0.85);
+            const path = `${selectedId}/${me.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+            const { error: upErr } = await supabase
+                .storage
+                .from('support-attachments')
+                .upload(path, file, { contentType: file.type || 'image/jpeg', upsert: false });
+            if (upErr) throw upErr;
+            await insertAdminMessage({
+                content: inputValue.trim() || null,
+                attachment: { path, mime: file.type || 'image/jpeg', size: file.size },
+            });
+            setInputValue('');
+        } catch (err) {
+            console.error('Error subiendo adjunto:', err);
+            alert(`No se pudo subir: ${err.message || err}`);
+        } finally {
+            setUploading(false);
+        }
     };
 
     const toggleStatus = async () => {
@@ -340,13 +413,31 @@ const AdminSupportPage = () => {
                                     <p className="text-center text-gray-500 text-sm mt-10">Sin mensajes aún.</p>
                                 ) : messages.map(m => {
                                     const isAdmin = m.sender_role === 'admin';
+                                    const url = m.attachment_path ? attachUrls[m.id] : null;
                                     return (
                                         <div key={m.id} className={`flex ${isAdmin ? 'justify-end' : 'justify-start'}`}>
-                                            <div className={`max-w-[75%] p-3 rounded-2xl ${isAdmin
+                                            <div className={`max-w-[75%] p-2.5 rounded-2xl ${isAdmin
                                                 ? 'bg-violet-600 text-white rounded-tr-none'
                                                 : 'bg-[#1A1F2E] text-gray-100 rounded-tl-none border border-white/5'
                                                 }`}>
-                                                <p className="text-sm whitespace-pre-wrap break-words">{m.content}</p>
+                                                {m.attachment_path && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => url && setLightbox(url)}
+                                                        className="block mb-1 rounded-lg overflow-hidden bg-black/20 max-w-full"
+                                                    >
+                                                        {url ? (
+                                                            <img src={url} alt="Adjunto" className="max-w-[260px] max-h-[260px] object-cover" />
+                                                        ) : (
+                                                            <div className="w-[180px] h-[120px] flex items-center justify-center text-xs opacity-70">
+                                                                <span className="material-symbols-outlined animate-pulse">image</span>
+                                                            </div>
+                                                        )}
+                                                    </button>
+                                                )}
+                                                {m.content && (
+                                                    <p className="text-sm whitespace-pre-wrap break-words">{m.content}</p>
+                                                )}
                                                 <p className={`text-[10px] mt-1 ${isAdmin ? 'text-white/70' : 'text-gray-500'}`}>
                                                     {fmtTime(m.created_at)}
                                                 </p>
@@ -357,18 +448,36 @@ const AdminSupportPage = () => {
                                 <div ref={messagesEndRef} />
                             </div>
 
-                            <div className="p-3 border-t border-white/5 flex gap-2 bg-[#1A1F2E]">
+                            <div className="p-3 border-t border-white/5 flex gap-2 items-center bg-[#1A1F2E]">
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={handleFilePick}
+                                />
+                                <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={uploading || sending}
+                                    title="Adjuntar imagen"
+                                    className="p-2 text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 rounded-lg disabled:opacity-40 transition-colors"
+                                >
+                                    <span className="material-symbols-outlined text-[22px]">
+                                        {uploading ? 'progress_activity' : 'attach_file'}
+                                    </span>
+                                </button>
                                 <input
                                     type="text"
                                     value={inputValue}
                                     onChange={(e) => setInputValue(e.target.value)}
                                     onKeyDown={(e) => e.key === 'Enter' && sendReply()}
-                                    placeholder="Escribir respuesta…"
+                                    placeholder={uploading ? 'Subiendo imagen…' : 'Escribir respuesta…'}
+                                    disabled={uploading}
                                     className="flex-1 bg-[#0F1014] border border-white/10 rounded-lg outline-none px-3 py-2 text-sm focus:border-violet-500/50 text-white placeholder:text-gray-600"
                                 />
                                 <button
                                     onClick={sendReply}
-                                    disabled={sending || !inputValue.trim()}
+                                    disabled={sending || uploading || !inputValue.trim()}
                                     className="px-4 py-2 bg-violet-600 text-white rounded-lg font-bold text-sm hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1"
                                 >
                                     <span className="material-symbols-outlined text-[18px]">send</span>
@@ -379,6 +488,15 @@ const AdminSupportPage = () => {
                     )}
                 </div>
             </div>
+
+            {lightbox && (
+                <div
+                    className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 cursor-zoom-out"
+                    onClick={() => setLightbox(null)}
+                >
+                    <img src={lightbox} alt="Adjunto ampliado" className="max-w-full max-h-full rounded-lg shadow-2xl" />
+                </div>
+            )}
         </div>
     );
 };

@@ -1,15 +1,18 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { vibrateIntense, playAlertSound } from '../services/notificationService';
 import { triggerSupportPush } from '../services/supportPush';
+import { compressImage } from '../utils/imageCompression';
 
 // Chat 1-a-1 entre el usuario logueado (pasajero o conductor) y el equipo
 // Higo (admins). Un hilo único por usuario (tabla support_threads).
 // Se renderiza globalmente desde App.jsx; se autooculta en /admin/* y /auth.
 
 const HIDDEN_PATH_PREFIXES = ['/admin', '/auth'];
+const SIGNED_URL_TTL = 3600;          // 1h — chat queda abierto largo a veces
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;   // 10 MB pre-compresión
 
 const SupportChatWidget = () => {
     const { pathname } = useLocation();
@@ -20,7 +23,11 @@ const SupportChatWidget = () => {
     const [messages, setMessages] = useState([]);
     const [isOpen, setIsOpen] = useState(false);
     const [inputValue, setInputValue] = useState('');
+    const [uploading, setUploading] = useState(false);
+    const [attachUrls, setAttachUrls] = useState({}); // msgId → signed URL
+    const [lightbox, setLightbox] = useState(null);   // URL ampliada
     const messagesEndRef = useRef(null);
+    const fileInputRef = useRef(null);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -111,7 +118,8 @@ const SupportChatWidget = () => {
                     LocalNotifications.schedule({
                         notifications: [{
                             title: 'Soporte Higo',
-                            body: payload.new.content || 'Tienes una respuesta del equipo',
+                            body: payload.new.content
+                                || (payload.new.attachment_path ? '📎 Te enviaron una imagen' : 'Tienes una respuesta del equipo'),
                             id: new Date().getTime(),
                             schedule: { at: new Date() },
                             channelId: 'higo_messages_v1'
@@ -152,27 +160,97 @@ const SupportChatWidget = () => {
             .then(() => {});
     }, [isOpen, thread?.id, thread?.unread_for_user]);
 
-    const handleSend = async () => {
-        const content = inputValue.trim();
-        if (!content || !thread?.id || !userId) return;
-        setInputValue('');
+    // ─── Resolver signed URLs para los adjuntos visibles ───────────────────
+    // El bucket es privado: cada path necesita una signed URL. Cacheamos
+    // por id de mensaje para no regenerar en cada render.
+    useEffect(() => {
+        const pending = messages.filter(m => m.attachment_path && !attachUrls[m.id]);
+        if (pending.length === 0) return;
+        let cancelled = false;
+        (async () => {
+            const updates = {};
+            for (const m of pending) {
+                const { data, error } = await supabase
+                    .storage
+                    .from('support-attachments')
+                    .createSignedUrl(m.attachment_path, SIGNED_URL_TTL);
+                if (!error && data?.signedUrl) updates[m.id] = data.signedUrl;
+            }
+            if (!cancelled && Object.keys(updates).length) {
+                setAttachUrls(prev => ({ ...prev, ...updates }));
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [messages, attachUrls]);
 
-        const { error } = await supabase
-            .from('support_messages')
-            .insert({
-                thread_id: thread.id,
-                sender_id: userId,
-                sender_role: 'user',
-                content
-            });
-
+    const sendMessage = useCallback(async ({ content, attachment }) => {
+        if (!thread?.id || !userId) return;
+        const payload = {
+            thread_id: thread.id,
+            sender_id: userId,
+            sender_role: 'user',
+            content: content || null,
+        };
+        if (attachment) {
+            payload.attachment_path = attachment.path;
+            payload.attachment_mime = attachment.mime;
+            payload.attachment_size = attachment.size;
+        }
+        const { error } = await supabase.from('support_messages').insert(payload);
         if (error) {
             console.error('Error enviando mensaje de soporte:', error);
             alert(`No se pudo enviar: ${error.message}`);
-            setInputValue(content);
-            return;
+            return false;
         }
         triggerSupportPush(thread.id);
+        return true;
+    }, [thread?.id, userId]);
+
+    const handleSend = async () => {
+        const content = inputValue.trim();
+        if (!content) return;
+        setInputValue('');
+        const ok = await sendMessage({ content });
+        if (!ok) setInputValue(content); // restaurar si falló
+    };
+
+    const handleFilePick = async (e) => {
+        const raw = e.target.files?.[0];
+        e.target.value = ''; // permitir reseleccionar el mismo archivo
+        if (!raw || !thread?.id || !userId) return;
+        if (!raw.type.startsWith('image/')) {
+            alert('Por ahora solo se admiten imágenes.');
+            return;
+        }
+        if (raw.size > MAX_UPLOAD_BYTES) {
+            alert('La imagen pesa más de 10 MB. Probá con una más liviana.');
+            return;
+        }
+
+        setUploading(true);
+        try {
+            const file = await compressImage(raw, 1600, 0.85);
+            const path = `${thread.id}/${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+            const { error: upErr } = await supabase
+                .storage
+                .from('support-attachments')
+                .upload(path, file, {
+                    contentType: file.type || 'image/jpeg',
+                    upsert: false,
+                });
+            if (upErr) throw upErr;
+
+            await sendMessage({
+                content: inputValue.trim() || null,
+                attachment: { path, mime: file.type || 'image/jpeg', size: file.size },
+            });
+            setInputValue('');
+        } catch (err) {
+            console.error('Error subiendo adjunto:', err);
+            alert(`No se pudo subir la imagen: ${err.message || err}`);
+        } finally {
+            setUploading(false);
+        }
     };
 
     if (hidden || !userId) return null;
@@ -204,16 +282,34 @@ const SupportChatWidget = () => {
                             </div>
                         ) : messages.map(msg => {
                             const isMe = msg.sender_id === userId;
+                            const url = msg.attachment_path ? attachUrls[msg.id] : null;
                             return (
                                 <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[80%] p-3 rounded-2xl ${isMe
+                                    <div className={`max-w-[80%] p-2.5 rounded-2xl ${isMe
                                         ? 'bg-violet-600 text-white rounded-tr-none'
                                         : 'bg-white dark:bg-[#233535] text-gray-800 dark:text-gray-200 rounded-tl-none shadow-sm'
                                         }`}>
                                         {!isMe && (
                                             <p className="text-[10px] font-bold uppercase tracking-wide text-violet-500 mb-0.5">Equipo Higo</p>
                                         )}
-                                        <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+                                        {msg.attachment_path && (
+                                            <button
+                                                type="button"
+                                                onClick={() => url && setLightbox(url)}
+                                                className="block mb-1 rounded-lg overflow-hidden bg-black/5 max-w-full"
+                                            >
+                                                {url ? (
+                                                    <img src={url} alt="Adjunto" className="max-w-[220px] max-h-[220px] object-cover" />
+                                                ) : (
+                                                    <div className="w-[180px] h-[120px] flex items-center justify-center text-xs opacity-70">
+                                                        <span className="material-symbols-outlined animate-pulse">image</span>
+                                                    </div>
+                                                )}
+                                            </button>
+                                        )}
+                                        {msg.content && (
+                                            <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+                                        )}
                                     </div>
                                 </div>
                             );
@@ -221,18 +317,36 @@ const SupportChatWidget = () => {
                         <div ref={messagesEndRef} />
                     </div>
 
-                    <div className="p-3 bg-white dark:bg-[#1a2c2c] border-t border-gray-200 dark:border-gray-700 flex gap-2">
+                    <div className="p-3 bg-white dark:bg-[#1a2c2c] border-t border-gray-200 dark:border-gray-700 flex gap-2 items-center">
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleFilePick}
+                        />
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={uploading || !thread?.id}
+                            title="Adjuntar imagen"
+                            className="p-2 text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg disabled:opacity-40 transition-colors"
+                        >
+                            <span className="material-symbols-outlined text-[22px]">
+                                {uploading ? 'progress_activity' : 'attach_file'}
+                            </span>
+                        </button>
                         <input
                             type="text"
                             className="flex-1 bg-gray-100 dark:bg-[#0f1c1c] border-none outline-none rounded-lg text-sm px-3 py-2 focus:ring-1 focus:ring-violet-600 text-gray-800 dark:text-white"
-                            placeholder="Escribe un mensaje…"
+                            placeholder={uploading ? 'Subiendo imagen…' : 'Escribe un mensaje…'}
                             value={inputValue}
                             onChange={(e) => setInputValue(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                            disabled={uploading}
                         />
                         <button
                             onClick={handleSend}
-                            disabled={!inputValue.trim() || !thread?.id}
+                            disabled={!inputValue.trim() || !thread?.id || uploading}
                             className="p-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-40 transition-colors"
                         >
                             <span className="material-symbols-outlined text-[20px]">send</span>
@@ -253,6 +367,15 @@ const SupportChatWidget = () => {
                     <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 border-2 border-white rounded-full"></span>
                 )}
             </button>
+
+            {lightbox && (
+                <div
+                    className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 pointer-events-auto cursor-zoom-out"
+                    onClick={() => setLightbox(null)}
+                >
+                    <img src={lightbox} alt="Adjunto ampliado" className="max-w-full max-h-full rounded-lg shadow-2xl" />
+                </div>
+            )}
         </div>
     );
 };
