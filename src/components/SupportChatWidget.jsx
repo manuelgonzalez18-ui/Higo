@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { vibrateIntense, playAlertSound } from '../services/notificationService';
+import { triggerSupportPush } from '../services/supportPush';
 
 // Chat 1-a-1 entre el usuario logueado (pasajero o conductor) y el equipo
 // Higo (admins). Un hilo único por usuario (tabla support_threads).
@@ -169,7 +170,9 @@ const SupportChatWidget = () => {
             console.error('Error enviando mensaje de soporte:', error);
             alert(`No se pudo enviar: ${error.message}`);
             setInputValue(content);
+            return;
         }
+        triggerSupportPush(thread.id);
     };
 
     if (hidden || !userId) return null;

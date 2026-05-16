@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase, getUserProfile } from '../services/supabase';
 import AdminNav from '../components/AdminNav';
+import { triggerSupportPush } from '../services/supportPush';
 
 // Bandeja de soporte: lista de hilos a la izquierda + conversación a la derecha.
 // Cada hilo es un usuario (pasajero o conductor) que escribió al equipo Higo.
@@ -161,6 +162,7 @@ const AdminSupportPage = () => {
             return;
         }
         setInputValue('');
+        triggerSupportPush(selectedId);
     };
 
     const toggleStatus = async () => {
