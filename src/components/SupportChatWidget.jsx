@@ -6,6 +6,28 @@ import { vibrateIntense, playAlertSound } from '../services/notificationService'
 import { triggerSupportPush } from '../services/supportPush';
 import { compressImage } from '../utils/imageCompression';
 import { useSupportTyping } from '../hooks/useSupportTyping';
+import SupportAttachment from './SupportAttachment';
+
+// Tipos permitidos como adjunto. RLS del bucket no filtra por mime; lo
+// aplicamos en el cliente.
+const ACCEPT_MIME = 'image/*,application/pdf,audio/*';
+
+const extFromMime = (mime, fallback = 'bin') => {
+    if (!mime) return fallback;
+    if (mime === 'application/pdf')     return 'pdf';
+    if (mime.startsWith('image/')) {
+        const sub = mime.split('/')[1];
+        return ['jpeg', 'jpg'].includes(sub) ? 'jpg' : sub;
+    }
+    if (mime.startsWith('audio/')) {
+        const sub = mime.split('/')[1].split(';')[0];
+        if (sub === 'mpeg')   return 'mp3';
+        if (sub === 'mp4')    return 'm4a';
+        if (sub === 'x-wav')  return 'wav';
+        return sub;
+    }
+    return fallback;
+};
 
 // Chat 1-a-1 entre el usuario logueado (pasajero o conductor) y el equipo
 // Higo (admins). Un hilo único por usuario (tabla support_threads).
@@ -122,7 +144,12 @@ const SupportChatWidget = () => {
                         notifications: [{
                             title: 'Soporte Higo',
                             body: payload.new.content
-                                || (payload.new.attachment_path ? '📎 Te enviaron una imagen' : 'Tienes una respuesta del equipo'),
+                                || (payload.new.attachment_path
+                                    ? (payload.new.attachment_mime?.startsWith('image/') ? '🖼️ Imagen del equipo'
+                                       : payload.new.attachment_mime?.startsWith('audio/') ? '🎤 Audio del equipo'
+                                       : payload.new.attachment_mime === 'application/pdf' ? '📄 PDF del equipo'
+                                       : '📎 Adjunto del equipo')
+                                    : 'Tienes una respuesta del equipo'),
                             id: new Date().getTime(),
                             schedule: { at: new Date() },
                             channelId: 'higo_messages_v1'
@@ -233,36 +260,46 @@ const SupportChatWidget = () => {
         const raw = e.target.files?.[0];
         e.target.value = ''; // permitir reseleccionar el mismo archivo
         if (!raw || !thread?.id || !userId) return;
-        if (!raw.type.startsWith('image/')) {
-            alert('Por ahora solo se admiten imágenes.');
+
+        const isImage = raw.type.startsWith('image/');
+        const isAudio = raw.type.startsWith('audio/');
+        const isPdf   = raw.type === 'application/pdf';
+        if (!isImage && !isAudio && !isPdf) {
+            alert('Solo se admiten imágenes, PDF o audio.');
             return;
         }
         if (raw.size > MAX_UPLOAD_BYTES) {
-            alert('La imagen pesa más de 10 MB. Probá con una más liviana.');
+            alert('El archivo pesa más de 10 MB. Probá con uno más liviano.');
             return;
         }
 
         setUploading(true);
         try {
-            const file = await compressImage(raw, 1600, 0.85);
-            const path = `${thread.id}/${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+            // Imágenes: comprimir antes de subir. PDF/audio: tal cual.
+            const file = isImage ? await compressImage(raw, 1600, 0.85) : raw;
+            const ext  = extFromMime(file.type || raw.type);
+            const path = `${thread.id}/${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
             const { error: upErr } = await supabase
                 .storage
                 .from('support-attachments')
                 .upload(path, file, {
-                    contentType: file.type || 'image/jpeg',
+                    contentType: file.type || raw.type || 'application/octet-stream',
                     upsert: false,
                 });
             if (upErr) throw upErr;
 
             await sendMessage({
                 content: inputValue.trim() || null,
-                attachment: { path, mime: file.type || 'image/jpeg', size: file.size },
+                attachment: {
+                    path,
+                    mime: file.type || raw.type || 'application/octet-stream',
+                    size: file.size,
+                },
             });
             setInputValue('');
         } catch (err) {
             console.error('Error subiendo adjunto:', err);
-            alert(`No se pudo subir la imagen: ${err.message || err}`);
+            alert(`No se pudo subir: ${err.message || err}`);
         } finally {
             setUploading(false);
         }
@@ -319,19 +356,13 @@ const SupportChatWidget = () => {
                                             <p className="text-[10px] font-bold uppercase tracking-wide text-violet-500 mb-0.5">Equipo Higo</p>
                                         )}
                                         {msg.attachment_path && (
-                                            <button
-                                                type="button"
-                                                onClick={() => url && setLightbox(url)}
-                                                className="block mb-1 rounded-lg overflow-hidden bg-black/5 max-w-full"
-                                            >
-                                                {url ? (
-                                                    <img src={url} alt="Adjunto" className="max-w-[220px] max-h-[220px] object-cover" />
-                                                ) : (
-                                                    <div className="w-[180px] h-[120px] flex items-center justify-center text-xs opacity-70">
-                                                        <span className="material-symbols-outlined animate-pulse">image</span>
-                                                    </div>
-                                                )}
-                                            </button>
+                                            <SupportAttachment
+                                                url={url}
+                                                mime={msg.attachment_mime}
+                                                size={msg.attachment_size}
+                                                variant={isMe ? 'admin' : 'user'}
+                                                onZoom={setLightbox}
+                                            />
                                         )}
                                         {msg.content && (
                                             <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
@@ -357,14 +388,14 @@ const SupportChatWidget = () => {
                         <input
                             ref={fileInputRef}
                             type="file"
-                            accept="image/*"
+                            accept={ACCEPT_MIME}
                             className="hidden"
                             onChange={handleFilePick}
                         />
                         <button
                             onClick={() => fileInputRef.current?.click()}
                             disabled={uploading || !thread?.id}
-                            title="Adjuntar imagen"
+                            title="Adjuntar imagen, PDF o audio"
                             className="p-2 text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg disabled:opacity-40 transition-colors"
                         >
                             <span className="material-symbols-outlined text-[22px]">

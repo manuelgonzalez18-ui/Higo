@@ -5,9 +5,28 @@ import AdminNav from '../components/AdminNav';
 import { triggerSupportPush } from '../services/supportPush';
 import { compressImage } from '../utils/imageCompression';
 import { useSupportTyping } from '../hooks/useSupportTyping';
+import SupportAttachment from '../components/SupportAttachment';
 
 const SIGNED_URL_TTL = 3600;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const ACCEPT_MIME = 'image/*,application/pdf,audio/*';
+
+const extFromMime = (mime, fallback = 'bin') => {
+    if (!mime) return fallback;
+    if (mime === 'application/pdf')     return 'pdf';
+    if (mime.startsWith('image/')) {
+        const sub = mime.split('/')[1];
+        return ['jpeg', 'jpg'].includes(sub) ? 'jpg' : sub;
+    }
+    if (mime.startsWith('audio/')) {
+        const sub = mime.split('/')[1].split(';')[0];
+        if (sub === 'mpeg')   return 'mp3';
+        if (sub === 'mp4')    return 'm4a';
+        if (sub === 'x-wav')  return 'wav';
+        return sub;
+    }
+    return fallback;
+};
 
 // Bandeja de soporte: lista de hilos a la izquierda + conversación a la derecha.
 // Cada hilo es un usuario (pasajero o conductor) que escribió al equipo Higo.
@@ -214,26 +233,38 @@ const AdminSupportPage = () => {
         const raw = e.target.files?.[0];
         e.target.value = '';
         if (!raw || !selectedId || !me?.id) return;
-        if (!raw.type.startsWith('image/')) {
-            alert('Solo se admiten imágenes por ahora.');
+
+        const isImage = raw.type.startsWith('image/');
+        const isAudio = raw.type.startsWith('audio/');
+        const isPdf   = raw.type === 'application/pdf';
+        if (!isImage && !isAudio && !isPdf) {
+            alert('Solo se admiten imágenes, PDF o audio.');
             return;
         }
         if (raw.size > MAX_UPLOAD_BYTES) {
-            alert('La imagen pesa más de 10 MB.');
+            alert('El archivo pesa más de 10 MB.');
             return;
         }
         setUploading(true);
         try {
-            const file = await compressImage(raw, 1600, 0.85);
-            const path = `${selectedId}/${me.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+            const file = isImage ? await compressImage(raw, 1600, 0.85) : raw;
+            const ext  = extFromMime(file.type || raw.type);
+            const path = `${selectedId}/${me.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
             const { error: upErr } = await supabase
                 .storage
                 .from('support-attachments')
-                .upload(path, file, { contentType: file.type || 'image/jpeg', upsert: false });
+                .upload(path, file, {
+                    contentType: file.type || raw.type || 'application/octet-stream',
+                    upsert: false,
+                });
             if (upErr) throw upErr;
             await insertAdminMessage({
                 content: inputValue.trim() || null,
-                attachment: { path, mime: file.type || 'image/jpeg', size: file.size },
+                attachment: {
+                    path,
+                    mime: file.type || raw.type || 'application/octet-stream',
+                    size: file.size,
+                },
             });
             setInputValue('');
         } catch (err) {
@@ -438,19 +469,13 @@ const AdminSupportPage = () => {
                                                 : 'bg-[#1A1F2E] text-gray-100 rounded-tl-none border border-white/5'
                                                 }`}>
                                                 {m.attachment_path && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => url && setLightbox(url)}
-                                                        className="block mb-1 rounded-lg overflow-hidden bg-black/20 max-w-full"
-                                                    >
-                                                        {url ? (
-                                                            <img src={url} alt="Adjunto" className="max-w-[260px] max-h-[260px] object-cover" />
-                                                        ) : (
-                                                            <div className="w-[180px] h-[120px] flex items-center justify-center text-xs opacity-70">
-                                                                <span className="material-symbols-outlined animate-pulse">image</span>
-                                                            </div>
-                                                        )}
-                                                    </button>
+                                                    <SupportAttachment
+                                                        url={url}
+                                                        mime={m.attachment_mime}
+                                                        size={m.attachment_size}
+                                                        variant="admin"
+                                                        onZoom={setLightbox}
+                                                    />
                                                 )}
                                                 {m.content && (
                                                     <p className="text-sm whitespace-pre-wrap break-words">{m.content}</p>
@@ -479,14 +504,14 @@ const AdminSupportPage = () => {
                                 <input
                                     ref={fileInputRef}
                                     type="file"
-                                    accept="image/*"
+                                    accept={ACCEPT_MIME}
                                     className="hidden"
                                     onChange={handleFilePick}
                                 />
                                 <button
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={uploading || sending}
-                                    title="Adjuntar imagen"
+                                    title="Adjuntar imagen, PDF o audio"
                                     className="p-2 text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 rounded-lg disabled:opacity-40 transition-colors"
                                 >
                                     <span className="material-symbols-outlined text-[22px]">

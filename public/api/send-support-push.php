@@ -124,11 +124,19 @@ if (($lastMsg['sender_id'] ?? '') !== $callerId) {
 $senderRole     = (string) $lastMsg['sender_role'];
 $content        = (string) ($lastMsg['content'] ?? '');
 $attachmentPath = (string) ($lastMsg['attachment_path'] ?? '');
+$attachmentMime = (string) ($lastMsg['attachment_mime'] ?? '');
 $hasAttachment  = $attachmentPath !== '';
-// Preview con fallback a "📎 Imagen" si vino sin texto.
+$isImageAtt     = $hasAttachment && str_starts_with($attachmentMime, 'image/');
+$isAudioAtt     = $hasAttachment && str_starts_with($attachmentMime, 'audio/');
+$isPdfAtt       = $hasAttachment && $attachmentMime === 'application/pdf';
+$attLabel       = $isImageAtt ? '🖼️ Imagen'
+                : ($isAudioAtt ? '🎤 Audio'
+                : ($isPdfAtt   ? '📄 PDF'
+                : ($hasAttachment ? '📎 Archivo' : '')));
+// Preview con fallback al label del adjunto si vino sin texto.
 $preview = $content !== ''
     ? mb_substr($content, 0, 140)
-    : ($hasAttachment ? '📎 Imagen' : '');
+    : $attLabel;
 
 // ═══ Resolver destinatarios ═════════════════════════════════════════════
 $recipients = [];   // [{id, full_name, fcm_token}]
@@ -353,7 +361,7 @@ if ($senderRole === 'user') {
     $hasText   = $content !== '';
     $safeMsg   = $hasText ? nl2br(htmlspecialchars($content, ENT_QUOTES)) : '';
     $safePrev  = htmlspecialchars(
-        $hasText ? mb_substr($content, 0, 80) : ($hasAttachment ? '📎 Imagen' : ''),
+        $hasText ? mb_substr($content, 0, 80) : $attLabel,
         ENT_QUOTES
     );
     $sentTs    = htmlspecialchars(gmdate('Y-m-d H:i:s') . ' UTC', ENT_QUOTES);
@@ -361,11 +369,33 @@ if ($senderRole === 'user') {
     $attachmentHtml = '';
     if ($attachmentSignedUrl !== '') {
         $safeAttach = htmlspecialchars($attachmentSignedUrl, ENT_QUOTES);
-        $attachmentHtml =
-              '<p style="margin:0 0 8px;color:#6b7280;font-size:12px;text-transform:uppercase;font-weight:700;letter-spacing:.5px;">Imagen adjunta</p>'
-            . '<a href="' . $safeAttach . '" target="_blank" style="display:block;margin-bottom:18px;">'
-            . '<img src="' . $safeAttach . '" alt="Adjunto" style="max-width:100%;max-height:400px;border-radius:10px;border:1px solid #e5e7eb;display:block;" />'
-            . '</a>';
+        if ($isImageAtt) {
+            $attachmentHtml =
+                  '<p style="margin:0 0 8px;color:#6b7280;font-size:12px;text-transform:uppercase;font-weight:700;letter-spacing:.5px;">Imagen adjunta</p>'
+                . '<a href="' . $safeAttach . '" target="_blank" style="display:block;margin-bottom:18px;">'
+                . '<img src="' . $safeAttach . '" alt="Adjunto" style="max-width:100%;max-height:400px;border-radius:10px;border:1px solid #e5e7eb;display:block;" />'
+                . '</a>';
+        } else {
+            // PDF, audio u otro: tarjeta clickeable. Los clientes de email
+            // no reproducen audio embebido confiablemente, así que damos
+            // un link grande que abre la signed URL en el navegador.
+            $cardTitle = $isPdfAtt   ? 'Documento PDF adjunto'
+                       : ($isAudioAtt ? 'Audio adjunto' : 'Archivo adjunto');
+            $cardIcon  = $isPdfAtt   ? '📄'
+                       : ($isAudioAtt ? '🎤' : '📎');
+            $cardSub   = $isPdfAtt   ? 'Tap para abrir el PDF en una pestaña nueva.'
+                       : ($isAudioAtt ? 'Tap para escuchar el audio.'
+                       : 'Tap para descargar.');
+            $attachmentHtml =
+                  '<p style="margin:0 0 8px;color:#6b7280;font-size:12px;text-transform:uppercase;font-weight:700;letter-spacing:.5px;">Adjunto</p>'
+                . '<a href="' . $safeAttach . '" target="_blank" style="display:flex;align-items:center;gap:12px;margin-bottom:18px;padding:14px 16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;text-decoration:none;color:#111827;">'
+                . '<span style="font-size:32px;line-height:1;">' . $cardIcon . '</span>'
+                . '<span style="flex:1;min-width:0;">'
+                . '<span style="display:block;font-weight:700;font-size:14px;color:#111827;">' . htmlspecialchars($cardTitle, ENT_QUOTES) . '</span>'
+                . '<span style="display:block;font-size:12px;color:#6b7280;margin-top:2px;">' . htmlspecialchars($cardSub, ENT_QUOTES) . '</span>'
+                . '</span>'
+                . '</a>';
+        }
     }
 
     $html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head>'
@@ -405,8 +435,12 @@ if ($senderRole === 'user') {
         . '</td></tr>'
         . '</table></td></tr></table></body></html>';
 
-    $plainBody = $hasText ? "Mensaje:\n{$content}\n\n" : "(Mensaje sin texto, solo imagen adjunta.)\n\n";
-    $plainAttach = $attachmentSignedUrl !== '' ? "Imagen adjunta: {$attachmentSignedUrl}\n\n" : '';
+    $plainBody = $hasText
+        ? "Mensaje:\n{$content}\n\n"
+        : "(Mensaje sin texto, solo adjunto: {$attLabel}.)\n\n";
+    $plainAttach = $attachmentSignedUrl !== ''
+        ? "{$attLabel}: {$attachmentSignedUrl}\n\n"
+        : '';
     $plain = "Soporte Higo · {$roleLabel}\n"
         . str_repeat('-', 50) . "\n"
         . "De: {$senderName} <{$senderEmail}>\n"
@@ -428,7 +462,7 @@ if ($senderRole === 'user') {
            . $html . "\r\n"
            . "--{$boundary}--\r\n";
 
-    $subjectPreview = $hasText ? mb_substr($content, 0, 80) : ($hasAttachment ? '📎 Imagen' : '');
+    $subjectPreview = $hasText ? mb_substr($content, 0, 80) : $attLabel;
     $subject = "=?UTF-8?B?" . base64_encode("[Soporte] {$senderName} — {$subjectPreview}") . "?=";
     $headers  = "From: noreply@higoapp.com\r\n";
     $headers .= "Reply-To: admin@higoapp.com\r\n";
