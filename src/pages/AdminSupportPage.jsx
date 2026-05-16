@@ -127,11 +127,9 @@ const AdminSupportPage = () => {
         };
         fetchMessages();
 
-        // Apagar unread del admin al entrar al hilo.
-        supabase.from('support_threads')
-            .update({ unread_for_admin: false })
-            .eq('id', selectedId)
-            .then(() => {});
+        // Marcar el hilo como leído por el admin: la RPC setea read_at en los
+        // mensajes del user y apaga unread_for_admin de un solo viaje.
+        supabase.rpc('mark_support_thread_read', { p_thread_id: selectedId }).then(() => {});
 
         const channel = supabase
             .channel(`admin_support_messages:${selectedId}`)
@@ -143,13 +141,18 @@ const AdminSupportPage = () => {
             }, (payload) => {
                 setMessages(prev => [...prev, payload.new]);
                 // Si el mensaje viene del user mientras lo tengo abierto, lo
-                // marco como leído por el admin de una.
+                // marco como leído de una (mismo RPC).
                 if (payload.new.sender_role === 'user') {
-                    supabase.from('support_threads')
-                        .update({ unread_for_admin: false })
-                        .eq('id', selectedId)
-                        .then(() => {});
+                    supabase.rpc('mark_support_thread_read', { p_thread_id: selectedId }).then(() => {});
                 }
+            })
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'support_messages',
+                filter: `thread_id=eq.${selectedId}`
+            }, (payload) => {
+                setMessages(prev => prev.map(m => m.id === payload.new.id ? { ...m, ...payload.new } : m));
             })
             .subscribe();
         return () => { supabase.removeChannel(channel); };
@@ -452,9 +455,19 @@ const AdminSupportPage = () => {
                                                 {m.content && (
                                                     <p className="text-sm whitespace-pre-wrap break-words">{m.content}</p>
                                                 )}
-                                                <p className={`text-[10px] mt-1 ${isAdmin ? 'text-white/70' : 'text-gray-500'}`}>
-                                                    {fmtTime(m.created_at)}
-                                                </p>
+                                                <div className={`flex items-center gap-1 mt-1 ${isAdmin ? 'justify-end' : 'justify-start'}`}>
+                                                    <p className={`text-[10px] ${isAdmin ? 'text-white/70' : 'text-gray-500'}`}>
+                                                        {fmtTime(m.created_at)}
+                                                    </p>
+                                                    {isAdmin && (
+                                                        <span
+                                                            className={`material-symbols-outlined text-[14px] leading-none ${m.read_at ? 'text-sky-300' : 'text-white/60'}`}
+                                                            title={m.read_at ? 'Visto' : 'Enviado'}
+                                                        >
+                                                            {m.read_at ? 'done_all' : 'done'}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     );

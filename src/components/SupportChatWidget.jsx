@@ -105,7 +105,7 @@ const SupportChatWidget = () => {
                 .order('created_at', { ascending: true });
             if (!cancelled && msgs) setMessages(msgs);
 
-            // Realtime: nuevos mensajes
+            // Realtime: nuevos mensajes + updates (read_at)
             messagesChannel = supabase
                 .channel(`support_messages:${t.id}`)
                 .on('postgres_changes', {
@@ -128,6 +128,14 @@ const SupportChatWidget = () => {
                             channelId: 'higo_messages_v1'
                         }]
                     }).catch(() => {});
+                })
+                .on('postgres_changes', {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'support_messages',
+                    filter: `thread_id=eq.${t.id}`
+                }, (payload) => {
+                    setMessages(prev => prev.map(m => m.id === payload.new.id ? { ...m, ...payload.new } : m));
                 })
                 .subscribe();
 
@@ -153,15 +161,19 @@ const SupportChatWidget = () => {
         };
     }, [userId, hidden]);
 
-    // ─── Al abrir el widget, apagar el flag unread_for_user ────────────────
+    // ─── Al abrir el widget (o cuando llega msj del admin con widget abierto),
+    //     marcar todo como leído. El RPC apaga unread_for_user y setea read_at
+    //     en los mensajes del admin → el admin verá los dobles checks azules.
+    const lastAdminMsgId = (() => {
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].sender_role === 'admin') return messages[i].id;
+        }
+        return null;
+    })();
     useEffect(() => {
-        if (!isOpen || !thread?.unread_for_user) return;
-        supabase
-            .from('support_threads')
-            .update({ unread_for_user: false })
-            .eq('id', thread.id)
-            .then(() => {});
-    }, [isOpen, thread?.id, thread?.unread_for_user]);
+        if (!isOpen || !thread?.id) return;
+        supabase.rpc('mark_support_thread_read', { p_thread_id: thread.id }).then(() => {});
+    }, [isOpen, thread?.id, lastAdminMsgId]);
 
     // ─── Resolver signed URLs para los adjuntos visibles ───────────────────
     // El bucket es privado: cada path necesita una signed URL. Cacheamos
@@ -323,6 +335,16 @@ const SupportChatWidget = () => {
                                         )}
                                         {msg.content && (
                                             <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+                                        )}
+                                        {isMe && (
+                                            <div className="flex justify-end mt-0.5 -mb-0.5">
+                                                <span
+                                                    className={`material-symbols-outlined text-[14px] leading-none ${msg.read_at ? 'text-sky-300' : 'text-white/60'}`}
+                                                    title={msg.read_at ? 'Visto' : 'Enviado'}
+                                                >
+                                                    {msg.read_at ? 'done_all' : 'done'}
+                                                </span>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
