@@ -226,14 +226,19 @@ try {
 
 // ═══ Enviar pushes ══════════════════════════════════════════════════════
 $senderName = '';
+$senderPhone = '';
+$senderRoleDb = '';
 [, $sBody] = bl_http_get(
-    $supaUrl . '/rest/v1/profiles?id=eq.' . rawurlencode($callerId) . '&select=full_name',
+    $supaUrl . '/rest/v1/profiles?id=eq.' . rawurlencode($callerId) . '&select=full_name,phone,role',
     ['apikey: ' . $supaKey, 'Authorization: Bearer ' . $supaKey]
 );
 $sp = json_decode($sBody, true);
-if (is_array($sp) && !empty($sp[0]['full_name'])) {
-    $senderName = (string) $sp[0]['full_name'];
+if (is_array($sp) && !empty($sp[0])) {
+    $senderName   = (string) ($sp[0]['full_name'] ?? '');
+    $senderPhone  = (string) ($sp[0]['phone'] ?? '');
+    $senderRoleDb = (string) ($sp[0]['role'] ?? '');
 }
+$senderEmail = (string) ($caller['email'] ?? '');
 
 $title = $senderRole === 'admin'
     ? 'Soporte Higo'
@@ -304,9 +309,88 @@ foreach ($recipients as $rcpt) {
     ];
 }
 
+// ═══ Email a admin@higoapp.com (solo para mensajes del USER) ════════════
+// Queda como registro permanente fuera de la app. Los mensajes del admin
+// no generan email (sería el equipo enviándose correos a sí mismo).
+$emailSent = false;
+if ($senderRole === 'user') {
+    $supportUrl = 'https://higoapp.com/#/admin/support?thread=' . $threadId;
+    $roleLabel  = $senderRoleDb === 'driver' ? 'Conductor' : 'Pasajero';
+
+    $safeName  = htmlspecialchars($senderName !== '' ? $senderName : '(sin nombre)', ENT_QUOTES);
+    $safeEmail = htmlspecialchars($senderEmail, ENT_QUOTES);
+    $safePhone = htmlspecialchars($senderPhone !== '' ? $senderPhone : '—', ENT_QUOTES);
+    $safeRole  = htmlspecialchars($roleLabel, ENT_QUOTES);
+    $safeMsg   = nl2br(htmlspecialchars($content, ENT_QUOTES));
+    $safePrev  = htmlspecialchars(mb_substr($content, 0, 80), ENT_QUOTES);
+    $sentTs    = htmlspecialchars(gmdate('Y-m-d H:i:s') . ' UTC', ENT_QUOTES);
+
+    $html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head>'
+        . '<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">'
+        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:24px 0;"><tr><td align="center">'
+        . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);">'
+        . '<tr><td style="background:linear-gradient(135deg,#7c3aed,#c026d3);padding:20px 24px;color:#fff;">'
+        . '<p style="margin:0;font-size:11px;text-transform:uppercase;letter-spacing:1px;opacity:.9;font-weight:700;">Soporte Higo · ' . $safeRole . '</p>'
+        . '<h1 style="margin:4px 0 0;font-size:20px;font-weight:800;">' . $safeName . '</h1>'
+        . '</td></tr>'
+
+        . '<tr><td style="padding:24px;color:#1f2937;font-size:14px;line-height:1.6;">'
+        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;margin:0 0 18px;">'
+        . '<tr><td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#374151;"><b>Correo:</b> ' . $safeEmail . '</td></tr>'
+        . '<tr><td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#374151;"><b>Teléfono:</b> ' . $safePhone . '</td></tr>'
+        . '<tr><td style="padding:10px 14px;font-size:12px;color:#6b7280;"><b>Hilo:</b> #' . $threadId . ' · ' . $sentTs . '</td></tr>'
+        . '</table>'
+
+        . '<p style="margin:0 0 8px;color:#6b7280;font-size:12px;text-transform:uppercase;font-weight:700;letter-spacing:.5px;">Mensaje</p>'
+        . '<div style="background:#f3f4f6;border-left:3px solid #7c3aed;padding:12px 16px;border-radius:6px;color:#111827;font-size:14px;white-space:pre-wrap;">'
+        . $safeMsg
+        . '</div>'
+
+        . '<p style="text-align:center;margin:24px 0 0;">'
+        . '<a href="' . htmlspecialchars($supportUrl, ENT_QUOTES) . '" style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;">'
+        . 'Responder en el panel'
+        . '</a></p>'
+        . '</td></tr>'
+
+        . '<tr><td style="padding:14px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;text-align:center;font-size:11px;color:#6b7280;">'
+        . 'Este correo se generó automáticamente por un mensaje en el chat de soporte. '
+        . 'Para responderle al usuario abrí el panel — Reply-To apunta al equipo.'
+        . '</td></tr>'
+        . '</table></td></tr></table></body></html>';
+
+    $plain = "Soporte Higo · {$roleLabel}\n"
+        . str_repeat('-', 50) . "\n"
+        . "De: {$senderName} <{$senderEmail}>\n"
+        . "Teléfono: " . ($senderPhone !== '' ? $senderPhone : '—') . "\n"
+        . "Hilo: #{$threadId}\n"
+        . "Fecha: " . gmdate('Y-m-d H:i:s') . " UTC\n\n"
+        . "Mensaje:\n{$content}\n\n"
+        . "Responder en el panel: {$supportUrl}\n";
+
+    $boundary = '=_higo_' . bin2hex(random_bytes(8));
+    $body  = "--{$boundary}\r\n"
+           . "Content-Type: text/plain; charset=UTF-8\r\n"
+           . "Content-Transfer-Encoding: 8bit\r\n\r\n"
+           . $plain . "\r\n"
+           . "--{$boundary}\r\n"
+           . "Content-Type: text/html; charset=UTF-8\r\n"
+           . "Content-Transfer-Encoding: 8bit\r\n\r\n"
+           . $html . "\r\n"
+           . "--{$boundary}--\r\n";
+
+    $subject = "=?UTF-8?B?" . base64_encode("[Soporte] {$senderName} — {$safePrev}") . "?=";
+    $headers  = "From: noreply@higoapp.com\r\n";
+    $headers .= "Reply-To: admin@higoapp.com\r\n";
+    $headers .= "MIME-Version: 1.0\r\n";
+    $headers .= "Content-Type: multipart/alternative; boundary=\"{$boundary}\"\r\n";
+
+    $emailSent = (bool) @mail('admin@higoapp.com', $subject, $body, $headers);
+}
+
 ssp_send(200, [
-    'ok'      => true,
-    'sent'    => $sent,
-    'skipped' => $skipped,
-    'errors'  => $errors,
+    'ok'         => true,
+    'sent'       => $sent,
+    'skipped'    => $skipped,
+    'errors'     => $errors,
+    'email_sent' => $emailSent,
 ]);
