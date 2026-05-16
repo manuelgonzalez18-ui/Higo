@@ -412,10 +412,18 @@ const AdminSupportPage = () => {
                 <div className="bg-gradient-to-br from-violet-600 to-fuchsia-600 p-3 rounded-2xl shadow-lg shadow-violet-600/20">
                     <span className="material-symbols-outlined text-white text-2xl">support_agent</span>
                 </div>
-                <div>
+                <div className="flex-1 min-w-0">
                     <h1 className="text-2xl font-black tracking-tight text-white">Soporte</h1>
                     <p className="text-gray-400 text-sm font-medium">Conversaciones con pasajeros y conductores</p>
                 </div>
+                <button
+                    onClick={() => navigate('/admin/support/stats')}
+                    className="ml-auto px-4 py-2 rounded-lg text-sm font-bold bg-white/5 text-gray-300 hover:bg-white/10 flex items-center gap-1.5 self-start"
+                    title="Ver métricas"
+                >
+                    <span className="material-symbols-outlined text-[18px]">monitoring</span>
+                    Métricas
+                </button>
             </div>
 
             <div className="bg-[#1A1F2E] p-3 rounded-[20px] border border-white/5 mb-3 flex items-center gap-2">

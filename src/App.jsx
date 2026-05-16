@@ -16,6 +16,7 @@ import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminAnalyticsPage from './pages/AdminAnalyticsPage';
 import AdminZonesPage from './pages/AdminZonesPage';
 import AdminSupportPage from './pages/AdminSupportPage';
+import AdminSupportStatsPage from './pages/AdminSupportStatsPage';
 import AdminGuard from './components/AdminGuard';
 import DriverLandingPage from './pages/DriverLandingPage';
 import HigoPayPage from './pages/HigoPayPage';
@@ -151,6 +152,7 @@ const App = () => {
         <Route path="/admin/analytics" element={<AdminGuard><AdminAnalyticsPage /></AdminGuard>} />
         <Route path="/admin/zones" element={<AdminGuard><AdminZonesPage /></AdminGuard>} />
         <Route path="/admin/support" element={<AdminGuard><AdminSupportPage /></AdminGuard>} />
+        <Route path="/admin/support/stats" element={<AdminGuard><AdminSupportStatsPage /></AdminGuard>} />
         <Route path="/join" element={<DriverLandingPage />} />
       </Routes>
       <ChatWidget />
