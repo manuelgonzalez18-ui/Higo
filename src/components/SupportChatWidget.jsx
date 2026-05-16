@@ -49,8 +49,32 @@ const SupportChatWidget = () => {
     const [uploading, setUploading] = useState(false);
     const [attachUrls, setAttachUrls] = useState({}); // msgId → signed URL
     const [lightbox, setLightbox] = useState(null);   // URL ampliada
+    const [menuFor, setMenuFor] = useState(null);     // msgId con menú abierto
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
+
+    const deleteMessage = async (msg) => {
+        setMenuFor(null);
+        if (!msg?.id) return;
+        if (!confirm('¿Eliminar este mensaje? No se puede deshacer.')) return;
+        const { error } = await supabase.rpc('delete_support_message', { p_id: msg.id });
+        if (error) {
+            alert(`No se pudo eliminar: ${error.message}`);
+            return;
+        }
+        // Best-effort: borrar el blob del bucket.
+        if (msg.attachment_path) {
+            supabase.storage.from('support-attachments').remove([msg.attachment_path]).catch(() => {});
+        }
+    };
+
+    // Cerrar el menú al clickear fuera.
+    useEffect(() => {
+        if (menuFor === null) return;
+        const close = () => setMenuFor(null);
+        window.addEventListener('click', close);
+        return () => window.removeEventListener('click', close);
+    }, [menuFor]);
 
     const { otherIsTyping, broadcastTyping } = useSupportTyping(thread?.id, 'user');
 
@@ -346,9 +370,26 @@ const SupportChatWidget = () => {
                         ) : messages.map(msg => {
                             const isMe = msg.sender_id === userId;
                             const url = msg.attachment_path ? attachUrls[msg.id] : null;
+                            const isDeleted = !!msg.deleted_at;
+
+                            if (isDeleted) {
+                                return (
+                                    <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                        <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-xs italic flex items-center gap-1.5 ${
+                                            isMe
+                                                ? 'bg-violet-600/30 text-white/70 rounded-tr-none'
+                                                : 'bg-gray-100 dark:bg-[#1d2c2c] text-gray-500 dark:text-gray-400 rounded-tl-none'
+                                        }`}>
+                                            <span className="material-symbols-outlined text-[14px]">block</span>
+                                            Mensaje eliminado
+                                        </div>
+                                    </div>
+                                );
+                            }
+
                             return (
                                 <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[80%] p-2.5 rounded-2xl ${isMe
+                                    <div className={`relative max-w-[80%] p-2.5 rounded-2xl group ${isMe
                                         ? 'bg-violet-600 text-white rounded-tr-none'
                                         : 'bg-white dark:bg-[#233535] text-gray-800 dark:text-gray-200 rounded-tl-none shadow-sm'
                                         }`}>
@@ -376,6 +417,32 @@ const SupportChatWidget = () => {
                                                     {msg.read_at ? 'done_all' : 'done'}
                                                 </span>
                                             </div>
+                                        )}
+
+                                        {isMe && (
+                                            <>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setMenuFor(menuFor === msg.id ? null : msg.id); }}
+                                                    className="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-white/95 text-gray-700 shadow flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                                                    title="Más"
+                                                >
+                                                    <span className="material-symbols-outlined text-[14px] leading-none">more_horiz</span>
+                                                </button>
+                                                {menuFor === msg.id && (
+                                                    <div
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="absolute -top-2 right-full mr-2 z-10 bg-white dark:bg-[#1a2c2c] rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 min-w-[140px]"
+                                                    >
+                                                        <button
+                                                            onClick={() => deleteMessage(msg)}
+                                                            className="w-full text-left px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-1.5"
+                                                        >
+                                                            <span className="material-symbols-outlined text-[14px]">delete</span>
+                                                            Eliminar
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 </div>

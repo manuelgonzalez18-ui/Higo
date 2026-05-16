@@ -54,8 +54,30 @@ const AdminSupportPage = () => {
     const [uploading, setUploading] = useState(false);
     const [attachUrls, setAttachUrls] = useState({}); // msgId → signed URL
     const [lightbox, setLightbox] = useState(null);
+    const [menuFor, setMenuFor] = useState(null);
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
+
+    const deleteMessage = async (msg) => {
+        setMenuFor(null);
+        if (!msg?.id) return;
+        if (!confirm('¿Eliminar este mensaje? No se puede deshacer.')) return;
+        const { error } = await supabase.rpc('delete_support_message', { p_id: msg.id });
+        if (error) {
+            alert(`No se pudo eliminar: ${error.message}`);
+            return;
+        }
+        if (msg.attachment_path) {
+            supabase.storage.from('support-attachments').remove([msg.attachment_path]).catch(() => {});
+        }
+    };
+
+    useEffect(() => {
+        if (menuFor === null) return;
+        const close = () => setMenuFor(null);
+        window.addEventListener('click', close);
+        return () => window.removeEventListener('click', close);
+    }, [menuFor]);
 
     const { otherIsTyping, broadcastTyping } = useSupportTyping(selectedId, 'admin');
 
@@ -462,9 +484,27 @@ const AdminSupportPage = () => {
                                 ) : messages.map(m => {
                                     const isAdmin = m.sender_role === 'admin';
                                     const url = m.attachment_path ? attachUrls[m.id] : null;
+                                    const isDeleted = !!m.deleted_at;
+                                    const isMine = isAdmin && m.sender_id === me?.id;
+
+                                    if (isDeleted) {
+                                        return (
+                                            <div key={m.id} className={`flex ${isAdmin ? 'justify-end' : 'justify-start'}`}>
+                                                <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-xs italic flex items-center gap-1.5 ${
+                                                    isAdmin
+                                                        ? 'bg-violet-600/30 text-white/70 rounded-tr-none'
+                                                        : 'bg-[#1A1F2E] text-gray-500 rounded-tl-none border border-white/5'
+                                                }`}>
+                                                    <span className="material-symbols-outlined text-[14px]">block</span>
+                                                    Mensaje eliminado
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+
                                     return (
                                         <div key={m.id} className={`flex ${isAdmin ? 'justify-end' : 'justify-start'}`}>
-                                            <div className={`max-w-[75%] p-2.5 rounded-2xl ${isAdmin
+                                            <div className={`relative max-w-[75%] p-2.5 rounded-2xl group ${isAdmin
                                                 ? 'bg-violet-600 text-white rounded-tr-none'
                                                 : 'bg-[#1A1F2E] text-gray-100 rounded-tl-none border border-white/5'
                                                 }`}>
@@ -493,6 +533,32 @@ const AdminSupportPage = () => {
                                                         </span>
                                                     )}
                                                 </div>
+
+                                                {isMine && (
+                                                    <>
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); setMenuFor(menuFor === m.id ? null : m.id); }}
+                                                            className="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-white/95 text-gray-700 shadow flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                                                            title="Más"
+                                                        >
+                                                            <span className="material-symbols-outlined text-[14px] leading-none">more_horiz</span>
+                                                        </button>
+                                                        {menuFor === m.id && (
+                                                            <div
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                className="absolute -top-2 right-full mr-2 z-10 bg-[#1A1F2E] rounded-lg shadow-xl border border-white/10 py-1 min-w-[140px]"
+                                                            >
+                                                                <button
+                                                                    onClick={() => deleteMessage(m)}
+                                                                    className="w-full text-left px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/10 flex items-center gap-1.5"
+                                                                >
+                                                                    <span className="material-symbols-outlined text-[14px]">delete</span>
+                                                                    Eliminar
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                     );
