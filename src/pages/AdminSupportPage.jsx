@@ -36,6 +36,23 @@ const FILTERS = [
     { id: 'closed', label: 'Cerrados',  icon: 'mark_chat_read' }
 ];
 
+const escapeHtml = (s) => s
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Resalta el query dentro del texto, devolviendo HTML seguro para
+// inyectar con dangerouslySetInnerHTML. Tanto el texto como el query
+// pasan por escapeHtml antes de armar el regex.
+const highlightMatch = (text, query) => {
+    const safeText = escapeHtml(text || '');
+    const q = (query || '').trim();
+    if (q.length < 2) return safeText;
+    const safeQ = escapeRegex(escapeHtml(q));
+    const re = new RegExp(safeQ, 'gi');
+    return safeText.replace(re, (m) => `<mark class="bg-yellow-400/40 text-yellow-100 rounded px-0.5">${m}</mark>`);
+};
+
 const AdminSupportPage = () => {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
@@ -47,6 +64,9 @@ const AdminSupportPage = () => {
     const [filter, setFilter] = useState('open');
     const [threads, setThreads] = useState([]);
     const [profiles, setProfiles] = useState({}); // id → profile
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState([]);
+    const [searching, setSearching] = useState(false);
     const [selectedId, setSelectedId] = useState(null);
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
@@ -154,6 +174,34 @@ const AdminSupportPage = () => {
         }
     }, [authorized, searchParams]);
 
+    // ─── Búsqueda global por contenido (debounced) ─────────────────────
+    useEffect(() => {
+        if (!authorized) return;
+        const q = searchQuery.trim();
+        if (q.length < 2) {
+            setSearchResults([]);
+            setSearching(false);
+            return;
+        }
+        setSearching(true);
+        const t = setTimeout(async () => {
+            const { data, error } = await supabase.rpc('search_support_messages', {
+                p_query: q, p_limit: 50,
+            });
+            if (error) console.error('Búsqueda falló:', error);
+            setSearchResults(data || []);
+            setSearching(false);
+        }, 300);
+        return () => clearTimeout(t);
+    }, [searchQuery, authorized]);
+
+    const openHit = (hit) => {
+        setSearchQuery('');
+        setSearchResults([]);
+        setSelectedId(hit.thread_id);
+        setSearchParams({ thread: String(hit.thread_id), msg: String(hit.message_id) });
+    };
+
     // ─── Cargar mensajes del hilo seleccionado + suscripción ───────────
     useEffect(() => {
         if (!selectedId) return;
@@ -165,6 +213,18 @@ const AdminSupportPage = () => {
                 .eq('thread_id', selectedId)
                 .order('created_at', { ascending: true });
             setMessages(data || []);
+            // Si llegamos vía ?msg=N, scrolleamos al mensaje y lo flasheamos.
+            const targetMsgId = searchParams.get('msg');
+            if (targetMsgId) {
+                setTimeout(() => {
+                    const el = document.getElementById(`support-msg-${targetMsgId}`);
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        el.classList.add('ring-2', 'ring-yellow-400', 'rounded-2xl');
+                        setTimeout(() => el.classList.remove('ring-2', 'ring-yellow-400', 'rounded-2xl'), 2200);
+                    }
+                }, 120);
+            }
         };
         fetchMessages();
 
@@ -358,6 +418,26 @@ const AdminSupportPage = () => {
                 </div>
             </div>
 
+            <div className="bg-[#1A1F2E] p-3 rounded-[20px] border border-white/5 mb-3 flex items-center gap-2">
+                <span className="material-symbols-outlined text-gray-500">search</span>
+                <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Buscar texto en todas las conversaciones…"
+                    className="flex-1 bg-transparent outline-none text-sm text-white placeholder:text-gray-600"
+                />
+                {searchQuery && (
+                    <button
+                        onClick={() => { setSearchQuery(''); setSearchResults([]); }}
+                        className="text-gray-500 hover:text-white"
+                        title="Limpiar"
+                    >
+                        <span className="material-symbols-outlined text-[18px]">close</span>
+                    </button>
+                )}
+            </div>
+
             <div className="bg-[#1A1F2E] p-3 rounded-[20px] border border-white/5 mb-6 flex gap-2 overflow-x-auto">
                 {FILTERS.map(f => (
                     <button
@@ -374,9 +454,59 @@ const AdminSupportPage = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-[360px_1fr] gap-4 h-[calc(100vh-260px)] min-h-[500px]">
-                {/* ─── Lista de hilos ─── */}
+                {/* ─── Lista de hilos / resultados de búsqueda ─── */}
                 <div className="bg-[#1A1F2E] rounded-[20px] border border-white/5 overflow-y-auto">
-                    {loading ? (
+                    {searchQuery.trim().length >= 2 ? (
+                        searching ? (
+                            <div className="flex justify-center py-20">
+                                <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin"></div>
+                            </div>
+                        ) : searchResults.length === 0 ? (
+                            <div className="text-center py-20 px-6">
+                                <span className="material-symbols-outlined text-gray-500 text-4xl">search_off</span>
+                                <p className="text-gray-400 font-medium mt-2 text-sm">Sin coincidencias.</p>
+                            </div>
+                        ) : (
+                            <>
+                                <p className="px-4 py-2 text-[11px] uppercase tracking-wider font-bold text-gray-500 border-b border-white/5">
+                                    {searchResults.length} {searchResults.length === 1 ? 'coincidencia' : 'coincidencias'}
+                                </p>
+                                {searchResults.map(hit => {
+                                    const rb = roleBadge(hit.user_role);
+                                    return (
+                                        <button
+                                            key={hit.message_id}
+                                            onClick={() => openHit(hit)}
+                                            className="w-full text-left px-4 py-3 border-b border-white/5 flex gap-3 hover:bg-white/5 transition-colors"
+                                        >
+                                            <div className="w-9 h-9 rounded-full bg-[#0F1014] border border-white/10 flex items-center justify-center shrink-0 overflow-hidden">
+                                                {hit.user_avatar ? (
+                                                    <img src={hit.user_avatar} alt="" className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <span className="material-symbols-outlined text-gray-400 text-[18px]">person</span>
+                                                )}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-bold text-white truncate text-xs">
+                                                        {hit.user_full_name || <span className="text-gray-500 italic">sin nombre</span>}
+                                                    </p>
+                                                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold border ${rb.cls}`}>{rb.label}</span>
+                                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold border bg-white/5 text-gray-400 border-white/10">
+                                                        {hit.sender_role === 'admin' ? 'Equipo' : 'Usuario'}
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-gray-300 truncate mt-0.5"
+                                                   dangerouslySetInnerHTML={{ __html: highlightMatch(hit.content || '', searchQuery) }}
+                                                />
+                                            </div>
+                                            <span className="text-[10px] text-gray-500 shrink-0 self-start">{fmtTime(hit.created_at)}</span>
+                                        </button>
+                                    );
+                                })}
+                            </>
+                        )
+                    ) : loading ? (
                         <div className="flex justify-center py-20">
                             <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin"></div>
                         </div>
@@ -503,7 +633,7 @@ const AdminSupportPage = () => {
                                     }
 
                                     return (
-                                        <div key={m.id} className={`flex ${isAdmin ? 'justify-end' : 'justify-start'}`}>
+                                        <div key={m.id} id={`support-msg-${m.id}`} className={`flex ${isAdmin ? 'justify-end' : 'justify-start'}`}>
                                             <div className={`relative max-w-[75%] p-2.5 rounded-2xl group ${isAdmin
                                                 ? 'bg-violet-600 text-white rounded-tr-none'
                                                 : 'bg-[#1A1F2E] text-gray-100 rounded-tl-none border border-white/5'
