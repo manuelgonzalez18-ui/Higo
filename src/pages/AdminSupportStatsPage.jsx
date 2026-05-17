@@ -28,6 +28,59 @@ const fmtHours = (n) => {
     return h ? `${d}d ${h}h` : `${d}d`;
 };
 
+// Escapa un valor para CSV: si contiene coma, comilla o newline lo
+// envuelve en comillas y duplica las comillas internas (RFC 4180).
+const csvEscape = (v) => {
+    if (v == null) return '';
+    const s = String(v);
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const csvRow = (cells) => cells.map(csvEscape).join(',');
+
+const downloadCsv = (stats, days) => {
+    if (!stats) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const lines = [];
+    lines.push(`# Higo Soporte · Métricas`);
+    lines.push(`# Rango: últimos ${days} días`);
+    lines.push(`# Generado: ${today}`);
+    lines.push('');
+
+    lines.push('## KPIs');
+    lines.push(csvRow(['Métrica', 'Valor']));
+    lines.push(csvRow(['Primera respuesta · promedio (min)',  stats.first_response_avg_minutes]));
+    lines.push(csvRow(['Primera respuesta · mediana (min)',   stats.first_response_median_minutes]));
+    lines.push(csvRow(['Resolución · promedio (h)',           stats.resolution_avg_hours]));
+    lines.push(csvRow(['Hilos cerrados (rango)',              stats.closed_count]));
+    lines.push(csvRow(['Hilos abiertos (ahora)',              stats.open_count]));
+    lines.push(csvRow(['Abiertos sin responder',              stats.open_unanswered]));
+    lines.push('');
+
+    lines.push('## Volumen diario');
+    lines.push(csvRow(['Día', 'Total', 'Usuario', 'Equipo', 'Hilos nuevos']));
+    (stats.volume_by_day || []).forEach(d => {
+        lines.push(csvRow([d.day, d.msgs_total, d.msgs_user, d.msgs_admin, d.threads_opened]));
+    });
+    lines.push('');
+
+    lines.push('## Top admins');
+    lines.push(csvRow(['#', 'Nombre', 'Mensajes', 'Hilos']));
+    (stats.top_admins || []).forEach((a, i) => {
+        lines.push(csvRow([i + 1, a.full_name || '', a.msgs_sent, a.threads_replied]));
+    });
+
+    // BOM para que Excel detecte UTF-8 y los emojis del preview se vean bien.
+    const blob = new Blob(['﻿', lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `higo-soporte-${days}d-${today}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+};
+
 const Kpi = ({ icon, label, value, tone = 'violet', hint }) => {
     const tones = {
         violet: 'from-violet-600 to-fuchsia-600',
@@ -112,13 +165,24 @@ const AdminSupportStatsPage = () => {
                         <p className="text-gray-400 text-sm font-medium">Tiempos de respuesta, volumen y top admins</p>
                     </div>
                 </div>
-                <button
-                    onClick={() => navigate('/admin/support')}
-                    className="px-4 py-2 rounded-lg text-sm font-bold bg-white/5 text-gray-300 hover:bg-white/10 flex items-center gap-1"
-                >
-                    <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-                    Volver a soporte
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => downloadCsv(stats, days)}
+                        disabled={!stats}
+                        className="px-4 py-2 rounded-lg text-sm font-bold bg-violet-600 text-white hover:bg-violet-500 flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Descargar todas las métricas en CSV"
+                    >
+                        <span className="material-symbols-outlined text-[18px]">download</span>
+                        CSV
+                    </button>
+                    <button
+                        onClick={() => navigate('/admin/support')}
+                        className="px-4 py-2 rounded-lg text-sm font-bold bg-white/5 text-gray-300 hover:bg-white/10 flex items-center gap-1"
+                    >
+                        <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                        Volver
+                    </button>
+                </div>
             </div>
 
             <div className="bg-[#1A1F2E] p-3 rounded-[20px] border border-white/5 mb-6 flex gap-2 overflow-x-auto">
