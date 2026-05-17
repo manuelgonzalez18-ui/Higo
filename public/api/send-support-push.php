@@ -94,7 +94,7 @@ if ($callerId === '') {
 
 // ═══ Cargar el hilo + último mensaje ════════════════════════════════════
 [$tStatus, $tBody] = bl_http_get(
-    $supaUrl . '/rest/v1/support_threads?id=eq.' . $threadId . '&select=id,user_id,status',
+    $supaUrl . '/rest/v1/support_threads?id=eq.' . $threadId . '&select=id,user_id,status,role_context',
     ['apikey: ' . $supaKey, 'Authorization: Bearer ' . $supaKey]
 );
 $threads = json_decode($tBody, true);
@@ -352,7 +352,11 @@ if ($senderRole === 'user') {
     }
 
     $supportUrl = 'https://higoapp.com/#/admin/support?thread=' . $threadId;
-    $roleLabel  = $senderRoleDb === 'driver' ? 'Conductor' : 'Pasajero';
+    // El label refleja el contexto del HILO (pasajero/driver), no el
+    // profile.role del user. Un mismo user puede tener 2 hilos: uno
+    // abierto desde la vista de pasajero, otro desde la de conductor.
+    $threadCtx  = (string) ($thread['role_context'] ?? 'passenger');
+    $roleLabel  = $threadCtx === 'driver' ? 'Conductor' : 'Pasajero';
 
     $safeName  = htmlspecialchars($senderName !== '' ? $senderName : '(sin nombre)', ENT_QUOTES);
     $safeEmail = htmlspecialchars($senderEmail, ENT_QUOTES);

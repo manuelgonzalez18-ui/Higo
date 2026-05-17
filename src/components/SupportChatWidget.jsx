@@ -35,12 +35,22 @@ const extFromMime = (mime, fallback = 'bin') => {
 // Se renderiza globalmente desde App.jsx; se autooculta en /admin/* y /auth.
 
 const HIDDEN_PATH_PREFIXES = ['/admin', '/auth'];
+
+// El widget abre UN hilo distinto según desde dónde se invoque:
+//   /driver*  → contexto "driver" (el user está usando la app como conductor)
+//   resto     → contexto "passenger" (default — /, /ride/:id, /schedule, ...)
+// Esto evita el bug en el que un mismo auth.uid() mezclaba todas sus
+// conversaciones en un solo thread sin importar el lado de la app.
+const contextFromPath = (pathname) => (
+    pathname.startsWith('/driver') ? 'driver' : 'passenger'
+);
 const SIGNED_URL_TTL = 3600;          // 1h — chat queda abierto largo a veces
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;   // 10 MB pre-compresión
 
 const SupportChatWidget = () => {
     const { pathname } = useLocation();
     const hidden = HIDDEN_PATH_PREFIXES.some(p => pathname.startsWith(p));
+    const roleContext = contextFromPath(pathname);
 
     const [userId, setUserId] = useState(null);
     const [thread, setThread] = useState(null);   // { id, status, unread_for_user, ... }
@@ -118,21 +128,23 @@ const SupportChatWidget = () => {
                 .from('support_threads')
                 .select('*')
                 .eq('user_id', userId)
+                .eq('role_context', roleContext)
                 .maybeSingle();
 
             let t = existing;
             if (!t) {
                 const { data: created, error } = await supabase
                     .from('support_threads')
-                    .insert({ user_id: userId })
+                    .insert({ user_id: userId, role_context: roleContext })
                     .select()
                     .single();
                 if (error) {
-                    // UNIQUE(user_id) puede chocar si otra pestaña insertó primero.
+                    // UNIQUE(user_id, role_context) puede chocar si otra pestaña insertó primero.
                     const { data: refetched } = await supabase
                         .from('support_threads')
                         .select('*')
                         .eq('user_id', userId)
+                        .eq('role_context', roleContext)
                         .maybeSingle();
                     if (!refetched) {
                         console.error('Error creando hilo de soporte:', error);
@@ -212,7 +224,7 @@ const SupportChatWidget = () => {
             if (messagesChannel) supabase.removeChannel(messagesChannel);
             if (threadChannel) supabase.removeChannel(threadChannel);
         };
-    }, [userId, hidden]);
+    }, [userId, hidden, roleContext]);
 
     // ─── Al abrir el widget (o cuando llega msj del admin con widget abierto),
     //     marcar todo como leído. El RPC apaga unread_for_user y setea read_at

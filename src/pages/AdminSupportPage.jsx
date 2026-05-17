@@ -389,10 +389,12 @@ const AdminSupportPage = () => {
             : date.toLocaleDateString('es-VE', { day: '2-digit', month: 'short' });
     };
 
-    const roleBadge = (role) => {
-        if (role === 'driver') return { label: 'Conductor', cls: 'bg-sky-500/10 text-sky-400 border-sky-500/30' };
-        if (role === 'admin')  return { label: 'Admin',     cls: 'bg-violet-500/10 text-violet-400 border-violet-500/30' };
-        return                       { label: 'Pasajero',  cls: 'bg-gray-500/10 text-gray-400 border-gray-500/30' };
+    // Badge según el contexto en el que el user abrió el chat (no según
+    // su profile.role): un mismo user puede tener 2 hilos abiertos.
+    const ctxBadge = (ctx) => {
+        if (ctx === 'driver')    return { label: 'Conductor', cls: 'bg-sky-500/10 text-sky-400 border-sky-500/30' };
+        if (ctx === 'passenger') return { label: 'Pasajero',  cls: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' };
+        return                          { label: ctx || '—',  cls: 'bg-gray-500/10 text-gray-400 border-gray-500/30' };
     };
 
     if (!authorized) {
@@ -482,7 +484,7 @@ const AdminSupportPage = () => {
                                     {searchResults.length} {searchResults.length === 1 ? 'coincidencia' : 'coincidencias'}
                                 </p>
                                 {searchResults.map(hit => {
-                                    const rb = roleBadge(hit.user_role);
+                                    const rb = ctxBadge(hit.thread_role_context || hit.user_role);
                                     return (
                                         <button
                                             key={hit.message_id}
@@ -529,7 +531,7 @@ const AdminSupportPage = () => {
                         </div>
                     ) : threads.map(t => {
                         const p = profiles[t.user_id];
-                        const rb = roleBadge(p?.role);
+                        const rb = ctxBadge(t.role_context);
                         const active = t.id === selectedId;
                         return (
                             <button
@@ -601,7 +603,7 @@ const AdminSupportPage = () => {
                                             </p>
                                         ) : (
                                             <p className="text-xs text-gray-400 truncate">
-                                                {selectedProfile?.phone || '—'} · {roleBadge(selectedProfile?.role).label}
+                                                {selectedProfile?.phone || '—'} · {ctxBadge(selectedThread?.role_context).label}
                                             </p>
                                         )}
                                     </div>
