@@ -15,10 +15,13 @@ import AdminLoginPage from './pages/AdminLoginPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminAnalyticsPage from './pages/AdminAnalyticsPage';
 import AdminZonesPage from './pages/AdminZonesPage';
+import AdminSupportPage from './pages/AdminSupportPage';
+import AdminSupportStatsPage from './pages/AdminSupportStatsPage';
 import AdminGuard from './components/AdminGuard';
 import DriverLandingPage from './pages/DriverLandingPage';
 import HigoPayPage from './pages/HigoPayPage';
 import ChatWidget from './components/ChatWidget';
+import SupportChatWidget from './components/SupportChatWidget';
 import './index.css';         // Ensure Tailwind/global CSS is imported
 
 import AuthPage from './pages/AuthPage';
@@ -148,9 +151,12 @@ const App = () => {
         <Route path="/admin/disputes" element={<AdminGuard><AdminDisputesPage /></AdminGuard>} />
         <Route path="/admin/analytics" element={<AdminGuard><AdminAnalyticsPage /></AdminGuard>} />
         <Route path="/admin/zones" element={<AdminGuard><AdminZonesPage /></AdminGuard>} />
+        <Route path="/admin/support" element={<AdminGuard><AdminSupportPage /></AdminGuard>} />
+        <Route path="/admin/support/stats" element={<AdminGuard><AdminSupportStatsPage /></AdminGuard>} />
         <Route path="/join" element={<DriverLandingPage />} />
       </Routes>
       <ChatWidget />
+      <SupportChatWidget />
 
       {showDisclosure && <LocationDisclosure onAccept={handleAcceptDisclosure} />}
 

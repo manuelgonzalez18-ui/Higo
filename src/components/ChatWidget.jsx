@@ -32,8 +32,16 @@ const ChatWidget = () => {
     }, [isOpen]);
 
     useEffect(() => {
-        // 1. Get Initial Session
+        // 1. Sesión desde localStorage (síncrono, no requiere red).
+        //    getUser() hace roundtrip y dejaba userId=null en redes lentas,
+        //    rompiendo el send con "Faltan datos: ID de usuario".
         const fetchUser = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) {
+                setUserId(session.user.id);
+                return;
+            }
+            // Fallback: si no hay sesión cacheada, intentamos refrescar contra el server.
             const { data: { user } } = await supabase.auth.getUser();
             if (user) setUserId(user.id);
         };
@@ -89,41 +97,24 @@ const ChatWidget = () => {
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ride_messages', filter: `ride_id=eq.${rideId}` }, async (payload) => {
                 setMessages(prev => [...prev, payload.new]);
 
-                // Notify if message is NOT from me
-                if (payload.new.sender_id !== userId) {
-                    if (!isOpen) {
-                        setUnreadCount(prev => prev + 1);
-                    }
+                if (payload.new.sender_id === userId) return;
 
-                    // Intense Vibration and Sound using Service
-                    vibrateIntense();
-                    playAlertSound();
+                if (!isOpen) setUnreadCount(prev => prev + 1);
+                vibrateIntense();
+                playAlertSound();
 
-                    // Notify if message is NOT from me
-                    if (payload.new.sender_id !== userId) {
-                        if (!isOpen) {
-                            setUnreadCount(prev => prev + 1);
-                        }
-
-                        // Intense Vibration and Sound using Service
-                        vibrateIntense();
-                        playAlertSound();
-
-                        // Native Notification for backup
-                        const msgText = payload.new.content || 'Tienes un nuevo mensaje';
-                        LocalNotifications.schedule({
-                            notifications: [{
-                                title: 'Nuevo Mensaje',
-                                body: msgText,
-                                id: new Date().getTime(),
-                                schedule: { at: new Date() },
-                                sound: 'alert_sound',
-                                channelId: 'higo_rides_v11',
-                                extra: { rideId: rideId }
-                            }]
-                        });
-                    }
-                }
+                const msgText = payload.new.content || 'Tienes un nuevo mensaje';
+                LocalNotifications.schedule({
+                    notifications: [{
+                        title: 'Nuevo Mensaje',
+                        body: msgText,
+                        id: new Date().getTime(),
+                        schedule: { at: new Date() },
+                        sound: 'alert_sound',
+                        channelId: 'higo_rides_v11',
+                        extra: { rideId: rideId }
+                    }]
+                });
             })
             .subscribe();
 
@@ -239,7 +230,8 @@ const ChatWidget = () => {
                         />
                         <button
                             onClick={handleSend}
-                            disabled={isLoading || !inputValue.trim()}
+                            disabled={isLoading || !inputValue.trim() || !userId}
+                            title={!userId ? 'Cargando sesión…' : ''}
                             className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
                         >
                             <span className="material-symbols-outlined text-[20px]">send</span>
