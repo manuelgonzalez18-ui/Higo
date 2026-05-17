@@ -2,17 +2,30 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-// Firebase Web SDK config. Estos valores no son secretos: Firebase los expone
-// deliberadamente y la seguridad real vive en Security Rules. Si .env está,
-// prevalece; si no, usamos los valores hardcoded.
+// Firebase Web SDK config. Los valores NO son secretos en el sentido
+// criptográfico (Firebase los expone deliberadamente al cliente y la
+// seguridad real vive en Security Rules), pero los pusheamos a .env
+// para tener UNA fuente de verdad y poder rotar el proyecto sin
+// recompilar. En dev, si falta el .env tiramos warning para que se
+// detecte temprano; en prod, throw — preferimos build roto a deploy
+// con config inconsistente.
+const env = import.meta.env;
+const required = ['VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_PROJECT_ID', 'VITE_FIREBASE_APP_ID'];
+const missing = required.filter(k => !env[k]);
+if (missing.length) {
+    const msg = `Firebase config faltante: ${missing.join(', ')}. Revisá .env / GitHub Actions secrets.`;
+    if (env.PROD) throw new Error(msg);
+    console.warn('[firebase]', msg);
+}
+
 const firebaseConfig = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyAcoBzdfPRJ76luR-bTjW4Kxen3dWZ0Xn4',
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'higo-app-26a19.firebaseapp.com',
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'higo-app-26a19',
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'higo-app-26a19.firebasestorage.app',
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '402695441944',
-    appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:402695441944:web:104db3fe36029e2c36bd6d',
-    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || 'G-0N2ZDGDGNT'
+    apiKey:            env.VITE_FIREBASE_API_KEY,
+    authDomain:        env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId:         env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket:     env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId:             env.VITE_FIREBASE_APP_ID,
+    measurementId:     env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
 const app = initializeApp(firebaseConfig);
