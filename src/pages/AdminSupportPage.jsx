@@ -6,6 +6,7 @@ import { triggerSupportPush } from '../services/supportPush';
 import { compressImage } from '../utils/imageCompression';
 import { useSupportTyping } from '../hooks/useSupportTyping';
 import SupportAttachment from '../components/SupportAttachment';
+import AudioRecorder from '../components/AudioRecorder';
 
 const SIGNED_URL_TTL = 3600;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -75,6 +76,7 @@ const AdminSupportPage = () => {
     const [attachUrls, setAttachUrls] = useState({}); // msgId → signed URL
     const [lightbox, setLightbox] = useState(null);
     const [menuFor, setMenuFor] = useState(null);
+    const [isRecording, setIsRecording] = useState(false);
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
 
@@ -311,42 +313,26 @@ const AdminSupportPage = () => {
         if (ok) setInputValue('');
     };
 
-    const handleFilePick = async (e) => {
-        const raw = e.target.files?.[0];
-        e.target.value = '';
-        if (!raw || !selectedId || !me?.id) return;
-
-        const isImage = raw.type.startsWith('image/');
-        const isAudio = raw.type.startsWith('audio/');
-        const isPdf   = raw.type === 'application/pdf';
-        if (!isImage && !isAudio && !isPdf) {
-            alert('Solo se admiten imágenes, PDF o audio.');
-            return;
-        }
-        if (raw.size > MAX_UPLOAD_BYTES) {
+    // Reusado por file picker y por el grabador de audio in-app.
+    const uploadAndSend = async (file) => {
+        if (!selectedId || !me?.id) return;
+        if (file.size > MAX_UPLOAD_BYTES) {
             alert('El archivo pesa más de 10 MB.');
             return;
         }
         setUploading(true);
         try {
-            const file = isImage ? await compressImage(raw, 1600, 0.85) : raw;
-            const ext  = extFromMime(file.type || raw.type);
+            const mime = file.type || 'application/octet-stream';
+            const ext  = extFromMime(mime);
             const path = `${selectedId}/${me.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
             const { error: upErr } = await supabase
                 .storage
                 .from('support-attachments')
-                .upload(path, file, {
-                    contentType: file.type || raw.type || 'application/octet-stream',
-                    upsert: false,
-                });
+                .upload(path, file, { contentType: mime, upsert: false });
             if (upErr) throw upErr;
             await insertAdminMessage({
                 content: inputValue.trim() || null,
-                attachment: {
-                    path,
-                    mime: file.type || raw.type || 'application/octet-stream',
-                    size: file.size,
-                },
+                attachment: { path, mime, size: file.size },
             });
             setInputValue('');
         } catch (err) {
@@ -355,6 +341,22 @@ const AdminSupportPage = () => {
         } finally {
             setUploading(false);
         }
+    };
+
+    const handleFilePick = async (e) => {
+        const raw = e.target.files?.[0];
+        e.target.value = '';
+        if (!raw) return;
+
+        const isImage = raw.type.startsWith('image/');
+        const isAudio = raw.type.startsWith('audio/');
+        const isPdf   = raw.type === 'application/pdf';
+        if (!isImage && !isAudio && !isPdf) {
+            alert('Solo se admiten imágenes, PDF o audio.');
+            return;
+        }
+        const file = isImage ? await compressImage(raw, 1600, 0.85) : raw;
+        await uploadAndSend(file);
     };
 
     const toggleStatus = async () => {
@@ -712,33 +714,45 @@ const AdminSupportPage = () => {
                                     className="hidden"
                                     onChange={handleFilePick}
                                 />
-                                <button
-                                    onClick={() => fileInputRef.current?.click()}
-                                    disabled={uploading || sending}
-                                    title="Adjuntar imagen, PDF o audio"
-                                    className="p-2 text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 rounded-lg disabled:opacity-40 transition-colors"
-                                >
-                                    <span className="material-symbols-outlined text-[22px]">
-                                        {uploading ? 'progress_activity' : 'attach_file'}
-                                    </span>
-                                </button>
-                                <input
-                                    type="text"
-                                    value={inputValue}
-                                    onChange={(e) => { setInputValue(e.target.value); if (e.target.value) broadcastTyping(); }}
-                                    onKeyDown={(e) => e.key === 'Enter' && sendReply()}
-                                    placeholder={uploading ? 'Subiendo imagen…' : 'Escribir respuesta…'}
-                                    disabled={uploading}
-                                    className="flex-1 bg-[#0F1014] border border-white/10 rounded-lg outline-none px-3 py-2 text-sm focus:border-violet-500/50 text-white placeholder:text-gray-600"
+                                {!isRecording && (
+                                    <>
+                                        <button
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={uploading || sending}
+                                            title="Adjuntar imagen, PDF o audio"
+                                            className="p-2 text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 rounded-lg disabled:opacity-40 transition-colors"
+                                        >
+                                            <span className="material-symbols-outlined text-[22px]">
+                                                {uploading ? 'progress_activity' : 'attach_file'}
+                                            </span>
+                                        </button>
+                                        <input
+                                            type="text"
+                                            value={inputValue}
+                                            onChange={(e) => { setInputValue(e.target.value); if (e.target.value) broadcastTyping(); }}
+                                            onKeyDown={(e) => e.key === 'Enter' && sendReply()}
+                                            placeholder={uploading ? 'Subiendo adjunto…' : 'Escribir respuesta…'}
+                                            disabled={uploading}
+                                            className="flex-1 bg-[#0F1014] border border-white/10 rounded-lg outline-none px-3 py-2 text-sm focus:border-violet-500/50 text-white placeholder:text-gray-600"
+                                        />
+                                    </>
+                                )}
+                                <AudioRecorder
+                                    disabled={uploading || sending || !selectedId}
+                                    variant="admin"
+                                    onRecording={setIsRecording}
+                                    onComplete={(file) => uploadAndSend(file)}
                                 />
-                                <button
-                                    onClick={sendReply}
-                                    disabled={sending || uploading || !inputValue.trim()}
-                                    className="px-4 py-2 bg-violet-600 text-white rounded-lg font-bold text-sm hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1"
-                                >
-                                    <span className="material-symbols-outlined text-[18px]">send</span>
-                                    Enviar
-                                </button>
+                                {!isRecording && (
+                                    <button
+                                        onClick={sendReply}
+                                        disabled={sending || uploading || !inputValue.trim()}
+                                        className="px-4 py-2 bg-violet-600 text-white rounded-lg font-bold text-sm hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1"
+                                    >
+                                        <span className="material-symbols-outlined text-[18px]">send</span>
+                                        Enviar
+                                    </button>
+                                )}
                             </div>
                         </>
                     )}

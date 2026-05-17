@@ -7,6 +7,7 @@ import { triggerSupportPush } from '../services/supportPush';
 import { compressImage } from '../utils/imageCompression';
 import { useSupportTyping } from '../hooks/useSupportTyping';
 import SupportAttachment from './SupportAttachment';
+import AudioRecorder from './AudioRecorder';
 
 // Tipos permitidos como adjunto. RLS del bucket no filtra por mime; lo
 // aplicamos en el cliente.
@@ -50,6 +51,7 @@ const SupportChatWidget = () => {
     const [attachUrls, setAttachUrls] = useState({}); // msgId → signed URL
     const [lightbox, setLightbox] = useState(null);   // URL ampliada
     const [menuFor, setMenuFor] = useState(null);     // msgId con menú abierto
+    const [isRecording, setIsRecording] = useState(false);
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
 
@@ -280,45 +282,28 @@ const SupportChatWidget = () => {
         if (!ok) setInputValue(content); // restaurar si falló
     };
 
-    const handleFilePick = async (e) => {
-        const raw = e.target.files?.[0];
-        e.target.value = ''; // permitir reseleccionar el mismo archivo
-        if (!raw || !thread?.id || !userId) return;
-
-        const isImage = raw.type.startsWith('image/');
-        const isAudio = raw.type.startsWith('audio/');
-        const isPdf   = raw.type === 'application/pdf';
-        if (!isImage && !isAudio && !isPdf) {
-            alert('Solo se admiten imágenes, PDF o audio.');
-            return;
-        }
-        if (raw.size > MAX_UPLOAD_BYTES) {
+    // Sube un File al bucket y dispara sendMessage. Reusado por el
+    // file picker (imágenes/PDF/audio existente) y por el grabador
+    // de audio in-app.
+    const uploadAndSend = async (file) => {
+        if (!thread?.id || !userId) return;
+        if (file.size > MAX_UPLOAD_BYTES) {
             alert('El archivo pesa más de 10 MB. Probá con uno más liviano.');
             return;
         }
-
         setUploading(true);
         try {
-            // Imágenes: comprimir antes de subir. PDF/audio: tal cual.
-            const file = isImage ? await compressImage(raw, 1600, 0.85) : raw;
-            const ext  = extFromMime(file.type || raw.type);
+            const mime = file.type || 'application/octet-stream';
+            const ext  = extFromMime(mime);
             const path = `${thread.id}/${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
             const { error: upErr } = await supabase
                 .storage
                 .from('support-attachments')
-                .upload(path, file, {
-                    contentType: file.type || raw.type || 'application/octet-stream',
-                    upsert: false,
-                });
+                .upload(path, file, { contentType: mime, upsert: false });
             if (upErr) throw upErr;
-
             await sendMessage({
                 content: inputValue.trim() || null,
-                attachment: {
-                    path,
-                    mime: file.type || raw.type || 'application/octet-stream',
-                    size: file.size,
-                },
+                attachment: { path, mime, size: file.size },
             });
             setInputValue('');
         } catch (err) {
@@ -327,6 +312,23 @@ const SupportChatWidget = () => {
         } finally {
             setUploading(false);
         }
+    };
+
+    const handleFilePick = async (e) => {
+        const raw = e.target.files?.[0];
+        e.target.value = ''; // permitir reseleccionar el mismo archivo
+        if (!raw) return;
+
+        const isImage = raw.type.startsWith('image/');
+        const isAudio = raw.type.startsWith('audio/');
+        const isPdf   = raw.type === 'application/pdf';
+        if (!isImage && !isAudio && !isPdf) {
+            alert('Solo se admiten imágenes, PDF o audio.');
+            return;
+        }
+        // Imágenes: comprimir antes. PDF/audio: tal cual.
+        const file = isImage ? await compressImage(raw, 1600, 0.85) : raw;
+        await uploadAndSend(file);
     };
 
     if (hidden || !userId) return null;
@@ -459,32 +461,44 @@ const SupportChatWidget = () => {
                             className="hidden"
                             onChange={handleFilePick}
                         />
-                        <button
-                            onClick={() => fileInputRef.current?.click()}
+                        {!isRecording && (
+                            <>
+                                <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={uploading || !thread?.id}
+                                    title="Adjuntar imagen, PDF o audio"
+                                    className="p-2 text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg disabled:opacity-40 transition-colors"
+                                >
+                                    <span className="material-symbols-outlined text-[22px]">
+                                        {uploading ? 'progress_activity' : 'attach_file'}
+                                    </span>
+                                </button>
+                                <input
+                                    type="text"
+                                    className="flex-1 bg-gray-100 dark:bg-[#0f1c1c] border-none outline-none rounded-lg text-sm px-3 py-2 focus:ring-1 focus:ring-violet-600 text-gray-800 dark:text-white"
+                                    placeholder={uploading ? 'Subiendo adjunto…' : 'Escribe un mensaje…'}
+                                    value={inputValue}
+                                    onChange={(e) => { setInputValue(e.target.value); if (e.target.value) broadcastTyping(); }}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                                    disabled={uploading}
+                                />
+                            </>
+                        )}
+                        <AudioRecorder
                             disabled={uploading || !thread?.id}
-                            title="Adjuntar imagen, PDF o audio"
-                            className="p-2 text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg disabled:opacity-40 transition-colors"
-                        >
-                            <span className="material-symbols-outlined text-[22px]">
-                                {uploading ? 'progress_activity' : 'attach_file'}
-                            </span>
-                        </button>
-                        <input
-                            type="text"
-                            className="flex-1 bg-gray-100 dark:bg-[#0f1c1c] border-none outline-none rounded-lg text-sm px-3 py-2 focus:ring-1 focus:ring-violet-600 text-gray-800 dark:text-white"
-                            placeholder={uploading ? 'Subiendo imagen…' : 'Escribe un mensaje…'}
-                            value={inputValue}
-                            onChange={(e) => { setInputValue(e.target.value); if (e.target.value) broadcastTyping(); }}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                            disabled={uploading}
+                            variant="user"
+                            onRecording={setIsRecording}
+                            onComplete={(file) => uploadAndSend(file)}
                         />
-                        <button
-                            onClick={handleSend}
-                            disabled={!inputValue.trim() || !thread?.id || uploading}
-                            className="p-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-40 transition-colors"
-                        >
-                            <span className="material-symbols-outlined text-[20px]">send</span>
-                        </button>
+                        {!isRecording && (
+                            <button
+                                onClick={handleSend}
+                                disabled={!inputValue.trim() || !thread?.id || uploading}
+                                className="p-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-40 transition-colors"
+                            >
+                                <span className="material-symbols-outlined text-[20px]">send</span>
+                            </button>
+                        )}
                     </div>
                 </div>
             )}
