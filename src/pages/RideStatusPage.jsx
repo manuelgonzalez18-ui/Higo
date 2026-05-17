@@ -101,14 +101,15 @@ const RideStatusPage = () => {
             })
             .subscribe();
 
-        // Backup Polling every 5 seconds in case socket fails
-        const interval = setInterval(() => {
-            fetchRide();
-        }, 2000); // Aggressive 2s Polling
+        // NOTA: el polling cada 2s a fetchRide() que vivía acá como
+        // "backup in case socket fails" se eliminó. El channel `ride:${id}`
+        // con filter server-side (id=eq.{id}) ya cubre el caso, y Supabase
+        // realtime reconecta automáticamente con backoff si el socket cae.
+        // Eran 30 queries/min/pasajero contra rides por nada — castigaba
+        // batería en mobile y API quota.
 
         return () => {
             supabase.removeChannel(channel);
-            clearInterval(interval);
         };
     }, [id]);
 
@@ -179,21 +180,14 @@ const RideStatusPage = () => {
         }
     };
 
-    // Robust Polling for Driver Location (Every 3 seconds)
-    // This runs alongside Realtime to ensure freshness even if socket hangs
-    useEffect(() => {
-        if (!ride?.driver_id) return;
-
-        const locInterval = setInterval(async () => {
-            const { data: driverData } = await supabase.from('profiles').select('*').eq('id', ride.driver_id).single();
-            if (driverData) {
-                // Only update if changed (optional, but React state dedupes mostly)
-                setDriver(prev => ({ ...prev, ...driverData }));
-            }
-        }, 3000);
-
-        return () => clearInterval(locInterval);
-    }, [ride?.driver_id]);
+    // NOTA: el polling cada 3s a profiles para refrescar driver location
+    // se eliminó. El channel `driver_loc:${ride.driver_id}` con filter
+    // server-side ya recibe el UPDATE cuando el chofer actualiza GPS
+    // (update_driver_gps RPC). El polling era 20 queries/min/pasajero
+    // duplicadas con el channel.
+    // Si el realtime cae, el indicador "hace X segundos" del UI (ver
+    // efecto del tick 1s más abajo) se hace evidente y el usuario puede
+    // refrescar manualmente; mejor que drenar batería en silencio.
 
     const submitRating = async () => {
         const { error } = await supabase
