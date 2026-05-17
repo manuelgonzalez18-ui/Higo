@@ -81,7 +81,36 @@ const downloadCsv = (stats, days) => {
     URL.revokeObjectURL(url);
 };
 
-const Kpi = ({ icon, label, value, tone = 'violet', hint }) => {
+// Calcula delta% entre actual y previo. Devuelve null si previo es
+// 0 o nulo (no podemos dividir, no mostramos pill).
+const computeDelta = (cur, prev) => {
+    if (cur == null || prev == null || prev === 0) return null;
+    return Math.round(((cur - prev) / prev) * 100);
+};
+
+// Pill de variación. lowerIsBetter=true para tiempos (1ª respuesta,
+// resolución): bajar es bueno (verde). Para counts (mensajes, hilos
+// abiertos) la dirección depende del contexto — por defecto subir es
+// neutro/informativo, no malo, así que usamos un tono neutro.
+const DeltaPill = ({ delta, lowerIsBetter = false }) => {
+    if (delta == null) return null;
+    const isUp = delta > 0;
+    const isFlat = delta === 0;
+    let cls = 'bg-white/5 text-gray-400';
+    if (!isFlat) {
+        const good = lowerIsBetter ? !isUp : isUp;
+        cls = good ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400';
+    }
+    const icon = isFlat ? 'remove' : (isUp ? 'arrow_upward' : 'arrow_downward');
+    return (
+        <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${cls}`}>
+            <span className="material-symbols-outlined text-[12px] leading-none">{icon}</span>
+            {Math.abs(delta)}%
+        </span>
+    );
+};
+
+const Kpi = ({ icon, label, value, tone = 'violet', hint, delta, lowerIsBetter }) => {
     const tones = {
         violet: 'from-violet-600 to-fuchsia-600',
         sky:    'from-sky-500 to-cyan-500',
@@ -96,7 +125,10 @@ const Kpi = ({ icon, label, value, tone = 'violet', hint }) => {
                 </div>
                 <p className="text-xs font-bold uppercase tracking-wider text-gray-400">{label}</p>
             </div>
-            <p className="text-3xl font-black text-white">{value}</p>
+            <div className="flex items-baseline gap-2">
+                <p className="text-3xl font-black text-white">{value}</p>
+                <DeltaPill delta={delta} lowerIsBetter={lowerIsBetter} />
+            </div>
             {hint && <p className="text-[11px] text-gray-500 mt-1">{hint}</p>}
         </div>
     );
@@ -207,6 +239,9 @@ const AdminSupportStatsPage = () => {
                 <div className="text-center py-20 text-gray-500">No se pudieron cargar las métricas.</div>
             ) : (
                 <>
+                    <p className="text-[11px] text-gray-500 mb-2 ml-1">
+                        Variaciones comparan contra los {days} días previos.
+                    </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                         <Kpi
                             icon="schedule"
@@ -214,6 +249,8 @@ const AdminSupportStatsPage = () => {
                             value={fmtMins(stats.first_response_avg_minutes)}
                             tone="violet"
                             hint={stats.first_response_median_minutes != null ? `Mediana ${fmtMins(stats.first_response_median_minutes)}` : null}
+                            delta={computeDelta(stats.first_response_avg_minutes, stats.previous?.first_response_avg_minutes)}
+                            lowerIsBetter
                         />
                         <Kpi
                             icon="check_circle"
@@ -221,6 +258,8 @@ const AdminSupportStatsPage = () => {
                             value={fmtHours(stats.resolution_avg_hours)}
                             tone="sky"
                             hint={`${stats.closed_count || 0} hilos cerrados`}
+                            delta={computeDelta(stats.resolution_avg_hours, stats.previous?.resolution_avg_hours)}
+                            lowerIsBetter
                         />
                         <Kpi
                             icon="mark_chat_unread"
@@ -235,6 +274,10 @@ const AdminSupportStatsPage = () => {
                             value={(stats.volume_by_day || []).reduce((a, d) => a + (d.msgs_total || 0), 0)}
                             tone="rose"
                             hint={`${(stats.volume_by_day || []).reduce((a, d) => a + (d.threads_opened || 0), 0)} hilos nuevos`}
+                            delta={computeDelta(
+                                (stats.volume_by_day || []).reduce((a, d) => a + (d.msgs_total || 0), 0),
+                                stats.previous?.msgs_total
+                            )}
                         />
                     </div>
 
