@@ -26,6 +26,13 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/../banesco-core.php';
+require_once __DIR__ . '/_ratelimit.php';
+
+// Cron endpoint — sin CORS porque se invoca server-to-server (cPanel
+// cron de Hostinger con header X-Cron-Secret). Rate limit defensivo
+// por IP por si alguien lo encuentra y trata de spamearlo aunque el
+// X-Cron-Secret lo cortaría igual.
+api_rate_limit('send-membership-reminders', 5, '/tmp/higo_ratelimit.log');
 
 // ═══ HTTP helpers ═════════════════════════════════════════════════════
 

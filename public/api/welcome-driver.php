@@ -24,13 +24,14 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/../banesco-core.php';
+require_once __DIR__ . '/_cors.php';
+require_once __DIR__ . '/_ratelimit.php';
+
+$_cfg_cors = function_exists('bl_load_config') ? bl_load_config() : [];
+api_apply_cors($_cfg_cors, 'POST, OPTIONS');
+api_rate_limit('welcome-driver', 5, '/tmp/higo_ratelimit.log');
 
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Headers: Authorization, Content-Type');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
 function wd_send(int $code, array $payload): void {
     http_response_code($code);

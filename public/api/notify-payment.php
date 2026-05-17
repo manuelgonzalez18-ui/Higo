@@ -8,10 +8,15 @@
  * El comprobante se incrusta como <img> con la signed URL completa, evitando
  * que se rompa por line-wrap del cliente de correo.
  */
+require_once __DIR__ . '/../banesco-core.php';
+require_once __DIR__ . '/_cors.php';
+require_once __DIR__ . '/_ratelimit.php';
+
+$_cfg_cors = function_exists('bl_load_config') ? bl_load_config() : [];
+api_apply_cors($_cfg_cors, 'POST, OPTIONS');
+api_rate_limit('notify-payment', 20, '/tmp/higo_ratelimit.log');
+
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Headers: Authorization, Content-Type');
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);

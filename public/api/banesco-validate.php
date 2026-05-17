@@ -233,7 +233,16 @@ try {
     bv_send_json(503, ['ok' => false, 'errorCode' => 'CONFIG', 'errorMessage' => $e->getMessage()]);
 }
 
-bv_apply_cors($cfg);
+// CORS + rate limit usando los helpers compartidos. La función inline
+// bv_apply_cors (ver arriba) se mantiene por compatibilidad pero ya no
+// se invoca — toda la lógica vive en _cors.php ahora.
+require_once __DIR__ . '/_cors.php';
+require_once __DIR__ . '/_ratelimit.php';
+api_apply_cors($cfg, 'POST, OPTIONS');
+// Banesco es el más expuesto a brute-force de referencias bancarias.
+// 10 req/min/IP cubre uso normal (un driver reportando pago) y corta
+// abuso temprano.
+api_rate_limit('banesco-validate', 10, '/tmp/higo_ratelimit.log');
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(204);

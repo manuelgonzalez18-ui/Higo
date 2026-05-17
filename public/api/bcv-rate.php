@@ -18,6 +18,8 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/../banesco-core.php';
+require_once __DIR__ . '/_cors.php';
+require_once __DIR__ . '/_ratelimit.php';
 
 const BCV_URL        = 'https://ve.dolarapi.com/v1/dolares/oficial';
 const BCV_CACHE_FILE = '/tmp/higo-bcv-rate.json';
@@ -31,9 +33,12 @@ function bcv_send(int $status, array $body): void {
     exit;
 }
 
-// CORS — cualquier origen, es info pública.
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, OPTIONS');
+// CORS: aunque la tasa BCV es info pública (la fuente dolarapi.com es
+// abierta), restringimos a nuestros dominios para no servir de cache
+// gratis a terceros. Quien quiera la tasa puede ir directo al origen.
+$_cfg_cors = function_exists('bl_load_config') ? bl_load_config() : [];
+api_apply_cors($_cfg_cors, 'GET, OPTIONS');
+api_rate_limit('bcv-rate', 60, '/tmp/higo_ratelimit.log');
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(204);
     exit;
