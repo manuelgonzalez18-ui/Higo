@@ -112,7 +112,7 @@ const DeltaPill = ({ delta, lowerIsBetter = false }) => {
 
 const Kpi = ({ icon, label, value, tone = 'violet', hint, delta, lowerIsBetter }) => {
     const tones = {
-        violet: 'from-violet-600 to-fuchsia-600',
+        violet: 'from-blue-600 to-blue-700',
         sky:    'from-sky-500 to-cyan-500',
         rose:   'from-rose-500 to-pink-500',
         amber:  'from-amber-500 to-orange-500',
@@ -178,7 +178,7 @@ const AdminSupportStatsPage = () => {
     if (!authorized) {
         return (
             <div className="min-h-screen bg-[#0F1014] flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
             </div>
         );
     }
@@ -189,7 +189,7 @@ const AdminSupportStatsPage = () => {
 
             <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
                 <div className="flex items-center gap-4">
-                    <div className="bg-gradient-to-br from-violet-600 to-fuchsia-600 p-3 rounded-2xl shadow-lg shadow-violet-600/20">
+                    <div className="bg-blue-600 p-3 rounded-2xl shadow-lg shadow-blue-600/20">
                         <span className="material-symbols-outlined text-white text-2xl">monitoring</span>
                     </div>
                     <div>
@@ -201,7 +201,7 @@ const AdminSupportStatsPage = () => {
                     <button
                         onClick={() => downloadCsv(stats, days)}
                         disabled={!stats}
-                        className="px-4 py-2 rounded-lg text-sm font-bold bg-violet-600 text-white hover:bg-violet-500 flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="px-4 py-2 rounded-lg text-sm font-bold bg-blue-600 text-white hover:bg-blue-500 flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
                         title="Descargar todas las métricas en CSV"
                     >
                         <span className="material-symbols-outlined text-[18px]">download</span>
@@ -233,7 +233,7 @@ const AdminSupportStatsPage = () => {
 
             {loading ? (
                 <div className="flex justify-center py-20">
-                    <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin"></div>
+                    <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                 </div>
             ) : !stats ? (
                 <div className="text-center py-20 text-gray-500">No se pudieron cargar las métricas.</div>
@@ -285,11 +285,11 @@ const AdminSupportStatsPage = () => {
                         {/* Volumen diario */}
                         <div className="lg:col-span-2 bg-[#1A1F2E] rounded-[20px] border border-white/5 p-5">
                             <div className="flex items-center gap-2 mb-4">
-                                <span className="material-symbols-outlined text-violet-400">bar_chart</span>
+                                <span className="material-symbols-outlined text-blue-400">bar_chart</span>
                                 <h2 className="font-bold text-white">Volumen diario</h2>
                                 <div className="ml-auto flex items-center gap-3 text-[11px]">
                                     <span className="flex items-center gap-1 text-gray-400">
-                                        <span className="w-2 h-2 rounded-sm bg-violet-500"></span> Usuario
+                                        <span className="w-2 h-2 rounded-sm bg-blue-500"></span> Usuario
                                     </span>
                                     <span className="flex items-center gap-1 text-gray-400">
                                         <span className="w-2 h-2 rounded-sm bg-sky-500"></span> Equipo
@@ -307,7 +307,7 @@ const AdminSupportStatsPage = () => {
                                             <div key={d.day} className="flex items-center gap-3 text-xs">
                                                 <span className="text-gray-400 w-20 shrink-0 font-mono">{d.day.slice(5)}</span>
                                                 <div className="flex-1 h-5 bg-white/5 rounded-md overflow-hidden flex">
-                                                    <div className="bg-violet-500 h-full" style={{ width: `${wu}%` }} title={`${d.msgs_user} del usuario`} />
+                                                    <div className="bg-blue-500 h-full" style={{ width: `${wu}%` }} title={`${d.msgs_user} del usuario`} />
                                                     <div className="bg-sky-500 h-full" style={{ width: `${wa}%` }} title={`${d.msgs_admin} del equipo`} />
                                                 </div>
                                                 <span className="text-gray-300 w-12 text-right tabular-nums">{d.msgs_total}</span>
@@ -324,7 +324,7 @@ const AdminSupportStatsPage = () => {
                         {/* Top admins */}
                         <div className="bg-[#1A1F2E] rounded-[20px] border border-white/5 p-5">
                             <div className="flex items-center gap-2 mb-4">
-                                <span className="material-symbols-outlined text-violet-400">workspace_premium</span>
+                                <span className="material-symbols-outlined text-blue-400">workspace_premium</span>
                                 <h2 className="font-bold text-white">Top admins</h2>
                             </div>
                             {(stats.top_admins || []).length === 0 ? (

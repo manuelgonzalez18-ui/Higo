@@ -400,7 +400,7 @@ const AdminSupportPage = () => {
     if (!authorized) {
         return (
             <div className="min-h-screen bg-[#0F1014] flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
             </div>
         );
     }
@@ -413,7 +413,7 @@ const AdminSupportPage = () => {
             <AdminNav />
 
             <div className="flex items-center gap-4 mb-6">
-                <div className="bg-gradient-to-br from-violet-600 to-fuchsia-600 p-3 rounded-2xl shadow-lg shadow-violet-600/20">
+                <div className="bg-blue-600 p-3 rounded-2xl shadow-lg shadow-blue-600/20">
                     <span className="material-symbols-outlined text-white text-2xl">support_agent</span>
                 </div>
                 <div className="flex-1 min-w-0">
@@ -471,7 +471,7 @@ const AdminSupportPage = () => {
                     {searchQuery.trim().length >= 2 ? (
                         searching ? (
                             <div className="flex justify-center py-20">
-                                <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin"></div>
+                                <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                             </div>
                         ) : searchResults.length === 0 ? (
                             <div className="text-center py-20 px-6">
@@ -520,7 +520,7 @@ const AdminSupportPage = () => {
                         )
                     ) : loading ? (
                         <div className="flex justify-center py-20">
-                            <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin"></div>
+                            <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                         </div>
                     ) : threads.length === 0 ? (
                         <div className="text-center py-20 px-6">
@@ -537,7 +537,7 @@ const AdminSupportPage = () => {
                             <button
                                 key={t.id}
                                 onClick={() => { setSelectedId(t.id); setSearchParams({ thread: String(t.id) }); }}
-                                className={`w-full text-left px-4 py-3 border-b border-white/5 flex gap-3 transition-colors ${active ? 'bg-violet-600/10' : 'hover:bg-white/5'}`}
+                                className={`w-full text-left px-4 py-3 border-b border-white/5 flex gap-3 transition-colors ${active ? 'bg-blue-600/10' : 'hover:bg-white/5'}`}
                             >
                                 <div className="w-10 h-10 rounded-full bg-[#0F1014] border border-white/10 flex items-center justify-center shrink-0 overflow-hidden">
                                     {p?.avatar_url ? (
@@ -593,11 +593,11 @@ const AdminSupportPage = () => {
                                             {selectedProfile?.full_name || 'Sin nombre'}
                                         </p>
                                         {otherIsTyping ? (
-                                            <p className="text-xs text-violet-300 truncate flex items-center gap-1">
+                                            <p className="text-xs text-blue-300 truncate flex items-center gap-1">
                                                 <span className="inline-flex gap-0.5">
-                                                    <span className="w-1 h-1 rounded-full bg-violet-300 animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                                                    <span className="w-1 h-1 rounded-full bg-violet-300 animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                                                    <span className="w-1 h-1 rounded-full bg-violet-300 animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                                                    <span className="w-1 h-1 rounded-full bg-blue-300 animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                                                    <span className="w-1 h-1 rounded-full bg-blue-300 animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                                                    <span className="w-1 h-1 rounded-full bg-blue-300 animate-bounce" style={{ animationDelay: '300ms' }}></span>
                                                 </span>
                                                 Escribiendo…
                                             </p>
@@ -634,7 +634,7 @@ const AdminSupportPage = () => {
                                             <div key={m.id} className={`flex ${isAdmin ? 'justify-end' : 'justify-start'}`}>
                                                 <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-xs italic flex items-center gap-1.5 ${
                                                     isAdmin
-                                                        ? 'bg-violet-600/30 text-white/70 rounded-tr-none'
+                                                        ? 'bg-blue-600/30 text-white/70 rounded-tr-none'
                                                         : 'bg-[#1A1F2E] text-gray-500 rounded-tl-none border border-white/5'
                                                 }`}>
                                                     <span className="material-symbols-outlined text-[14px]">block</span>
@@ -647,7 +647,7 @@ const AdminSupportPage = () => {
                                     return (
                                         <div key={m.id} id={`support-msg-${m.id}`} className={`flex ${isAdmin ? 'justify-end' : 'justify-start'}`}>
                                             <div className={`relative max-w-[75%] p-2.5 rounded-2xl group ${isAdmin
-                                                ? 'bg-violet-600 text-white rounded-tr-none'
+                                                ? 'bg-blue-600 text-white rounded-tr-none'
                                                 : 'bg-[#1A1F2E] text-gray-100 rounded-tl-none border border-white/5'
                                                 }`}>
                                                 {m.attachment_path && (
@@ -722,7 +722,7 @@ const AdminSupportPage = () => {
                                             onClick={() => fileInputRef.current?.click()}
                                             disabled={uploading || sending}
                                             title="Adjuntar imagen, PDF o audio"
-                                            className="p-2 text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 rounded-lg disabled:opacity-40 transition-colors"
+                                            className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-lg disabled:opacity-40 transition-colors"
                                         >
                                             <span className="material-symbols-outlined text-[22px]">
                                                 {uploading ? 'progress_activity' : 'attach_file'}
@@ -735,7 +735,7 @@ const AdminSupportPage = () => {
                                             onKeyDown={(e) => e.key === 'Enter' && sendReply()}
                                             placeholder={uploading ? 'Subiendo adjunto…' : 'Escribir respuesta…'}
                                             disabled={uploading}
-                                            className="flex-1 bg-[#0F1014] border border-white/10 rounded-lg outline-none px-3 py-2 text-sm focus:border-violet-500/50 text-white placeholder:text-gray-600"
+                                            className="flex-1 bg-[#0F1014] border border-white/10 rounded-lg outline-none px-3 py-2 text-sm focus:border-blue-500/50 text-white placeholder:text-gray-600"
                                         />
                                     </>
                                 )}
@@ -749,7 +749,7 @@ const AdminSupportPage = () => {
                                     <button
                                         onClick={sendReply}
                                         disabled={sending || uploading || !inputValue.trim()}
-                                        className="px-4 py-2 bg-violet-600 text-white rounded-lg font-bold text-sm hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1"
+                                        className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 disabled:opacity-40 flex items-center gap-1"
                                     >
                                         <span className="material-symbols-outlined text-[18px]">send</span>
                                         Enviar

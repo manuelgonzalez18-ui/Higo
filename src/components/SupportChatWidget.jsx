@@ -351,7 +351,7 @@ const SupportChatWidget = () => {
         <div className="fixed bottom-24 right-6 z-40 flex flex-col items-end pointer-events-none">
             {isOpen && (
                 <div className="mb-3 w-80 md:w-96 bg-white dark:bg-[#1a2c2c] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col max-h-[500px] animate-in fade-in slide-in-from-bottom-5 pointer-events-auto">
-                    <div className="p-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white flex justify-between items-center">
+                    <div className="p-4 bg-blue-600 text-white flex justify-between items-center">
                         <div className="flex items-center gap-2">
                             <span className="material-symbols-outlined">support_agent</span>
                             <div>
@@ -378,7 +378,7 @@ const SupportChatWidget = () => {
                     <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50 dark:bg-[#152323] min-h-[280px]">
                         {messages.length === 0 ? (
                             <div className="text-center text-gray-400 text-sm mt-10 px-4">
-                                <span className="material-symbols-outlined text-3xl text-violet-400">waving_hand</span>
+                                <span className="material-symbols-outlined text-3xl text-blue-400">waving_hand</span>
                                 <p className="mt-2">Hola! Contanos en qué te podemos ayudar y un miembro del equipo Higo te responde por acá mismo.</p>
                             </div>
                         ) : messages.map(msg => {
@@ -391,7 +391,7 @@ const SupportChatWidget = () => {
                                     <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                                         <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-xs italic flex items-center gap-1.5 ${
                                             isMe
-                                                ? 'bg-violet-600/30 text-white/70 rounded-tr-none'
+                                                ? 'bg-blue-600/30 text-white/70 rounded-tr-none'
                                                 : 'bg-gray-100 dark:bg-[#1d2c2c] text-gray-500 dark:text-gray-400 rounded-tl-none'
                                         }`}>
                                             <span className="material-symbols-outlined text-[14px]">block</span>
@@ -404,11 +404,11 @@ const SupportChatWidget = () => {
                             return (
                                 <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                                     <div className={`relative max-w-[80%] p-2.5 rounded-2xl group ${isMe
-                                        ? 'bg-violet-600 text-white rounded-tr-none'
+                                        ? 'bg-blue-600 text-white rounded-tr-none'
                                         : 'bg-white dark:bg-[#233535] text-gray-800 dark:text-gray-200 rounded-tl-none shadow-sm'
                                         }`}>
                                         {!isMe && (
-                                            <p className="text-[10px] font-bold uppercase tracking-wide text-violet-500 mb-0.5">Equipo Higo</p>
+                                            <p className="text-[10px] font-bold uppercase tracking-wide text-blue-500 mb-0.5">Equipo Higo</p>
                                         )}
                                         {msg.attachment_path && (
                                             <SupportAttachment
@@ -479,7 +479,7 @@ const SupportChatWidget = () => {
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={uploading || !thread?.id}
                                     title="Adjuntar imagen, PDF o audio"
-                                    className="p-2 text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg disabled:opacity-40 transition-colors"
+                                    className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg disabled:opacity-40 transition-colors"
                                 >
                                     <span className="material-symbols-outlined text-[22px]">
                                         {uploading ? 'progress_activity' : 'attach_file'}
@@ -487,7 +487,7 @@ const SupportChatWidget = () => {
                                 </button>
                                 <input
                                     type="text"
-                                    className="flex-1 bg-gray-100 dark:bg-[#0f1c1c] border-none outline-none rounded-lg text-sm px-3 py-2 focus:ring-1 focus:ring-violet-600 text-gray-800 dark:text-white"
+                                    className="flex-1 bg-gray-100 dark:bg-[#0f1c1c] border-none outline-none rounded-lg text-sm px-3 py-2 focus:ring-1 focus:ring-blue-600 text-gray-800 dark:text-white"
                                     placeholder={uploading ? 'Subiendo adjunto…' : 'Escribe un mensaje…'}
                                     value={inputValue}
                                     onChange={(e) => { setInputValue(e.target.value); if (e.target.value) broadcastTyping(); }}
@@ -506,7 +506,7 @@ const SupportChatWidget = () => {
                             <button
                                 onClick={handleSend}
                                 disabled={!inputValue.trim() || !thread?.id || uploading}
-                                className="p-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-40 transition-colors"
+                                className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors"
                             >
                                 <span className="material-symbols-outlined text-[20px]">send</span>
                             </button>
@@ -518,7 +518,7 @@ const SupportChatWidget = () => {
             <button
                 onClick={() => setIsOpen(o => !o)}
                 aria-label="Abrir chat de soporte"
-                className="pointer-events-auto relative w-14 h-14 rounded-full bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white shadow-2xl shadow-violet-900/40 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+                className="pointer-events-auto relative w-14 h-14 rounded-full bg-blue-600 text-white shadow-2xl shadow-blue-900/40 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
             >
                 <span className="material-symbols-outlined text-[26px]">
                     {isOpen ? 'close' : 'support_agent'}

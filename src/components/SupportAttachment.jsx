@@ -72,7 +72,7 @@ const SupportAttachment = ({ url, mime, size, variant = 'user', onZoom }) => {
             onClick={(e) => { if (!url) e.preventDefault(); }}
             className={`flex items-center gap-2 mb-1 px-2.5 py-2 rounded-lg border ${cardBg} max-w-[260px] hover:bg-opacity-70 transition-colors`}
         >
-            <span className={`material-symbols-outlined text-[28px] ${isPdf ? 'text-red-400' : 'text-violet-300'} shrink-0`}>
+            <span className={`material-symbols-outlined text-[28px] ${isPdf ? 'text-red-400' : 'text-blue-300'} shrink-0`}>
                 {icon}
             </span>
             <div className="min-w-0 flex-1">

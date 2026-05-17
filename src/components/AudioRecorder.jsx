@@ -138,8 +138,8 @@ const AudioRecorder = ({ disabled, onRecording, onComplete, variant = 'user' }) 
 
     if (!recording) {
         const idleCls = variant === 'admin'
-            ? 'bg-white/5 text-violet-300 hover:bg-white/10'
-            : 'bg-violet-600/10 text-violet-500 hover:bg-violet-600/20';
+            ? 'bg-white/5 text-blue-300 hover:bg-white/10'
+            : 'bg-blue-600/10 text-blue-500 hover:bg-blue-600/20';
         return (
             <button
                 type="button"
@@ -175,7 +175,7 @@ const AudioRecorder = ({ disabled, onRecording, onComplete, variant = 'user' }) 
             <button
                 type="button"
                 onClick={stopAndSend}
-                className="w-9 h-9 rounded-full flex items-center justify-center bg-violet-600 text-white hover:bg-violet-500"
+                className="w-9 h-9 rounded-full flex items-center justify-center bg-blue-600 text-white hover:bg-blue-500"
                 title="Enviar"
             >
                 <span className="material-symbols-outlined text-[18px]">send</span>
