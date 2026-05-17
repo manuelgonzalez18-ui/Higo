@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, getUserProfile } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
 import InteractiveMap from '../components/InteractiveMap';
-import { generateSpeech, playAudioBuffer } from '../services/geminiService';
 import { startLoopingRequestAlert, stopLoopingRequestAlert } from '../services/notificationService';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { TextToSpeech } from '@capacitor-community/text-to-speech';

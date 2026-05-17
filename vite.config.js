@@ -10,12 +10,19 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       output: {
-        // Nombres estables (sin hash) para que lftp siempre haga overwrite
-        // en vez de crear archivos nuevos (Hostinger FTP falla con archivos
-        // nuevos grandes). El cache-busting lo hace el .htaccess con
-        // Cache-Control: no-cache para HTML.
+        // Entry (index.js) sin hash: el .htaccess sirve HTML con no-cache,
+        // así el browser siempre lo refetchea y referencia los chunks
+        // nuevos. El index.js sí se sobreescribe en cada deploy lftp.
         entryFileNames: 'assets/[name].js',
-        chunkFileNames: 'assets/[name].js',
+        // Chunks SÍ con hash: cada lazy chunk + manualChunk tiene un
+        // nombre único por build. Esto resuelve el riesgo histórico de
+        // exports desincronizados entre index.js nuevo y chunk viejo
+        // (que era el motivo para mantener gemini en el main bundle).
+        // Ahora podemos sacar Gemini afuera y hacer lazy de rutas sin
+        // miedo a stale chunks: si el deploy lftp todavía no subió un
+        // chunk, el index.js nuevo tira "Failed to load chunk" visible
+        // (recuperable con reload) en vez de corrupción silenciosa.
+        chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: (info) => {
           // Fuentes y binarios con [hash] para mejor caching (rara vez cambian)
           if (/\.(woff2?|ttf|eot|png|jpe?g|gif|svg)$/.test(info.name || '')) {
@@ -27,9 +34,11 @@ export default defineConfig({
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'supabase': ['@supabase/supabase-js'],
           'maps': ['@vis.gl/react-google-maps'],
-          // gemini intencionalmente omitido del chunk separado:
-          // sin hash en los nombres, un gemini.js viejo en el server puede
-          // dejar exports minificados desincronizados con index.js del build nuevo.
+          // Gemini ya no entra en main: los dos consumers (LocationInput
+          // y DriverDashboard) hacen `await import('./geminiService')`,
+          // así que Vite arma un chunk lazy `geminiService-<hash>.js`
+          // que incluye @google/genai SDK. Sin entry acá: deduplica
+          // automáticamente entre los dos consumers.
           'capacitor': [
             '@capacitor/core',
             '@capacitor/app',

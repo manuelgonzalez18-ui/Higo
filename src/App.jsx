@@ -1,30 +1,37 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
-import RequestRidePage from './pages/RequestRidePage';
-import ScheduleRidePage from './pages/ScheduleRidePage';
-import ConfirmTripPage from './pages/ConfirmTripPage';
-import DriverDashboard from './pages/DriverDashboard';
-import DriverStatsPage from './pages/DriverStatsPage';
-import RideStatusPage from './pages/RideStatusPage';
-import AdminDriversPage from './pages/AdminDriversPage';
-import AdminUsersPage from './pages/AdminUsersPage';
-import AdminPricingPage from './pages/AdminPricingPage';
-import AdminPromoCodesPage from './pages/AdminPromoCodesPage';
-import AdminDisputesPage from './pages/AdminDisputesPage';
-import AdminLoginPage from './pages/AdminLoginPage';
-import AdminDashboardPage from './pages/AdminDashboardPage';
-import AdminAnalyticsPage from './pages/AdminAnalyticsPage';
-import AdminZonesPage from './pages/AdminZonesPage';
-import AdminSupportPage from './pages/AdminSupportPage';
-import AdminSupportStatsPage from './pages/AdminSupportStatsPage';
 import AdminGuard from './components/AdminGuard';
-import DriverLandingPage from './pages/DriverLandingPage';
-import HigoPayPage from './pages/HigoPayPage';
 import ChatWidget from './components/ChatWidget';
 import SupportChatWidget from './components/SupportChatWidget';
 import './index.css';         // Ensure Tailwind/global CSS is imported
 
-import AuthPage from './pages/AuthPage';
+// ─── Páginas: lazy split ─────────────────────────────────────────────
+// Cada page se carga on-demand cuando el usuario llega a su ruta. El
+// chunk se hashea (ver vite.config.js: chunkFileNames con [hash]) así
+// no hay riesgo de stale chunk vs index.js nuevo durante el deploy.
+// Para el shell del que ya están en el bundle main (ChatWidget,
+// SupportChatWidget, AdminGuard) seguimos con import estático porque
+// se renderizan globalmente, no por ruta.
+const RequestRidePage         = lazy(() => import('./pages/RequestRidePage'));
+const ScheduleRidePage        = lazy(() => import('./pages/ScheduleRidePage'));
+const ConfirmTripPage         = lazy(() => import('./pages/ConfirmTripPage'));
+const DriverDashboard         = lazy(() => import('./pages/DriverDashboard'));
+const DriverStatsPage         = lazy(() => import('./pages/DriverStatsPage'));
+const RideStatusPage          = lazy(() => import('./pages/RideStatusPage'));
+const AdminDriversPage        = lazy(() => import('./pages/AdminDriversPage'));
+const AdminUsersPage          = lazy(() => import('./pages/AdminUsersPage'));
+const AdminPricingPage        = lazy(() => import('./pages/AdminPricingPage'));
+const AdminPromoCodesPage     = lazy(() => import('./pages/AdminPromoCodesPage'));
+const AdminDisputesPage       = lazy(() => import('./pages/AdminDisputesPage'));
+const AdminLoginPage          = lazy(() => import('./pages/AdminLoginPage'));
+const AdminDashboardPage      = lazy(() => import('./pages/AdminDashboardPage'));
+const AdminAnalyticsPage      = lazy(() => import('./pages/AdminAnalyticsPage'));
+const AdminZonesPage          = lazy(() => import('./pages/AdminZonesPage'));
+const AdminSupportPage        = lazy(() => import('./pages/AdminSupportPage'));
+const AdminSupportStatsPage   = lazy(() => import('./pages/AdminSupportStatsPage'));
+const DriverLandingPage       = lazy(() => import('./pages/DriverLandingPage'));
+const HigoPayPage             = lazy(() => import('./pages/HigoPayPage'));
+const AuthPage                = lazy(() => import('./pages/AuthPage'));
 
 import { useEffect, useState } from 'react';
 import { initGlobalAudio } from './services/notificationService';
@@ -126,6 +133,12 @@ const App = () => {
 
   return (
     <HashRouter>
+      {/* Suspense fallback mientras se carga el chunk de la ruta. */}
+      <Suspense fallback={
+        <div className="min-h-screen flex items-center justify-center bg-[#0F1014]">
+          <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        </div>
+      }>
       <Routes>
         <Route
           path="/"
@@ -155,6 +168,7 @@ const App = () => {
         <Route path="/admin/support/stats" element={<AdminGuard><AdminSupportStatsPage /></AdminGuard>} />
         <Route path="/join" element={<DriverLandingPage />} />
       </Routes>
+      </Suspense>
       <ChatWidget />
       <SupportChatWidget />
 

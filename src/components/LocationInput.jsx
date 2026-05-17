@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { searchPlaces } from '../services/geminiService';
+// geminiService se importa dinámicamente (ver Vite manualChunks):
+// pesa ~500KB con el SDK @google/genai y solo se usa al tipear en el
+// autocomplete de origen/destino. Carga el chunk al primer keystroke
+// que pase el umbral; queda cacheado para los siguientes.
 
 const LocationInput = ({
     placeholder,
@@ -28,6 +31,7 @@ const LocationInput = ({
     useEffect(() => {
         const timer = setTimeout(async () => {
             if (isTyping && value.length > 2) { // Reduced from 3 to 2
+                const { searchPlaces } = await import('../services/geminiService');
                 const results = await searchPlaces(value);
                 setSuggestions(results);
                 setShowSuggestions(true);
