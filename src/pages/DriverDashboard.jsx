@@ -435,80 +435,50 @@ const DriverDashboard = () => {
         return () => supabase.removeChannel(channel);
     }, [profile?.id]);
 
-    // Active Ride Cancellation Listener
+    // Active Ride Cancellation Listener.
+    // Filtramos por id server-side (id=eq.{rideId}) en vez de recibir
+    // TODAS las updates de rides y filtrar en JS. Reduce dramáticamente
+    // el tráfico del WebSocket cuando hay muchos rides activos en la app.
     useEffect(() => {
         if (!activeRide) return;
 
         const channel = supabase
             .channel(`ride_cancel:${activeRide.id}`)
-            // Removing strict filter to debug, will filter inside
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rides' }, async (payload) => {
-                if (payload.new.id == activeRide.id && payload.new.status === 'cancelled') {
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'rides',
+                filter: `id=eq.${activeRide.id}`,
+            }, async (payload) => {
+                if (payload.new.status !== 'cancelled') return;
 
-                    // 1. IMMEDIATE PHYSICAL FEEDBACK
-                    if (navigator.vibrate) navigator.vibrate([1000, 500, 1000]);
-                    speak("El viaje ha sido cancelado por el pasajero.");
+                if (navigator.vibrate) navigator.vibrate([1000, 500, 1000]);
+                speak("El viaje ha sido cancelado por el pasajero.");
 
-                    // 2. Schedule Notification (Async, don't await blocking)
-                    LocalNotifications.schedule({
-                        notifications: [{
-                            title: "Viaje Cancelado",
-                            body: "El pasajero ha cancelado el viaje.",
-                            id: new Date().getTime(),
-                            schedule: { at: new Date() },
-                            channelId: 'higo_rides_v6', // Updated channel
-                            // sound removed
-                            actionTypeId: "",
-                            extra: null
-                        }]
-                    }).catch(e => console.error("Cancel Notification Fail:", e));
+                LocalNotifications.schedule({
+                    notifications: [{
+                        title: "Viaje Cancelado",
+                        body: "El pasajero ha cancelado el viaje.",
+                        id: new Date().getTime(),
+                        schedule: { at: new Date() },
+                        channelId: 'higo_rides_v6',
+                        actionTypeId: "",
+                        extra: null
+                    }]
+                }).catch(e => console.error("Cancel Notification Fail:", e));
 
-                    alert("El pasajero ha cancelado el viaje. Volviendo al mapa...");
-
-                    // Force a reload to clear state cleanly and re-fetch
-                    window.location.reload();
-                }
+                alert("El pasajero ha cancelado el viaje. Volviendo al mapa...");
+                window.location.reload();
             })
             .subscribe();
 
         return () => supabase.removeChannel(channel);
     }, [activeRide]);
 
-    // Polling Logic for Cancellation (Backup to Realtime)
-    useEffect(() => {
-        if (!activeRide) return;
-        const interval = setInterval(async () => {
-            const { data, error } = await supabase
-                .from('rides')
-                .select('status')
-                .eq('id', activeRide.id)
-                .single();
-
-            if (data && data.status === 'cancelled') {
-
-                // 1. Feedback
-                if (navigator.vibrate) navigator.vibrate([1000, 1000]);
-                alert("El viaje ha sido cancelado (Sincronizado).");
-
-                // 2. Reset immediately
-                window.location.reload();
-
-                // 3. Try Notification (Low Priority)
-                LocalNotifications.schedule({
-                    notifications: [{
-                        title: "Viaje Cancelado",
-                        body: "Detectado por sincronización.",
-                        id: new Date().getTime(),
-                        schedule: { at: new Date() },
-                        channelId: 'higo_rides_v8',
-                        // sound removed
-                        extra: null
-                    }]
-                }).catch(() => {});
-            }
-        }, 5000); // Check every 5 seconds
-        return () => clearInterval(interval);
-    }, [activeRide]);
+    // NOTA: el polling de 5s contra `rides.status` que estaba acá como
+    // "Backup to Realtime" se eliminó. El channel de arriba con filtro
+    // server-side cubre el caso, y eran 12 queries/minuto innecesarias
+    // por driver activo — drena batería y carga la API.
 
     const toggleOnline = async () => {
         if (!isOnline) {
