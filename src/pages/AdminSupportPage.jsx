@@ -397,6 +397,36 @@ const AdminSupportPage = () => {
         return                          { label: ctx || '—',  cls: 'bg-gray-500/10 text-gray-400 border-gray-500/30' };
     };
 
+    // Avatar con overlay del contexto. Para evitar la confusión cuando
+    // un user con profile.role='driver' usa la app como pasajero (su
+    // avatar es la foto del conductor), si el contexto NO matchea el
+    // role primario, mostramos icono genérico en vez de la foto.
+    // El chip de la esquina inferior derecha SIEMPRE refleja el
+    // contexto del hilo: car (sky) para driver, person (emerald) para
+    // passenger — así el admin lo capta de un vistazo.
+    const ThreadAvatar = ({ profile, ctx, size = 'md' }) => {
+        const sizeCls = size === 'sm' ? 'w-9 h-9' : 'w-10 h-10';
+        const badgeCls = size === 'sm' ? 'w-4 h-4 text-[10px]' : 'w-[18px] h-[18px] text-[11px]';
+        const showPhoto = profile?.avatar_url && profile?.role === ctx;
+        const isDriverCtx = ctx === 'driver';
+        return (
+            <div className={`relative ${sizeCls} shrink-0`}>
+                <div className={`${sizeCls} rounded-full bg-[#0F1014] border border-white/10 flex items-center justify-center overflow-hidden`}>
+                    {showPhoto ? (
+                        <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                        <span className="material-symbols-outlined text-gray-400 text-[18px]">person</span>
+                    )}
+                </div>
+                <span className={`absolute -bottom-0.5 -right-0.5 ${badgeCls} rounded-full border-2 border-[#1A1F2E] flex items-center justify-center ${isDriverCtx ? 'bg-sky-500 text-white' : 'bg-emerald-500 text-white'}`} title={ctxBadge(ctx).label}>
+                    <span className="material-symbols-outlined" style={{ fontSize: size === 'sm' ? 10 : 12 }}>
+                        {isDriverCtx ? 'directions_car' : 'person'}
+                    </span>
+                </span>
+            </div>
+        );
+    };
+
     if (!authorized) {
         return (
             <div className="min-h-screen bg-[#0F1014] flex items-center justify-center">
@@ -491,13 +521,11 @@ const AdminSupportPage = () => {
                                             onClick={() => openHit(hit)}
                                             className="w-full text-left px-4 py-3 border-b border-white/5 flex gap-3 hover:bg-white/5 transition-colors"
                                         >
-                                            <div className="w-9 h-9 rounded-full bg-[#0F1014] border border-white/10 flex items-center justify-center shrink-0 overflow-hidden">
-                                                {hit.user_avatar ? (
-                                                    <img src={hit.user_avatar} alt="" className="w-full h-full object-cover" />
-                                                ) : (
-                                                    <span className="material-symbols-outlined text-gray-400 text-[18px]">person</span>
-                                                )}
-                                            </div>
+                                            <ThreadAvatar
+                                                profile={{ avatar_url: hit.user_avatar, role: hit.user_role }}
+                                                ctx={hit.thread_role_context}
+                                                size="sm"
+                                            />
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2">
                                                     <p className="font-bold text-white truncate text-xs">
@@ -539,13 +567,7 @@ const AdminSupportPage = () => {
                                 onClick={() => { setSelectedId(t.id); setSearchParams({ thread: String(t.id) }); }}
                                 className={`w-full text-left px-4 py-3 border-b border-white/5 flex gap-3 transition-colors ${active ? 'bg-blue-600/10' : 'hover:bg-white/5'}`}
                             >
-                                <div className="w-10 h-10 rounded-full bg-[#0F1014] border border-white/10 flex items-center justify-center shrink-0 overflow-hidden">
-                                    {p?.avatar_url ? (
-                                        <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <span className="material-symbols-outlined text-gray-400">person</span>
-                                    )}
-                                </div>
+                                <ThreadAvatar profile={p} ctx={t.role_context} />
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
                                         <p className="font-bold text-white truncate text-sm">
@@ -581,13 +603,7 @@ const AdminSupportPage = () => {
                         <>
                             <div className="p-4 border-b border-white/5 flex justify-between items-center">
                                 <div className="flex items-center gap-3 min-w-0">
-                                    <div className="w-10 h-10 rounded-full bg-[#0F1014] border border-white/10 flex items-center justify-center shrink-0 overflow-hidden">
-                                        {selectedProfile?.avatar_url ? (
-                                            <img src={selectedProfile.avatar_url} alt="" className="w-full h-full object-cover" />
-                                        ) : (
-                                            <span className="material-symbols-outlined text-gray-400">person</span>
-                                        )}
-                                    </div>
+                                    <ThreadAvatar profile={selectedProfile} ctx={selectedThread?.role_context} />
                                     <div className="min-w-0">
                                         <p className="font-bold text-white truncate">
                                             {selectedProfile?.full_name || 'Sin nombre'}
