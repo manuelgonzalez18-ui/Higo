@@ -8,6 +8,7 @@ import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import { registerPlugin, Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { calculateBearing, getDistanceFromLatLonInKm } from '../utils/geoUtils';
+import { triggerEmergencyAlert } from '../utils/triggerEmergencyAlert';
 import { useDriverMembership } from '../hooks/useDriverMembership';
 
 const BackgroundGeolocation = Capacitor.isNativePlatform() ? registerPlugin('BackgroundGeolocation') : null;
@@ -479,6 +480,28 @@ const DriverDashboard = () => {
     // "Backup to Realtime" se eliminó. El channel de arriba con filtro
     // server-side cubre el caso, y eran 12 queries/minuto innecesarias
     // por driver activo — drena batería y carga la API.
+
+    // SOS chofer (Fase 10 D.C3). Reusa triggerEmergencyAlert util
+    // construido para el pasajero — el endpoint send-emergency.php
+    // distingue triggered_by ('driver' acá) y arma el email con el
+    // contexto del PASAJERO como counterpart.
+    const handleSOS = () => {
+        const ok = confirm(
+            "🚨 ALERTA DE EMERGENCIA\n\n" +
+            "Vamos a:\n" +
+            "  • Notificar al equipo Higo con tu ubicación actual\n" +
+            (activeRide ? "  • Compartir datos del viaje y del pasajero con soporte\n" : "") +
+            "  • Llamar al 911 inmediatamente después\n\n" +
+            "¿Continuar?"
+        );
+        if (!ok) return;
+        // Fire-and-forget: red mala no debe bloquear el path al tel:911.
+        triggerEmergencyAlert({
+            rideId: activeRide?.id || null,
+            triggeredBy: 'driver',
+        }).catch(err => console.error('Emergency alert (driver) failed:', err));
+        window.location.href = 'tel:911';
+    };
 
     const toggleOnline = async () => {
         if (!isOnline) {
@@ -1357,6 +1380,14 @@ const DriverDashboard = () => {
                                                 className="w-11 h-11 bg-[#252A3A] rounded-full flex items-center justify-center border border-white/5 hover:bg-[#2C3345] hover:text-blue-400 transition-colors"
                                             >
                                                 <span className="material-symbols-outlined text-white text-[20px]">chat_bubble</span>
+                                            </button>
+                                            {/* SOS chofer (Fase 10 D.C3) */}
+                                            <button
+                                                onClick={handleSOS}
+                                                title="Emergencia · Notificar Higo y llamar al 911"
+                                                className="w-11 h-11 bg-red-600/20 rounded-full flex items-center justify-center border border-red-500/40 hover:bg-red-600/30 active:scale-95 transition-all"
+                                            >
+                                                <span className="material-symbols-outlined text-red-400 text-[20px]">e911_emergency</span>
                                             </button>
                                         </div>
                                     </div>
