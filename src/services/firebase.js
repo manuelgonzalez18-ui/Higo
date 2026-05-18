@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { logger } from '../utils/logger';
 
 // Firebase Web SDK config. Los valores NO son secretos en el sentido
 // criptográfico (Firebase los expone deliberadamente al cliente y la
@@ -39,7 +40,7 @@ try {
         messaging = getMessaging(app);
     }
 } catch (error) {
-    console.log("Firebase Messaging not supported in this environment", error);
+    logger.debug("Firebase Messaging not supported in this environment", error);
 }
 
 export { messaging };
