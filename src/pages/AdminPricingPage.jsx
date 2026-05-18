@@ -232,7 +232,7 @@ const AdminPricingPage = () => {
             </div>
 
             {/* D.A2 — Reglas de surge pricing */}
-            <div className="max-w-6xl mx-auto mt-10">
+            <div className="max-w-6xl lg:max-w-7xl mx-auto mt-10">
                 <h2 className="text-lg font-bold mb-1 flex items-center gap-2">
                     <span className="material-symbols-outlined text-amber-400">trending_up</span>
                     Reglas de surge

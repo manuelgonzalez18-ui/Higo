@@ -122,7 +122,7 @@ const AdminDashboardContent = () => {
 
     return (
         <div className="min-h-screen bg-[#0F1419] text-white">
-            <div className="max-w-6xl mx-auto px-4 py-6">
+            <div className="max-w-6xl lg:max-w-7xl mx-auto px-4 py-6">
                 <div className="flex items-center justify-between mb-6">
                     <div>
                         <h1 className="text-2xl font-extrabold">Panel Admin</h1>
