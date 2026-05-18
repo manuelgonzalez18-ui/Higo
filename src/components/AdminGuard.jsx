@@ -1,30 +1,19 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { getUserProfile } from '../services/supabase';
+import React from 'react';
+import { useRequireRole } from '../hooks/useRequireRole';
 
-// Verifica que el usuario esté autenticado y tenga role='admin'. Si no, redirige
-// a /admin (login). Reemplaza el bloque checkAuth duplicado en cada AdminPage:
-// aunque esas páginas siguen teniendo su propio check como defensa en profundidad,
-// el guard impide ver el flash de contenido antes de que esa verificación corra.
+// Verifica que el usuario esté autenticado y tenga role='admin'. Si
+// no, redirige a /admin (login). Defensa en profundidad: aunque las
+// admin pages siguen teniendo su propio check inline, el guard impide
+// ver el flash de contenido antes de que esa verificación corra.
+//
+// Delega a useRequireRole (Fase 12 C3) que es el hook centralizado
+// del patrón "fetch profile + check role + redirect". Refactor
+// gradual: las admin pages migran a useRequireAdmin() también cuando
+// se las toque por otro motivo.
 const AdminGuard = ({ children }) => {
-    const navigate = useNavigate();
-    const [state, setState] = useState('checking');
+    const { loading, authorized } = useRequireRole('admin', { fallbackPath: '/admin' });
 
-    useEffect(() => {
-        let cancelled = false;
-        (async () => {
-            const profile = await getUserProfile();
-            if (cancelled) return;
-            if (!profile || profile.role !== 'admin') {
-                navigate('/admin', { replace: true });
-                return;
-            }
-            setState('ok');
-        })();
-        return () => { cancelled = true; };
-    }, [navigate]);
-
-    if (state !== 'ok') {
+    if (loading || !authorized) {
         return (
             <div className="min-h-screen bg-[#0F1419] flex items-center justify-center text-gray-400">
                 <div className="flex items-center gap-3">
