@@ -102,7 +102,7 @@ const RideHistoryPage = () => {
 
         let q = supabase
             .from('rides')
-            .select('id, created_at, pickup, dropoff, price, status, driver_id, rating, ride_type, service_type, wait_fee')
+            .select('id, created_at, pickup, dropoff, price, status, driver_id, rating, ride_type, service_type, wait_fee, tip_amount')
             .eq('user_id', userId)
             .order('created_at', { ascending: false })
             .limit(PAGE_SIZE);
@@ -205,7 +205,8 @@ const RideHistoryPage = () => {
                         {rides.map(ride => {
                             const chip = statusChip(ride.status);
                             const driver = ride.driver_id ? drivers[ride.driver_id] : null;
-                            const total = Number(ride.price || 0) + Number(ride.wait_fee || 0);
+                            const total = Number(ride.price || 0) + Number(ride.wait_fee || 0) + Number(ride.tip_amount || 0);
+                            const hasTip = Number(ride.tip_amount || 0) > 0;
                             const isDelivery = ride.service_type === 'delivery';
                             return (
                                 <li
@@ -249,7 +250,12 @@ const RideHistoryPage = () => {
                                                     </span>
                                                     {ratingStars(ride.rating)}
                                                 </div>
-                                                <p className="font-black text-sm">{fmtPrice(total)}</p>
+                                                <div className="text-right">
+                                                    <p className="font-black text-sm">{fmtPrice(total)}</p>
+                                                    {hasTip && (
+                                                        <p className="text-[10px] text-emerald-400">+ {fmtPrice(ride.tip_amount)} propina</p>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
