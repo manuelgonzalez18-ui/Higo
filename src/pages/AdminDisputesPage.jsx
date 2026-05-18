@@ -92,6 +92,39 @@ const AdminDisputesPage = () => {
         }
     };
 
+    // D.A4: reembolsar al pasajero acreditando saldo HigoPay.
+    // No descontamos del chofer (Higo no toma comisión, el cobro fue
+    // entre las partes); este crédito sale del lado de Higo y queda
+    // como crédito futuro del pasajero. RPC admin_refund_ride valida
+    // admin + ride + monto y crea el movement atómicamente.
+    const refundPassenger = async (ride) => {
+        const raw = prompt(
+            `Reembolsar al pasajero del viaje #${ride.id}.\n\nEl monto entra como saldo HigoPay del pasajero (no se descuenta del chofer — Higo asume el crédito).\n\nMonto en USD (sugerido: ${Number(ride.price || 0).toFixed(2)}):`,
+            Number(ride.price || 0).toFixed(2)
+        );
+        if (!raw) return;
+        const amount = Number(raw);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            setMessage({ type: 'error', text: 'Monto inválido.' });
+            return;
+        }
+        const note = prompt('Nota interna (motivo, opcional):', '');
+        const { data, error } = await supabase.rpc('admin_refund_ride', {
+            p_ride_id: ride.id,
+            p_amount: amount,
+            p_note: note || null,
+        });
+        if (error) {
+            setMessage({ type: 'error', text: error.message });
+            return;
+        }
+        setMessage({
+            type: 'success',
+            text: `Reembolso #${data} creado: $${amount.toFixed(2)} acreditados al pasajero.`,
+        });
+        fetchDisputes();
+    };
+
     const resetPayment = async (ride) => {
         if (!confirm(`¿Resetear confirmaciones de pago del viaje #${ride.id}? Esto limpia referencias y confirmaciones para que las partes vuelvan a marcar.`)) return;
         const { error } = await supabase.from('rides').update({
@@ -206,7 +239,7 @@ const AdminDisputesPage = () => {
                                     </div>
                                 </div>
 
-                                <div className="flex gap-2 justify-end">
+                                <div className="flex gap-2 justify-end flex-wrap">
                                     {!closed && (
                                         <button
                                             onClick={() => forceConfirm(r)}
@@ -217,6 +250,14 @@ const AdminDisputesPage = () => {
                                             Confirmar
                                         </button>
                                     )}
+                                    <button
+                                        onClick={() => refundPassenger(r)}
+                                        className="px-3 py-2 rounded-lg text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 flex items-center gap-1"
+                                        title="Reembolsar al pasajero como crédito HigoPay (Higo asume)"
+                                    >
+                                        <span className="material-symbols-outlined text-[16px]">currency_exchange</span>
+                                        Reembolsar
+                                    </button>
                                     <button
                                         onClick={() => resetPayment(r)}
                                         className="px-3 py-2 rounded-lg text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 flex items-center gap-1"
