@@ -82,7 +82,7 @@ const HigoPayPage = () => {
             const [{ data: planRow }, bcvRate] = await Promise.all([
                 supabase
                     .from('membership_plans')
-                    .select('plan, period, amount_usd, amount_bs, bs_updated_at')
+                    .select('plan, period, amount_usd, amount_bs, bs_updated_at, display_name')
                     .eq('plan', planKey)
                     .maybeSingle(),
                 getOfficialBcvRate(),
