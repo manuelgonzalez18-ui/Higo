@@ -20,6 +20,10 @@ const AdminDriversPage = () => {
 
     // Modal States
     const [showObjModal, setShowObjModal] = useState(false); // Action Modal
+    const [showDocsModal, setShowDocsModal] = useState(false); // Docs Review Modal (D.C1)
+    const [docsList, setDocsList] = useState([]);     // driver_documents del selectedDriver
+    const [docsUrls, setDocsUrls] = useState({});     // type → signed URL
+    const [docsLoading, setDocsLoading] = useState(false);
     const [selectedDriver, setSelectedDriver] = useState(null);
     const [actionType, setActionType] = useState('pago'); // 'pago', 'pago_activar', 'activar', 'desactivar', 'eliminar'
     const [membershipPeriod, setMembershipPeriod] = useState('monthly');
@@ -151,6 +155,92 @@ const AdminDriversPage = () => {
         carro:     { plan: 'standard', monthly: 20, weekly: 5 },
         van:       { plan: 'van',      monthly: 25, weekly: 7 },
         camioneta: { plan: 'van',      monthly: 25, weekly: 7 },
+    };
+
+    // ─── Docs review (D.C1 · 4/4) ──────────────────────────────────
+    // Cuando se abre el docs modal, fetcheamos driver_documents del
+    // chofer + resolvemos signed URLs en paralelo para los previews.
+    React.useEffect(() => {
+        if (!showDocsModal || !selectedDriver?.id) {
+            setDocsList([]);
+            setDocsUrls({});
+            return;
+        }
+        let cancelled = false;
+        setDocsLoading(true);
+        (async () => {
+            const { data, error } = await supabase
+                .from('driver_documents')
+                .select('*')
+                .eq('user_id', selectedDriver.id)
+                .order('submitted_at', { ascending: false });
+            if (cancelled) return;
+            if (error) {
+                console.error('docs fetch failed:', error);
+                setDocsList([]);
+                setDocsLoading(false);
+                return;
+            }
+            setDocsList(data || []);
+            const urls = {};
+            await Promise.all((data || []).map(async (d) => {
+                const { data: signed } = await supabase
+                    .storage
+                    .from('driver-docs')
+                    .createSignedUrl(d.file_path, 300);
+                if (signed?.signedUrl) urls[d.document_type] = signed.signedUrl;
+            }));
+            if (!cancelled) {
+                setDocsUrls(urls);
+                setDocsLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [showDocsModal, selectedDriver?.id]);
+
+    const approveDoc = async (doc) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        const { error } = await supabase
+            .from('driver_documents')
+            .update({
+                status: 'approved',
+                reviewed_at: new Date().toISOString(),
+                reviewed_by: user?.id || null,
+                rejection_reason: null,
+            })
+            .eq('id', doc.id);
+        if (error) {
+            alert(`Error aprobando: ${error.message}`);
+            return;
+        }
+        // Refetch.
+        setDocsList(prev => prev.map(d => d.id === doc.id
+            ? { ...d, status: 'approved', reviewed_at: new Date().toISOString() }
+            : d
+        ));
+    };
+
+    const rejectDoc = async (doc) => {
+        const reason = prompt('Motivo del rechazo (el chofer lo va a ver):', '');
+        if (!reason || !reason.trim()) return;
+        const { data: { user } } = await supabase.auth.getUser();
+        const { error } = await supabase
+            .from('driver_documents')
+            .update({
+                status: 'rejected',
+                reviewed_at: new Date().toISOString(),
+                reviewed_by: user?.id || null,
+                rejection_reason: reason.trim(),
+            })
+            .eq('id', doc.id);
+        if (error) {
+            alert(`Error rechazando: ${error.message}`);
+            return;
+        }
+        setDocsList(prev => prev.map(d => d.id === doc.id
+            ? { ...d, status: 'rejected', rejection_reason: reason.trim() }
+            : d
+        ));
     };
 
     const openSupportChat = async (driver) => {
@@ -461,6 +551,13 @@ const AdminDriversPage = () => {
                                 <span className="material-symbols-outlined">chat</span>
                             </button>
                             <button
+                                onClick={() => { setSelectedDriver(driver); setShowDocsModal(true); }}
+                                className="w-10 h-10 flex items-center justify-center hover:bg-blue-600/20 rounded-full transition-colors text-gray-400 hover:text-blue-400"
+                                title="Revisar documentos"
+                            >
+                                <span className="material-symbols-outlined">badge</span>
+                            </button>
+                            <button
                                 onClick={() => { setSelectedDriver(driver); setShowObjModal(true); }}
                                 className="w-10 h-10 flex items-center justify-center hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white"
                             >
@@ -713,6 +810,106 @@ const AdminDriversPage = () => {
                                 <span className="material-symbols-outlined">check_circle</span>
                                 Crear Higo Driver
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Docs Review Modal (D.C1 · 4/4) */}
+            {showDocsModal && selectedDriver && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="bg-[#1A1F2E] w-full max-w-2xl rounded-[24px] shadow-2xl overflow-hidden animate-in zoom-in-95 border border-white/10 max-h-[90vh] flex flex-col">
+                        <div className="p-5 bg-blue-600 relative flex items-start gap-3">
+                            <span className="material-symbols-outlined text-white text-[28px]">badge</span>
+                            <div className="flex-1 min-w-0">
+                                <h3 className="font-bold text-white text-lg">Documentos del conductor</h3>
+                                <p className="text-blue-100 text-sm opacity-90 truncate">{selectedDriver.full_name || selectedDriver.email}</p>
+                            </div>
+                            <button
+                                onClick={() => setShowDocsModal(false)}
+                                className="w-8 h-8 bg-black/20 hover:bg-black/30 rounded-full flex items-center justify-center text-white"
+                            >
+                                <span className="material-symbols-outlined text-sm">close</span>
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-5 space-y-3">
+                            {docsLoading ? (
+                                <div className="flex justify-center py-12">
+                                    <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                                </div>
+                            ) : docsList.length === 0 ? (
+                                <p className="text-center text-gray-500 text-sm py-12">
+                                    Este chofer todavía no subió ningún documento.
+                                </p>
+                            ) : ['cedula', 'licencia', 'rcv', 'vehicle_photo'].map(type => {
+                                const doc = docsList.find(d => d.document_type === type);
+                                const url = docsUrls[type];
+                                const labels = {
+                                    cedula:        'Cédula de identidad',
+                                    licencia:      'Licencia de conducir',
+                                    rcv:           'Póliza RCV',
+                                    vehicle_photo: 'Foto del vehículo',
+                                };
+                                const chipCls = doc?.status === 'approved' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                              : doc?.status === 'rejected' ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                                              : doc                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                                              :                              'bg-gray-500/10 text-gray-400 border-gray-500/30';
+                                const chipLbl = doc?.status === 'approved' ? 'Aprobado'
+                                              : doc?.status === 'rejected' ? 'Rechazado'
+                                              : doc                        ? 'En revisión'
+                                              :                              'No subido';
+                                const isImage = doc?.file_mime?.startsWith('image/');
+                                const isPdf   = doc?.file_mime === 'application/pdf';
+                                return (
+                                    <div key={type} className="bg-[#0F1014] border border-white/5 rounded-2xl p-4">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <p className="font-bold text-sm">{labels[type]}</p>
+                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${chipCls}`}>{chipLbl}</span>
+                                        </div>
+                                        {doc?.rejection_reason && (
+                                            <div className="mb-3 p-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200">
+                                                <strong>Motivo previo:</strong> {doc.rejection_reason}
+                                            </div>
+                                        )}
+                                        {url ? (
+                                            <div className="rounded-lg overflow-hidden border border-white/10 bg-black/40 mb-3">
+                                                {isImage ? (
+                                                    <a href={url} target="_blank" rel="noopener noreferrer">
+                                                        <img src={url} alt="" className="w-full max-h-64 object-contain bg-black" />
+                                                    </a>
+                                                ) : isPdf ? (
+                                                    <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-3 hover:bg-white/5">
+                                                        <span className="material-symbols-outlined text-red-400">picture_as_pdf</span>
+                                                        <span className="text-xs flex-1">Abrir PDF</span>
+                                                        <span className="material-symbols-outlined text-gray-400 text-[16px]">open_in_new</span>
+                                                    </a>
+                                                ) : (
+                                                    <p className="text-xs text-gray-500 p-3">Archivo cargado</p>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <p className="text-xs text-gray-500 italic mb-3">Sin archivo subido.</p>
+                                        )}
+                                        {doc && doc.status !== 'approved' && (
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => approveDoc(doc)}
+                                                    className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold"
+                                                >
+                                                    Aprobar
+                                                </button>
+                                                <button
+                                                    onClick={() => rejectDoc(doc)}
+                                                    className="flex-1 py-2 rounded-lg bg-rose-600/20 border border-rose-500/40 hover:bg-rose-600/30 text-rose-300 text-sm font-bold"
+                                                >
+                                                    Rechazar
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>

@@ -505,7 +505,30 @@ const DriverDashboard = () => {
 
     const toggleOnline = async () => {
         if (!isOnline) {
-            // Trying to go ONLINE
+            // Trying to go ONLINE.
+            // Gate D.C1: el chofer no puede ponerse en línea hasta que
+            // sus 4 documentos (cédula, licencia, RCV, foto vehículo)
+            // estén aprobados por un admin. Grandfathering implícito:
+            // si el chofer ya tiene subscription_status='active', es
+            // un legacy del flow viejo (admin lo registró manualmente
+            // antes de D.C1) y NO le exigimos los docs nuevos; pasa.
+            if (profile.subscription_status !== 'active') {
+                const { data: approved, error: rpcErr } = await supabase
+                    .rpc('driver_is_fully_approved', { p_uid: profile.id });
+                if (rpcErr) {
+                    console.error('driver_is_fully_approved failed:', rpcErr);
+                    // Defensive: si el RPC no existe (mig 41 no aplicada)
+                    // o falla, no bloqueamos al chofer — preferimos que
+                    // pueda trabajar a romper la app. El admin verá
+                    // signal de docs pendientes en su panel.
+                } else if (!approved) {
+                    if (window.confirm("📋 Tus documentos todavía no están aprobados.\n\nNecesitás cédula, licencia, RCV y foto del vehículo aprobados antes de ponerte en línea.\n\n¿Ir a cargarlos ahora?")) {
+                        navigate('/driver/onboarding');
+                    }
+                    return;
+                }
+            }
+
             if (profile.subscription_status === 'suspended') {
                 if (window.confirm("⚠️ Tu membresía está vencida. Renuévala desde Higo Pay para volver a operar.\n\n¿Ir a renovar ahora?")) {
                     navigate('/higo-pay');
