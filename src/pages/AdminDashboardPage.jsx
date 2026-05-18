@@ -3,6 +3,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import AdminNav from '../components/AdminNav';
 import AdminGuard from '../components/AdminGuard';
+import InteractiveMap from '../components/InteractiveMap';
+
+// Centro default del mapa: Higuerote, Miranda, VE. El mapa permite
+// pan/zoom; este es solo el frame inicial.
+const HIGUEROTE_CENTER = { lat: 10.4862, lng: -66.0944 };
 
 // Criterio para considerar un driver "online" en vivo: status=online Y
 // actualización de ubicación reciente. 90s es el mismo umbral que usa
@@ -134,7 +139,7 @@ const AdminDashboardContent = () => {
 
                 <AdminNav />
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                     <KpiCard
                         icon="directions_car"
                         label="Drivers online"
@@ -164,6 +169,33 @@ const AdminDashboardContent = () => {
                         loading={loading}
                     />
                 </div>
+
+                {/* D.A1: Mapa realtime con drivers online. InteractiveMap
+                    ya se suscribe a profiles UPDATE filtrado por role=driver
+                    y mantiene drivers[] como state interno; renderiza
+                    AnimatedVehicleMarker con heading. Acá lo embebemos sin
+                    assignedDriver ni isDriver para que muestre TODA la flota
+                    online. */}
+                <section className="mb-8 bg-[#1A1F2E] rounded-2xl border border-white/5 overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+                        <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-green-400 text-[20px]">my_location</span>
+                            <h2 className="font-bold text-sm">Flota en vivo</h2>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                            {kpis.driversOnline} drivers · {kpis.ridesToday} viajes hoy
+                        </div>
+                    </div>
+                    <div className="h-[420px] relative">
+                        <InteractiveMap
+                            center={HIGUEROTE_CENTER}
+                            isDriver={false}
+                            assignedDriver={null}
+                            showPin={false}
+                        />
+                    </div>
+                </section>
 
                 <h2 className="text-lg font-bold mb-3">Accesos rápidos</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
