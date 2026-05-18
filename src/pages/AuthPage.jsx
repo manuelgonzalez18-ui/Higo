@@ -3,6 +3,45 @@ import React, { useState } from 'react';
 import { supabase } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
 
+// pending_referral_code: lo guardamos al signup cuando el user todavía
+// no está autenticado (espera verificación por email). Antes vivía en
+// localStorage para siempre — si el user nunca completaba o se anotaba
+// en otro device, el código quedaba huérfano y se aplicaba a la primera
+// sesión válida que viniera, semanas o meses después. Ahora va con TTL
+// de 24h + validación de formato (UPPERCASE, alfanumérico, max 32 chars).
+const PENDING_REF_TTL_MS = 24 * 60 * 60 * 1000;
+
+const writePendingReferral = (code) => {
+    if (!/^[A-Z0-9_-]{1,32}$/.test(code)) return; // formato inválido → no guarda.
+    try {
+        localStorage.setItem('pending_referral_code', JSON.stringify({
+            code,
+            exp: Date.now() + PENDING_REF_TTL_MS,
+        }));
+    } catch { /* QuotaExceeded / SecurityError: ignorar */ }
+};
+
+const readPendingReferral = () => {
+    try {
+        const raw = localStorage.getItem('pending_referral_code');
+        if (!raw) return null;
+        // Compat con format viejo (string plano sin wrapper).
+        if (raw[0] !== '{') {
+            localStorage.removeItem('pending_referral_code');
+            return /^[A-Z0-9_-]{1,32}$/.test(raw) ? raw : null;
+        }
+        const parsed = JSON.parse(raw);
+        if (!parsed?.code || !parsed?.exp || Date.now() > parsed.exp) {
+            localStorage.removeItem('pending_referral_code');
+            return null;
+        }
+        return /^[A-Z0-9_-]{1,32}$/.test(parsed.code) ? parsed.code : null;
+    } catch {
+        localStorage.removeItem('pending_referral_code');
+        return null;
+    }
+};
+
 const AuthPage = () => {
     const [loading, setLoading] = useState(false);
     const [email, setEmail] = useState('');
@@ -44,7 +83,11 @@ const AuthPage = () => {
                 localStorage.setItem('session_id', newSessionId);
 
                 // Si quedó un referral pendiente del signup, registrarlo ahora.
-                const pendingRef = localStorage.getItem('pending_referral_code');
+                // El código viene wrapeado con TTL — si pasó más de 24h se
+                // descarta limpio (caso: usuario abandona, vuelve semanas
+                // después por otro motivo, no debería arrastrar un referral
+                // viejo de cuando se anotó).
+                const pendingRef = readPendingReferral();
                 if (pendingRef) {
                     await supabase.rpc('register_referral', {
                         p_code: pendingRef,
@@ -67,8 +110,8 @@ const AuthPage = () => {
                 if (error) throw error;
                 // Si el usuario quedó autenticado y entró un código de referido,
                 // lo registramos. Si requiere verificación por email, user puede
-                // ser null; en ese caso lo guardamos en localStorage para procesarlo
-                // tras el primer login.
+                // ser null; en ese caso lo guardamos con TTL de 24h para
+                // procesarlo en el primer login válido.
                 if (referralCode.trim()) {
                     if (user?.id) {
                         await supabase.rpc('register_referral', {
@@ -76,7 +119,7 @@ const AuthPage = () => {
                             p_referred_id: user.id
                         });
                     } else {
-                        localStorage.setItem('pending_referral_code', referralCode.trim().toUpperCase());
+                        writePendingReferral(referralCode.trim().toUpperCase());
                     }
                 }
                 setMessage('¡Registro exitoso! Por favor verifica tu correo electrónico.');

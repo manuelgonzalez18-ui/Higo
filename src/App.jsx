@@ -46,6 +46,20 @@ const App = () => {
   const [incomingRequest, setIncomingRequest] = useState(null);
 
   // --- GLOBAL SESSION LOCKING ---
+  // Nota sobre threat model de localStorage.session_id:
+  // Está en localStorage plaintext, no en sessionStorage. La razón es
+  // intencional: sessionStorage se borra al cerrar la tab y forzaría
+  // logout cada vez que el user reabre la app, además rompería
+  // multi-tab (Tab 2 al cargar leería null y el realtime lo
+  // expulsaría asumiendo que es "otro dispositivo").
+  // El riesgo real de XSS está limitado: Supabase guarda su auth-token
+  // en el MISMO localStorage; quien pueda leer session_id ya tiene el
+  // token de auth (que es lo que da acceso real a la cuenta). Robar
+  // session_id solo permite romper la detección de multi-device, no
+  // escalar permisos. Migrar a Capacitor Preferences (encrypted en
+  // Android EncryptedSharedPreferences / iOS Keychain) daría defensa
+  // adicional en mobile, pero requiere recompilar el APK y queda para
+  // una fase con bandwidth para coordinar el bump de versión nativa.
   useEffect(() => {
     let channel;
 
