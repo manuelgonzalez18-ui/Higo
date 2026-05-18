@@ -46,6 +46,13 @@ const AdminDriversPage = () => {
 
     const [message, setMessage] = useState(null);
     const [avatarFile, setAvatarFile] = useState(null);
+    // Docs del chofer subidos por el admin al registrar (opcional).
+    // Tipos: cedula, licencia, rcv, vehicle_photo. Tras crear el user
+    // via welcome-driver.php se uploadean al bucket driver-docs y se
+    // insertan en driver_documents con status='approved'.
+    const [newDriverDocs, setNewDriverDocs] = useState({
+        cedula: null, licencia: null, rcv: null, vehicle_photo: null,
+    });
     const [avatarPreview, setAvatarPreview] = useState(null);
 
     const handleAvatarChange = (e) => {
@@ -388,10 +395,61 @@ const AdminDriversPage = () => {
                     ? 'Foto cargada.'
                     : `Foto NO cargada (${result.avatar_detail || 'desconocido'}).`)
                 : '';
-            setMessage({ type: 'success', text: `Conductor registrado. ${emailNote} ${avatarNote}`.trim() });
+
+            // Si el admin cargó docs en el modal: subir al bucket driver-docs
+            // y crear filas en driver_documents con status='approved'. Las
+            // policies de mig 47 permiten que el admin escriba en el folder
+            // del chofer e inserte filas approved en su nombre. Best-effort:
+            // si alguno falla no rompemos el registro entero, solo loggeamos.
+            const newUserId = result.user_id;
+            const docsToUpload = Object.entries(newDriverDocs).filter(([, f]) => f);
+            let docsOk = 0;
+            let docsFail = 0;
+            if (newUserId && docsToUpload.length) {
+                const { data: { user: adminUser } } = await supabase.auth.getUser();
+                const adminId = adminUser?.id || null;
+                const nowIso = new Date().toISOString();
+                for (const [docType, file] of docsToUpload) {
+                    try {
+                        const ext = (file.type === 'application/pdf') ? 'pdf'
+                                  : (file.type?.startsWith('image/') ? (file.type.split('/')[1] === 'jpeg' ? 'jpg' : file.type.split('/')[1]) : 'bin');
+                        const path = `${newUserId}/${docType}-${Date.now()}.${ext}`;
+                        const { error: upErr } = await supabase.storage
+                            .from('driver-docs')
+                            .upload(path, file, {
+                                contentType: file.type || 'application/octet-stream',
+                                upsert: false,
+                            });
+                        if (upErr) throw upErr;
+                        const { error: insErr } = await supabase
+                            .from('driver_documents')
+                            .insert({
+                                user_id: newUserId,
+                                document_type: docType,
+                                file_path: path,
+                                file_mime: file.type,
+                                file_size: file.size,
+                                status: 'approved',
+                                reviewed_at: nowIso,
+                                reviewed_by: adminId,
+                            });
+                        if (insErr) throw insErr;
+                        docsOk++;
+                    } catch (e) {
+                        console.error(`doc ${docType} upload failed:`, e);
+                        docsFail++;
+                    }
+                }
+            }
+            const docsNote = docsToUpload.length
+                ? ` Docs: ${docsOk}/${docsToUpload.length} cargados${docsFail ? ` (${docsFail} fallaron, revisar consola)` : ''}.`
+                : '';
+
+            setMessage({ type: 'success', text: `Conductor registrado. ${emailNote} ${avatarNote}${docsNote}`.trim() });
             setShowRegisterModal(false);
             setAvatarFile(null);
             setAvatarPreview(null);
+            setNewDriverDocs({ cedula: null, licencia: null, rcv: null, vehicle_photo: null });
             setNewDriver({
                 full_name: '', phone: '', vehicle_type: 'Carro',
                 vehicle_brand: '', vehicle_model: '', vehicle_color: '', license_plate: '',
@@ -781,6 +839,56 @@ const AdminDriversPage = () => {
                                             onChange={(e) => setNewDriver({ ...newDriver, license_plate: e.target.value })}
                                         />
                                     </div>
+                                </div>
+                            </div>
+
+                            <div className="border-t border-dashed border-white/10 my-4"></div>
+
+                            {/* Documentos del chofer (opcional al alta).
+                                Si el admin los sube acá, se guardan con
+                                status='approved' y el chofer puede ponerse
+                                en línea sin pasar por /driver/onboarding.
+                                Si los deja vacíos, el chofer los sube
+                                después y un admin los revisa. */}
+                            <div>
+                                <p className="text-xs font-bold text-violet-400 uppercase tracking-wider mb-2">
+                                    Documentos del chofer <span className="text-gray-500 font-normal normal-case">(opcional, si los cargás se aprueban auto)</span>
+                                </p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {[
+                                        { type: 'cedula',        label: 'Cédula',     icon: 'badge' },
+                                        { type: 'licencia',      label: 'Licencia',   icon: 'card_membership' },
+                                        { type: 'rcv',           label: 'RCV',        icon: 'verified_user' },
+                                        { type: 'vehicle_photo', label: 'Foto carro', icon: 'directions_car' },
+                                    ].map(d => {
+                                        const file = newDriverDocs[d.type];
+                                        return (
+                                            <label
+                                                key={d.type}
+                                                className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                                                    file
+                                                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                                                        : 'bg-[#1A1F2E] border-white/10 text-gray-400 hover:border-white/20'
+                                                }`}
+                                            >
+                                                <span className="material-symbols-outlined text-[18px]">
+                                                    {file ? 'check_circle' : d.icon}
+                                                </span>
+                                                <span className="text-xs flex-1 truncate">
+                                                    {file ? file.name : d.label}
+                                                </span>
+                                                <input
+                                                    type="file"
+                                                    accept={d.type === 'vehicle_photo' ? 'image/*' : 'image/*,application/pdf'}
+                                                    className="hidden"
+                                                    onChange={(e) => {
+                                                        const f = e.target.files?.[0] || null;
+                                                        setNewDriverDocs(prev => ({ ...prev, [d.type]: f }));
+                                                    }}
+                                                />
+                                            </label>
+                                        );
+                                    })}
                                 </div>
                             </div>
 
