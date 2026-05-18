@@ -22,6 +22,7 @@ const RequestRidePage = () => {
     const [stops, setStops] = useState([]); // Array of objects {id, address, coords}
     const [price, setPrice] = useState(0);
     const [oldPrice, setOldPrice] = useState(0);
+    const [surgeMultiplier, setSurgeMultiplier] = useState(1.0);
     const [roadDistance, setRoadDistance] = useState(0); // Store actual road distance in meters
     const [showStopConfirm, setShowStopConfirm] = useState(false);
     const [hasPendingStopConfirm, setHasPendingStopConfirm] = useState(false);
@@ -121,6 +122,30 @@ const RequestRidePage = () => {
         return d;
     };
 
+    // Fetch surge multiplier (D.A2). Re-fetch al cambiar tipo de
+    // vehículo o pickup. La RPC get_active_pricing_multiplier
+    // matchea reglas activas por vehicle_type + day_of_week + hora
+    // local VE + validity window. Si ninguna matchea retorna 1.0.
+    // El fetch es barato — 1 query con index sobre active=true.
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const { data, error } = await supabase.rpc('get_active_pricing_multiplier', {
+                p_vehicle_type: selectedRide,
+                p_lat: pickupCoords?.lat || null,
+                p_lng: pickupCoords?.lng || null,
+            });
+            if (cancelled) return;
+            if (error) {
+                console.warn('surge fetch failed (default 1.0):', error);
+                setSurgeMultiplier(1.0);
+                return;
+            }
+            setSurgeMultiplier(Number(data) || 1.0);
+        })();
+        return () => { cancelled = true; };
+    }, [selectedRide, pickupCoords?.lat, pickupCoords?.lng]);
+
     // Calculate Price with Stops
     // This useEffect replaces the previous calculatePrice and recalculatePrice functions
     useEffect(() => {
@@ -168,6 +193,9 @@ const RequestRidePage = () => {
         // Minimum is the base price
         if (calculated < basePrice) calculated = basePrice;
 
+        // Aplicar surge multiplier (D.A2). Defensive: 1.0 si fetch falló.
+        calculated = calculated * (surgeMultiplier || 1.0);
+
         setPrice(parseFloat(calculated.toFixed(2)));
 
         // Calculate old price (without stops) for comparison in modal
@@ -180,7 +208,7 @@ const RequestRidePage = () => {
             setOldPrice(0); // No stops, so no "old price" to compare
         }
 
-    }, [pickupCoords, dropoffCoords, selectedRide, stops, serviceType, roadDistance, VEHICLE_RATES]);
+    }, [pickupCoords, dropoffCoords, selectedRide, stops, serviceType, roadDistance, VEHICLE_RATES, surgeMultiplier]);
 
 
     // Check if we should show the "Confirm Stop" modal
