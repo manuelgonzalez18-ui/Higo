@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import InteractiveMap from '../components/InteractiveMap';
+import { triggerEmergencyAlert } from '../utils/triggerEmergencyAlert';
 
 const RideStatusPage = () => {
     const { id } = useParams();
@@ -250,9 +251,23 @@ const RideStatusPage = () => {
     };
 
     const handleSOS = () => {
-        if (confirm("¿Estás seguro de que quieres llamar a emergencias (911)?")) {
-            window.location.href = 'tel:911';
-        }
+        const ok = confirm(
+            "🚨 ALERTA DE EMERGENCIA\n\n" +
+            "Vamos a:\n" +
+            "  • Notificar al equipo Higo con tu ubicación actual\n" +
+            "  • Compartir datos del viaje y del conductor con soporte\n" +
+            "  • Llamar al 911 inmediatamente después\n\n" +
+            "¿Continuar?"
+        );
+        if (!ok) return;
+        // Fire-and-forget el alert al backend: NO esperamos respuesta
+        // antes de llamar al 911. Si la red está mal, el tel: tiene
+        // prioridad. El backend reintentará el email del lado del
+        // servidor; el sos_event queda registrado de todas formas si
+        // la request HTTP llegó a iniciarse.
+        triggerEmergencyAlert({ rideId: ride?.id, triggeredBy: 'passenger' })
+            .catch(err => console.error('Emergency alert failed:', err));
+        window.location.href = 'tel:911';
     };
 
     if (!ride) return <div className="h-screen flex items-center justify-center bg-[#0F1014] text-white">Loading...</div>;
