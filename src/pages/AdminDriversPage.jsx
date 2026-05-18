@@ -245,17 +245,29 @@ const AdminDriversPage = () => {
     };
 
     const openSupportChat = async (driver) => {
+        // Admin abre chat de soporte con un chofer → role_context='driver'.
+        // Si el chofer también es pasajero en otra parte de la app, tiene
+        // 2 threads (UNIQUE (user_id, role_context) de mig 33); este flow
+        // siempre apunta al thread de driver.
         const { data: existing } = await supabase
             .from('support_threads')
             .select('id')
             .eq('user_id', driver.id)
+            .eq('role_context', 'driver')
             .maybeSingle();
 
         let threadId = existing?.id;
         if (!threadId) {
+            // Upsert defensivo en lugar de INSERT crudo: si por race
+            // condition el thread se creó entre el SELECT y el INSERT
+            // (ej. el chofer abrió el widget en paralelo), upsert con
+            // onConflict no rompe — devuelve la fila existente.
             const { data: created, error } = await supabase
                 .from('support_threads')
-                .insert({ user_id: driver.id })
+                .upsert(
+                    { user_id: driver.id, role_context: 'driver' },
+                    { onConflict: 'user_id,role_context' }
+                )
                 .select('id')
                 .single();
             if (error) { setMessage({ type: 'error', text: error.message }); return; }

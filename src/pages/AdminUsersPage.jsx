@@ -51,18 +51,25 @@ const AdminUsersPage = () => {
     };
 
     const openSupportChat = async (user) => {
-        // Buscar el hilo existente; si no, crearlo (admin tiene RLS para insert).
+        // Admin abre chat con un usuario desde /admin/users → role_context
+        // 'passenger' por default. Si el user también tiene cuenta driver
+        // tendrá 2 threads (UNIQUE (user_id, role_context) de mig 33),
+        // este flow apunta al de passenger.
         const { data: existing } = await supabase
             .from('support_threads')
             .select('id')
             .eq('user_id', user.id)
+            .eq('role_context', 'passenger')
             .maybeSingle();
 
         let threadId = existing?.id;
         if (!threadId) {
             const { data: created, error } = await supabase
                 .from('support_threads')
-                .insert({ user_id: user.id })
+                .upsert(
+                    { user_id: user.id, role_context: 'passenger' },
+                    { onConflict: 'user_id,role_context' }
+                )
                 .select('id')
                 .single();
             if (error) { setMessage({ type: 'error', text: error.message }); return; }
