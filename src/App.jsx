@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { HashRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import AdminGuard from './components/AdminGuard';
 import ChatWidget from './components/ChatWidget';
 import SupportChatWidget from './components/SupportChatWidget';
@@ -32,6 +32,7 @@ const AdminSupportStatsPage   = lazy(() => import('./pages/AdminSupportStatsPage
 const DriverLandingPage       = lazy(() => import('./pages/DriverLandingPage'));
 const HigoPayPage             = lazy(() => import('./pages/HigoPayPage'));
 const RideHistoryPage         = lazy(() => import('./pages/RideHistoryPage'));
+const OnboardingPage          = lazy(() => import('./pages/OnboardingPage'));
 const AuthPage                = lazy(() => import('./pages/AuthPage'));
 
 import { useEffect, useState } from 'react';
@@ -41,6 +42,61 @@ import DriverRequestCard from './components/DriverRequestCard';
 import { supabase } from './services/supabase';
 import { useGeolocation } from './hooks/useGeolocation';
 import LocationDisclosure from './components/LocationDisclosure';
+
+// Rutas donde NO chequeamos onboarding (sino entraríamos en loop o
+// gateamos a usuarios que no son pasajeros).
+const ONBOARDING_SKIP_PREFIXES = [
+    '/onboarding', '/auth',
+    '/admin', '/driver',
+];
+
+// Gate del onboarding del pasajero (Fase 9 D.P1). Vive DENTRO del
+// HashRouter para poder usar useNavigate y reaccionar a cambios de
+// ubicación. Si:
+//   1. Hay user logueado y
+//   2. profile.role === 'passenger' y
+//   3. user_preferences.onboarded_at IS NULL y
+//   4. la ruta actual NO está en ONBOARDING_SKIP_PREFIXES
+// → navigate('/onboarding', { replace: true }).
+//
+// Se ejecuta al mount + en cada cambio de location (cuando navegan)
+// + en cada auth state change (login fresh). El check es barato
+// (1-2 queries cacheables) y se evita re-disparar si ya estamos en
+// onboarding.
+const OnboardingGate = () => {
+    const navigate = useNavigate();
+    const location = useLocation();
+    React.useEffect(() => {
+        let cancelled = false;
+        const skip = ONBOARDING_SKIP_PREFIXES.some(p => location.pathname.startsWith(p));
+        if (skip) return;
+        (async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (cancelled || !user) return;
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', user.id)
+                .maybeSingle();
+            if (cancelled || (profile?.role && profile.role !== 'passenger')) return;
+            const { data: prefs } = await supabase
+                .from('user_preferences')
+                .select('onboarded_at')
+                .eq('user_id', user.id)
+                .maybeSingle();
+            if (cancelled) return;
+            // Si la tabla no existe todavía (mig 38 no aplicada en prod)
+            // el maybeSingle devuelve error en data y prefs === null —
+            // no nag para no romper la app.
+            if (prefs === null) return;
+            if (!prefs.onboarded_at) {
+                navigate('/onboarding', { replace: true });
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [location.pathname, navigate]);
+    return null;
+};
 
 const App = () => {
   const { showDisclosure, handleAcceptDisclosure } = useGeolocation();
@@ -148,6 +204,7 @@ const App = () => {
 
   return (
     <HashRouter>
+      <OnboardingGate />
       {/* Suspense fallback mientras se carga el chunk de la ruta. */}
       <Suspense fallback={
         <div className="min-h-screen flex items-center justify-center bg-[#0F1014]">
@@ -170,6 +227,7 @@ const App = () => {
         <Route path="/driver/stats" element={<DriverStatsPage />} />
         <Route path="/higo-pay" element={<HigoPayPage />} />
         <Route path="/history" element={<RideHistoryPage />} />
+        <Route path="/onboarding" element={<OnboardingPage />} />
         <Route path="/ride/:id" element={<RideStatusPage />} />
         <Route path="/admin" element={<AdminLoginPage />} />
         <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
