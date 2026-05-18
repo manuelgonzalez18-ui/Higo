@@ -206,6 +206,7 @@ const AdminDashboardContent = () => {
                     <NavTile to="/admin/disputes"  icon="report"         label="Disputas"    description="Conflictos de pago entre driver y pasajero" />
                     <NavTile to="/admin/analytics" icon="bar_chart"      label="Analytics"   description="Viajes, ingresos y retención de usuarios" />
                     <NavTile to="/admin/zones"     icon="place"          label="Zonas"       description="Áreas de cobertura geográfica de Higo" />
+                    <NavTile to="/admin/fraud"     icon="crisis_alert"   label="Fraud signals" description="Cancelaciones, ratings bajos, velocidades imposibles" />
                 </div>
             </div>
         </div>
