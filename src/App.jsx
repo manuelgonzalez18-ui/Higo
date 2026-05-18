@@ -17,6 +17,7 @@ const ScheduleRidePage        = lazy(() => import('./pages/ScheduleRidePage'));
 const ConfirmTripPage         = lazy(() => import('./pages/ConfirmTripPage'));
 const DriverDashboard         = lazy(() => import('./pages/DriverDashboard'));
 const DriverStatsPage         = lazy(() => import('./pages/DriverStatsPage'));
+const DriverOnboardingPage    = lazy(() => import('./pages/DriverOnboardingPage'));
 const RideStatusPage          = lazy(() => import('./pages/RideStatusPage'));
 const AdminDriversPage        = lazy(() => import('./pages/AdminDriversPage'));
 const AdminUsersPage          = lazy(() => import('./pages/AdminUsersPage'));
@@ -225,6 +226,7 @@ const App = () => {
         <Route path="/confirm" element={<ConfirmTripPage />} />
         <Route path="/driver" element={<DriverDashboard />} />
         <Route path="/driver/stats" element={<DriverStatsPage />} />
+        <Route path="/driver/onboarding" element={<DriverOnboardingPage />} />
         <Route path="/higo-pay" element={<HigoPayPage />} />
         <Route path="/history" element={<RideHistoryPage />} />
         <Route path="/onboarding" element={<OnboardingPage />} />
