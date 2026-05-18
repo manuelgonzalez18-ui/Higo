@@ -70,7 +70,7 @@ const HigoPayPage = () => {
 
             const { data: prof } = await supabase
                 .from('profiles')
-                .select('id, full_name, role, vehicle_model, subscription_status, last_payment_date, avatar_url')
+                .select('id, full_name, role, vehicle_model, subscription_status, last_payment_date, avatar_url, referral_code, referral_credit_balance')
                 .eq('id', u.id)
                 .single();
             if (!prof || prof.role !== 'driver') { navigate('/'); return; }
@@ -419,7 +419,7 @@ const HigoPayPage = () => {
     const refreshProfile = async () => {
         const { data } = await supabase
             .from('profiles')
-            .select('id, full_name, role, vehicle_model, subscription_status, last_payment_date, avatar_url')
+            .select('id, full_name, role, vehicle_model, subscription_status, last_payment_date, avatar_url, referral_code, referral_credit_balance')
             .eq('id', user.id).single();
         if (data) setProfile(data);
     };
@@ -478,6 +478,12 @@ const HigoPayPage = () => {
                         <div className="flex-1 min-w-0">
                             <p className="font-bold text-lg truncate">{profile?.full_name || 'Conductor'}</p>
                             <p className="text-xs text-gray-400 truncate">{user?.email}</p>
+                            {plan?.display_name && (
+                                <p className="text-[11px] text-cyan-300 mt-0.5 truncate">
+                                    {plan.display_name}
+                                    {plan.amount_usd && <span className="text-gray-400"> · {fmtUsd(plan.amount_usd)}/mes</span>}
+                                </p>
+                            )}
                         </div>
                         <MembershipBadge active={membershipActive} severity={severity} daysLeft={daysLeft} />
                     </div>
@@ -513,6 +519,26 @@ const HigoPayPage = () => {
                         <p className="text-2xl font-black">{rides.length}</p>
                     </div>
                 </section>
+
+                {/* Mis créditos (Fase 10 D.C2) — referral credits del chofer.
+                    Higo no toma comisión, así que esto es lo único que se
+                    acumula del lado del chofer en la plataforma. Hoy los
+                    créditos se descuentan de la próxima membresía; cash-out
+                    queda diferido a Fase 15 si se decide habilitarlo. */}
+                {Number(profile?.referral_credit_balance || 0) > 0 && (
+                    <section className="bg-[#1A1F2E] border border-emerald-500/20 rounded-2xl p-4 flex items-center gap-4">
+                        <div className="w-11 h-11 rounded-2xl bg-emerald-500/15 flex items-center justify-center shrink-0">
+                            <span className="material-symbols-outlined text-emerald-400 text-[22px]">redeem</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-[10px] uppercase tracking-wider text-gray-500">Mis créditos</p>
+                            <p className="text-xl font-black text-emerald-400">{fmtUsd(profile.referral_credit_balance)}</p>
+                            <p className="text-[10px] text-gray-500 mt-0.5">
+                                Se aplican como descuento en tu próxima membresía.
+                            </p>
+                        </div>
+                    </section>
+                )}
 
                 {/* Selector de método de pago */}
                 <section className="bg-[#1A1F2E] rounded-3xl p-4">
