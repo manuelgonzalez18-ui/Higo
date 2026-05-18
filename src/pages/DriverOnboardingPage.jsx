@@ -39,6 +39,20 @@ const DOCS = [
         accept:  'image/*,application/pdf',
     },
     {
+        type:    'circulacion',
+        label:   'Certificado de circulación',
+        desc:    'Certificado de circulación del vehículo vigente. Foto o PDF.',
+        icon:    'description',
+        accept:  'image/*,application/pdf',
+    },
+    {
+        type:    'cert_salud',
+        label:   'Certificado de salud',
+        desc:    'Certificado médico de salud vigente del conductor. Foto o PDF.',
+        icon:    'medical_information',
+        accept:  'image/*,application/pdf',
+    },
+    {
         type:    'vehicle_photo',
         label:   'Foto del vehículo',
         desc:    'Foto frontal del vehículo con la placa visible. Tomada de día.',

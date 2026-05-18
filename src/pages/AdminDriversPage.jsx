@@ -51,7 +51,8 @@ const AdminDriversPage = () => {
     // via welcome-driver.php se uploadean al bucket driver-docs y se
     // insertan en driver_documents con status='approved'.
     const [newDriverDocs, setNewDriverDocs] = useState({
-        cedula: null, licencia: null, rcv: null, vehicle_photo: null,
+        cedula: null, licencia: null, rcv: null,
+        circulacion: null, cert_salud: null, vehicle_photo: null,
     });
     const [avatarPreview, setAvatarPreview] = useState(null);
 
@@ -449,7 +450,10 @@ const AdminDriversPage = () => {
             setShowRegisterModal(false);
             setAvatarFile(null);
             setAvatarPreview(null);
-            setNewDriverDocs({ cedula: null, licencia: null, rcv: null, vehicle_photo: null });
+            setNewDriverDocs({
+                cedula: null, licencia: null, rcv: null,
+                circulacion: null, cert_salud: null, vehicle_photo: null,
+            });
             setNewDriver({
                 full_name: '', phone: '', vehicle_type: 'Carro',
                 vehicle_brand: '', vehicle_model: '', vehicle_color: '', license_plate: '',
@@ -856,10 +860,12 @@ const AdminDriversPage = () => {
                                 </p>
                                 <div className="grid grid-cols-2 gap-2">
                                     {[
-                                        { type: 'cedula',        label: 'Cédula',     icon: 'badge' },
-                                        { type: 'licencia',      label: 'Licencia',   icon: 'card_membership' },
-                                        { type: 'rcv',           label: 'RCV',        icon: 'verified_user' },
-                                        { type: 'vehicle_photo', label: 'Foto carro', icon: 'directions_car' },
+                                        { type: 'cedula',        label: 'Cédula',           icon: 'badge' },
+                                        { type: 'licencia',      label: 'Licencia',         icon: 'card_membership' },
+                                        { type: 'rcv',           label: 'RCV',              icon: 'verified_user' },
+                                        { type: 'circulacion',   label: 'Circulación',      icon: 'description' },
+                                        { type: 'cert_salud',    label: 'Cert. salud',      icon: 'medical_information' },
+                                        { type: 'vehicle_photo', label: 'Foto carro',       icon: 'directions_car' },
                                     ].map(d => {
                                         const file = newDriverDocs[d.type];
                                         return (
@@ -963,13 +969,15 @@ const AdminDriversPage = () => {
                                 <p className="text-center text-gray-500 text-sm py-12">
                                     Este chofer todavía no subió ningún documento.
                                 </p>
-                            ) : ['cedula', 'licencia', 'rcv', 'vehicle_photo'].map(type => {
+                            ) : ['cedula', 'licencia', 'rcv', 'circulacion', 'cert_salud', 'vehicle_photo'].map(type => {
                                 const doc = docsList.find(d => d.document_type === type);
                                 const url = docsUrls[type];
                                 const labels = {
                                     cedula:        'Cédula de identidad',
                                     licencia:      'Licencia de conducir',
                                     rcv:           'Póliza RCV',
+                                    circulacion:   'Certificado de circulación',
+                                    cert_salud:    'Certificado de salud',
                                     vehicle_photo: 'Foto del vehículo',
                                 };
                                 const chipCls = doc?.status === 'approved' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
