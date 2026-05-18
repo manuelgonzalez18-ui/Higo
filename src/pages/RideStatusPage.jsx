@@ -14,9 +14,6 @@ const RideStatusPage = () => {
     const [rating, setRating] = useState(0);
     const [feedback, setFeedback] = useState("");
     const [submitted, setSubmitted] = useState(false);
-    // Tip: tipPct ∈ {0, 5, 10, 15, 'custom'}; tipCustom = monto $ libre.
-    const [tipPct, setTipPct] = useState(0);
-    const [tipCustom, setTipCustom] = useState('');
 
     const [showDriverDetails, setShowDriverDetails] = useState(true);
     const [showCancelModal, setShowCancelModal] = useState(false);
@@ -194,26 +191,16 @@ const RideStatusPage = () => {
     // efecto del tick 1s más abajo) se hace evidente y el usuario puede
     // refrescar manualmente; mejor que drenar batería en silencio.
 
-    const computeTipAmount = () => {
-        const price = Number(ride?.price || 0);
-        if (tipPct === 'custom') {
-            const n = Number(tipCustom);
-            return Number.isFinite(n) && n >= 0 ? n : 0;
-        }
-        return +(price * (tipPct / 100)).toFixed(2);
-    };
+    // NOTA: el selector de propinas (D.P4) se retiró del UI por
+    // decisión de producto — confundía a los pasajeros al final del
+    // viaje. Las columnas tip_amount/tip_paid_at de mig 39 quedan en
+    // DB por si se reactiva el feature después, pero el UPDATE de
+    // submitRating ya no las toca; quedan en su default 0/NULL.
 
     const submitRating = async () => {
-        const tipAmount = computeTipAmount();
-        const update = {
-            rating,
-            feedback,
-            tip_amount: tipAmount,
-            tip_paid_at: tipAmount > 0 ? new Date().toISOString() : null,
-        };
         const { error } = await supabase
             .from('rides')
-            .update(update)
+            .update({ rating, feedback })
             .eq('id', id);
 
         if (!error) {
@@ -458,64 +445,8 @@ const RideStatusPage = () => {
                                 <button key={star} onClick={() => setRating(star)} className={`text-3xl ${star <= rating ? 'text-yellow-400' : 'text-gray-600'}`}>★</button>
                             ))}
                         </div>
-
-                        {/* Tip selector */}
-                        <div className="mb-4">
-                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 text-center">¿Querés dejar propina?</p>
-                            <div className="grid grid-cols-5 gap-1.5">
-                                {[
-                                    { id: 0,  label: 'Sin' },
-                                    { id: 5,  label: '5%' },
-                                    { id: 10, label: '10%' },
-                                    { id: 15, label: '15%' },
-                                    { id: 'custom', label: 'Otro' },
-                                ].map(opt => {
-                                    const active = tipPct === opt.id;
-                                    const amount = opt.id === 'custom' || opt.id === 0
-                                        ? null
-                                        : (Number(ride.price || 0) * (opt.id / 100));
-                                    return (
-                                        <button
-                                            key={opt.id}
-                                            onClick={() => setTipPct(opt.id)}
-                                            className={`py-2 px-1 rounded-lg text-xs font-bold border transition ${
-                                                active
-                                                    ? 'bg-blue-600 border-blue-500 text-white'
-                                                    : 'bg-[#1A1F2E] border-white/10 text-gray-300 hover:border-white/20'
-                                            }`}
-                                        >
-                                            <div>{opt.label}</div>
-                                            {amount != null && (
-                                                <div className={`text-[10px] mt-0.5 ${active ? 'text-white/80' : 'text-gray-500'}`}>
-                                                    ${amount.toFixed(2)}
-                                                </div>
-                                            )}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                            {tipPct === 'custom' && (
-                                <div className="mt-2 flex items-center gap-2 bg-[#1A1F2E] border border-white/10 rounded-lg px-3 py-2">
-                                    <span className="text-gray-400">$</span>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.50"
-                                        value={tipCustom}
-                                        onChange={e => setTipCustom(e.target.value)}
-                                        placeholder="Monto"
-                                        className="flex-1 bg-transparent outline-none text-sm"
-                                        autoFocus
-                                    />
-                                </div>
-                            )}
-                        </div>
-
                         <button onClick={submitRating} className="w-full bg-white text-black py-3 rounded-xl font-bold">
-                            Enviar
-                            {computeTipAmount() > 0 && (
-                                <span className="ml-1 font-normal text-gray-600">+ ${computeTipAmount().toFixed(2)} propina</span>
-                            )}
+                            Enviar calificación
                         </button>
                     </div>
                 )}

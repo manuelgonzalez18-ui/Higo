@@ -160,7 +160,13 @@ if ($insStatus >= 200 && $insStatus < 300) {
 
 // ─── Email rich a admin@higoapp.com ─────────────────────────────────
 $adminEmail = (string) ($_cfg['SUPPORT_ADMIN_EMAIL'] ?? 'admin@higoapp.com');
-$mailFrom   = (string) ($_cfg['MAIL_FROM_ADDRESS']    ?? 'no-reply@higoapp.com');
+// IMPORTANTE: From DEBE matchear un mailbox local que existe en
+// Hostinger, sin guiones ni display name. `noreply@higoapp.com` está
+// validado y funciona en send-support-push.php. Cualquier otra forma
+// (Higo <no-reply@higoapp.com>, foo@higoapp.com) puede hacer que el
+// MTA de Hostinger rechace el envío silenciosamente y mail() devuelva
+// false sin error visible.
+$mailFrom   = 'noreply@higoapp.com';
 
 $safe = fn($v) => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES);
 $mapsLink = ($lat !== null && $lng !== null)
@@ -226,15 +232,30 @@ $html = '<!doctype html><html><body style="margin:0;font-family:-apple-system,sa
     . '</p>'
     . '</td></tr></table></body></html>';
 
-$subject = '🚨 SOS Higo · ' . $callerName . ' &middot; ' . $triggeredLabel;
-$headers = [
-    'From: Higo <' . $mailFrom . '>',
-    'MIME-Version: 1.0',
-    'Content-Type: text/html; charset=utf-8',
-    'X-Priority: 1',
-    'X-MSMail-Priority: High',
-];
-$mailOk = @mail($adminEmail, $subject, $html, implode("\r\n", $headers));
+// Subject base64-encoded UTF-8 para que el emoji 🚨 no se mangle ni
+// dispare filtros de spam por mojibake (mismo patrón que send-support-
+// push.php que SÍ funciona en prod).
+$subject = '=?UTF-8?B?' . base64_encode('🚨 SOS Higo · ' . $callerName . ' · ' . $triggeredLabel) . '?=';
+
+// Headers como string concatenado (no array imploded), mismo formato
+// que el endpoint que funciona. Reply-To apunta a admin para que
+// responder al email vuelva al inbox correcto.
+$headers  = "From: {$mailFrom}\r\n";
+$headers .= "Reply-To: {$adminEmail}\r\n";
+$headers .= "MIME-Version: 1.0\r\n";
+$headers .= "Content-Type: text/html; charset=utf-8\r\n";
+$headers .= "X-Priority: 1\r\n";
+$headers .= "X-MSMail-Priority: High\r\n";
+
+$mailOk = @mail($adminEmail, $subject, $html, $headers);
+if (!$mailOk) {
+    // mail() devuelve false si el MTA local rechazó el envío. Log
+    // para que el admin pueda revisar en Hostinger cPanel → Error Logs.
+    error_log(sprintf(
+        '[SOS] mail() failed: to=%s from=%s subject_len=%d body_len=%d',
+        $adminEmail, $mailFrom, strlen($subject), strlen($html)
+    ));
+}
 
 emerg_send(200, [
     'ok'        => true,
