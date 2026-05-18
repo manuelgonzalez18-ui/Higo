@@ -36,6 +36,7 @@ const ICONS = {
 // Singleton para callers no-React. Se enchufa con el provider en
 // useEffect. Si todavía no hay provider montado, no-op.
 let _push = null;
+// eslint-disable-next-line react-refresh/only-export-components
 export const toast = {
     success: (msg, opts) => _push?.('success', msg, opts),
     error:   (msg, opts) => _push?.('error',   msg, opts),
@@ -93,6 +94,7 @@ export const ToastProvider = ({ children }) => {
     );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useToast = () => {
     const ctx = useContext(ToastContext);
     // Fallback: si alguien llama useToast sin provider, usamos el

@@ -79,7 +79,8 @@ const FraudPanel = () => {
         setLoading(false);
     };
 
-    useEffect(() => { load(); }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => { load(); }, []);  // load() es estable, OK ejecutar al mount.
 
     const refresh = async () => {
         setRefreshing(true);
