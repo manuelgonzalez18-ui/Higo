@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { playIntenseBeep, vibrateIntense, playAlertSound } from '../services/notificationService';
+import { toast } from './Toast';
 
 
 
@@ -157,7 +158,7 @@ const ChatWidget = () => {
             if (!rideId) missing.push("ID de viaje");
             if (!currentUserId) missing.push("ID de usuario");
 
-            alert(`Error: Faltan datos para enviar: ${missing.join(', ')}. Intenta recargar la página.`);
+            toast.error(`Error: Faltan datos para enviar: ${missing.join(', ')}. Intenta recargar la página.`);
             return;
         }
 
@@ -174,7 +175,7 @@ const ChatWidget = () => {
 
         if (error) {
             console.error('Error sending message:', error);
-            alert(`Error al enviar: ${error.message}`);
+            toast.error(`Error al enviar: ${error.message}`);
             setInputValue(content); // Restore if failed
         }
     };

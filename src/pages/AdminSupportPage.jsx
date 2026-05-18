@@ -7,6 +7,7 @@ import { compressImage } from '../utils/imageCompression';
 import { useSupportTyping } from '../hooks/useSupportTyping';
 import SupportAttachment from '../components/SupportAttachment';
 import AudioRecorder from '../components/AudioRecorder';
+import { toast } from '../components/Toast';
 
 const SIGNED_URL_TTL = 3600;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -86,7 +87,7 @@ const AdminSupportPage = () => {
         if (!confirm('¿Eliminar este mensaje? No se puede deshacer.')) return;
         const { error } = await supabase.rpc('delete_support_message', { p_id: msg.id });
         if (error) {
-            alert(`No se pudo eliminar: ${error.message}`);
+            toast.error(`No se pudo eliminar: ${error.message}`);
             return;
         }
         if (msg.attachment_path) {
@@ -297,7 +298,7 @@ const AdminSupportPage = () => {
         }
         const { error } = await supabase.from('support_messages').insert(payload);
         if (error) {
-            alert(`Error al enviar: ${error.message}`);
+            toast.error(`Error al enviar: ${error.message}`);
             return false;
         }
         triggerSupportPush(selectedId);
@@ -317,7 +318,7 @@ const AdminSupportPage = () => {
     const uploadAndSend = async (file) => {
         if (!selectedId || !me?.id) return;
         if (file.size > MAX_UPLOAD_BYTES) {
-            alert('El archivo pesa más de 10 MB.');
+            toast.error('El archivo pesa más de 10 MB.');
             return;
         }
         setUploading(true);
@@ -337,7 +338,7 @@ const AdminSupportPage = () => {
             setInputValue('');
         } catch (err) {
             console.error('Error subiendo adjunto:', err);
-            alert(`No se pudo subir: ${err.message || err}`);
+            toast.error(`No se pudo subir: ${err.message || err}`);
         } finally {
             setUploading(false);
         }
@@ -352,7 +353,7 @@ const AdminSupportPage = () => {
         const isAudio = raw.type.startsWith('audio/');
         const isPdf   = raw.type === 'application/pdf';
         if (!isImage && !isAudio && !isPdf) {
-            alert('Solo se admiten imágenes, PDF o audio.');
+            toast.error('Solo se admiten imágenes, PDF o audio.');
             return;
         }
         const file = isImage ? await compressImage(raw, 1600, 0.85) : raw;
@@ -371,7 +372,7 @@ const AdminSupportPage = () => {
             .from('support_threads')
             .update({ status: newStatus })
             .eq('id', selectedId);
-        if (error) alert(error.message);
+        if (error) toast.error(error.message);
         else if (newStatus === 'closed') {
             // Si la cerré, la sacamos del listado actual (que filtra por 'open').
             setSearchParams({});

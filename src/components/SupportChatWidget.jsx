@@ -8,6 +8,7 @@ import { compressImage } from '../utils/imageCompression';
 import { useSupportTyping } from '../hooks/useSupportTyping';
 import SupportAttachment from './SupportAttachment';
 import AudioRecorder from './AudioRecorder';
+import { toast } from './Toast';
 
 // Tipos permitidos como adjunto. RLS del bucket no filtra por mime; lo
 // aplicamos en el cliente.
@@ -71,7 +72,7 @@ const SupportChatWidget = () => {
         if (!confirm('¿Eliminar este mensaje? No se puede deshacer.')) return;
         const { error } = await supabase.rpc('delete_support_message', { p_id: msg.id });
         if (error) {
-            alert(`No se pudo eliminar: ${error.message}`);
+            toast.error(`No se pudo eliminar: ${error.message}`);
             return;
         }
         // Best-effort: borrar el blob del bucket.
@@ -279,7 +280,7 @@ const SupportChatWidget = () => {
         const { error } = await supabase.from('support_messages').insert(payload);
         if (error) {
             console.error('Error enviando mensaje de soporte:', error);
-            alert(`No se pudo enviar: ${error.message}`);
+            toast.error(`No se pudo enviar: ${error.message}`);
             return false;
         }
         triggerSupportPush(thread.id);
@@ -300,7 +301,7 @@ const SupportChatWidget = () => {
     const uploadAndSend = async (file) => {
         if (!thread?.id || !userId) return;
         if (file.size > MAX_UPLOAD_BYTES) {
-            alert('El archivo pesa más de 10 MB. Probá con uno más liviano.');
+            toast.error('El archivo pesa más de 10 MB. Probá con uno más liviano.');
             return;
         }
         setUploading(true);
@@ -320,7 +321,7 @@ const SupportChatWidget = () => {
             setInputValue('');
         } catch (err) {
             console.error('Error subiendo adjunto:', err);
-            alert(`No se pudo subir: ${err.message || err}`);
+            toast.error(`No se pudo subir: ${err.message || err}`);
         } finally {
             setUploading(false);
         }
@@ -335,7 +336,7 @@ const SupportChatWidget = () => {
         const isAudio = raw.type.startsWith('audio/');
         const isPdf   = raw.type === 'application/pdf';
         if (!isImage && !isAudio && !isPdf) {
-            alert('Solo se admiten imágenes, PDF o audio.');
+            toast.error('Solo se admiten imágenes, PDF o audio.');
             return;
         }
         // Imágenes: comprimir antes. PDF/audio: tal cual.

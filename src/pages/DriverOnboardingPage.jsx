@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import { toast } from '../components/Toast';
 
 // Onboarding self-service del conductor (Fase 10 D.C1 · 3/4).
 // El chofer sube 4 documentos: cédula, licencia, RCV, foto del vehículo.
@@ -112,7 +113,7 @@ const DriverOnboardingPage = () => {
     const handleFile = async (docType, file) => {
         if (!file || !userId) return;
         if (file.size > MAX_BYTES) {
-            alert('El archivo pesa más de 10 MB. Probá con uno más liviano.');
+            toast.error('El archivo pesa más de 10 MB. Probá con uno más liviano.');
             return;
         }
         setUploading(prev => ({ ...prev, [docType]: true }));
@@ -166,7 +167,7 @@ const DriverOnboardingPage = () => {
             await refresh(userId);
         } catch (err) {
             console.error('Upload doc failed:', err);
-            alert(`No se pudo subir: ${err.message || err}`);
+            toast.error(`No se pudo subir: ${err.message || err}`);
         } finally {
             setUploading(prev => ({ ...prev, [docType]: false }));
         }

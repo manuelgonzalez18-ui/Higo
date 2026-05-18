@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import InteractiveMap from '../components/InteractiveMap';
 
 import { supabase } from '../services/supabase';
+import { toast } from '../components/Toast';
 
 
 
@@ -66,7 +67,7 @@ const ConfirmTripPage = () => {
         if (!code) return;
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) {
-            alert('Debes iniciar sesión para usar códigos promocionales.');
+            toast.error('Debes iniciar sesión para usar códigos promocionales.');
             return;
         }
         const { data: promo, error } = await supabase
@@ -77,22 +78,22 @@ const ConfirmTripPage = () => {
             .maybeSingle();
         if (error || !promo) {
             setAppliedPromo(null);
-            alert('Código inválido o inactivo.');
+            toast.error('Código inválido o inactivo.');
             return;
         }
         if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
             setAppliedPromo(null);
-            alert('El código ha expirado.');
+            toast.error('El código ha expirado.');
             return;
         }
         if (promo.max_uses != null && promo.used_count >= promo.max_uses) {
             setAppliedPromo(null);
-            alert('El código alcanzó su límite de usos.');
+            toast.error('El código alcanzó su límite de usos.');
             return;
         }
         if (price < (promo.min_ride_amount || 0)) {
             setAppliedPromo(null);
-            alert(`El viaje debe ser de al menos $${promo.min_ride_amount}.`);
+            toast.error(`El viaje debe ser de al menos $${promo.min_ride_amount}.`);
             return;
         }
         const discount = promo.discount_type === 'percent'
@@ -115,7 +116,7 @@ const ConfirmTripPage = () => {
         const { data: { session } } = await supabase.auth.getSession();
 
         if (!session) {
-            alert("Por favor inicia sesión para confirmar tu viaje.");
+            toast.error("Por favor inicia sesión para confirmar tu viaje.");
             navigate('/auth');
             return;
         }
@@ -157,11 +158,11 @@ const ConfirmTripPage = () => {
             if (data && data[0]) {
                 navigate(`/ride/${data[0].id}`);
             } else {
-                alert("¡Viaje Confirmado! Un conductor va en camino.");
+                toast.success("¡Viaje Confirmado! Un conductor va en camino.");
                 navigate('/');
             }
         } catch (error) {
-            alert("Error: " + error.message);
+            toast.error("Error: " + error.message);
         } finally {
             setLoading(false);
         }

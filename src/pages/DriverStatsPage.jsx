@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import { toast } from '../components/Toast';
 
 // Pantalla "Mis Estadísticas" del conductor.
 // Muestra: ganancias por periodo, viajes totales, rating promedio,
@@ -66,7 +67,7 @@ const DriverStatsPage = () => {
             try { await navigator.share({ title: 'Higo App', text }); } catch (_) {}
         } else {
             await navigator.clipboard.writeText(text);
-            alert('Mensaje copiado al portapapeles.');
+            toast.success('Mensaje copiado al portapapeles.');
         }
     };
 

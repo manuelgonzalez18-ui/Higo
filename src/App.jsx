@@ -44,6 +44,7 @@ import DriverRequestCard from './components/DriverRequestCard';
 import { supabase } from './services/supabase';
 import { useGeolocation } from './hooks/useGeolocation';
 import LocationDisclosure from './components/LocationDisclosure';
+import { ToastProvider } from './components/Toast';
 
 // Rutas donde NO chequeamos onboarding (sino entraríamos en loop o
 // gateamos a usuarios que no son pasajeros).
@@ -139,7 +140,7 @@ const App = () => {
           const localSessionId = localStorage.getItem('session_id');
 
           if (dbSessionId && localSessionId && dbSessionId !== localSessionId) {
-            alert("⚠️ Tu cuenta se ha abierto en otro dispositivo. Se cerrará la sesión en este equipo.");
+            toast.error("⚠️ Tu cuenta se ha abierto en otro dispositivo. Se cerrará la sesión en este equipo.");
             supabase.auth.signOut().then(() => {
               localStorage.removeItem('session_id');
               window.location.href = '#/auth';
@@ -205,6 +206,7 @@ const App = () => {
   };
 
   return (
+    <ToastProvider>
     <HashRouter>
       <OnboardingGate />
       {/* Suspense fallback mientras se carga el chunk de la ruta. */}
@@ -262,6 +264,7 @@ const App = () => {
 
 
     </HashRouter>
+    </ToastProvider>
   );
 };
 

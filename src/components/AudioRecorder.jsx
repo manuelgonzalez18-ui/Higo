@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { toast } from './Toast';
 
 // Grabador de audio in-app para el chat de soporte. Usa MediaRecorder
 // (web) + getUserMedia. En Capacitor WebView funciona si el manifest
@@ -120,7 +121,7 @@ const AudioRecorder = ({ disabled, onRecording, onComplete, variant = 'user' }) 
             const msg = err?.name === 'NotAllowedError'
                 ? 'Permiso de micrófono denegado. Habilitalo en los ajustes del navegador.'
                 : 'No pude acceder al micrófono.';
-            alert(msg);
+            toast.error(msg);
             cleanup();
         }
     };

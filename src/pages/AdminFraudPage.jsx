@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import AdminNav from '../components/AdminNav';
 import AdminGuard from '../components/AdminGuard';
+import { toast } from '../components/Toast';
 
 // Fraud signals panel (Fase 11 D.A3).
 // Lee la materialized view fraud_signals via RPC get_fraud_signals
@@ -84,7 +85,7 @@ const FraudPanel = () => {
         setRefreshing(true);
         const { error } = await supabase.rpc('refresh_fraud_signals');
         if (error) {
-            alert(`Error refrescando: ${error.message}`);
+            toast.error(`Error refrescando: ${error.message}`);
             setRefreshing(false);
             return;
         }

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import { toast } from '../components/Toast';
 
 
 const DriverLandingPage = () => {
@@ -33,7 +34,7 @@ const DriverLandingPage = () => {
             setSubmitted(true);
         } catch (err) {
             console.error('Error submitting application:', err);
-            alert('Error al enviar la solicitud. Por favor intenta de nuevo.');
+            toast.error('Error al enviar la solicitud. Por favor intenta de nuevo.');
         } finally {
             setLoading(false);
         }

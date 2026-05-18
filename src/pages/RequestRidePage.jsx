@@ -8,6 +8,7 @@ import { useGeolocation } from '../hooks/useGeolocation';
 import ServiceSelection from '../components/ServiceSelection';
 import DeliveryFormSteps from '../components/DeliveryFormSteps';
 import ProhibitedItemsModal from '../components/ProhibitedItemsModal';
+import { toast } from '../components/Toast';
 
 
 const RequestRidePage = () => {
@@ -220,7 +221,7 @@ const RequestRidePage = () => {
 
     const handleRequestRide = async () => {
         if (!pickup || !dropoff) {
-            alert('Por favor selecciona origen y destino');
+            toast.error('Por favor selecciona origen y destino');
             return;
         }
 

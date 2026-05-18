@@ -4,6 +4,7 @@ import { supabase } from '../services/supabase';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import InteractiveMap from '../components/InteractiveMap';
 import { triggerEmergencyAlert } from '../utils/triggerEmergencyAlert';
+import { toast } from '../components/Toast';
 
 const RideStatusPage = () => {
     const { id } = useParams();
@@ -33,7 +34,7 @@ const RideStatusPage = () => {
 
     const handleCancelRide = async () => {
         if (!selectedReason) {
-            alert("Por favor selecciona un motivo");
+            toast.error("Por favor selecciona un motivo");
             return;
         }
 
@@ -47,9 +48,9 @@ const RideStatusPage = () => {
 
         if (error) {
             console.error(error);
-            alert(`Error al cancelar el viaje: ${error.message}`);
+            toast.error(`Error al cancelar el viaje: ${error.message}`);
         } else {
-            alert("El viaje ha sido cancelado y el conductor ha sido notificado.");
+            toast.info("El viaje ha sido cancelado y el conductor ha sido notificado.");
             navigate('/');
         }
     };
@@ -95,7 +96,7 @@ const RideStatusPage = () => {
                     }
 
                     // Fallback visual alert (Guaranteed to show if app is open)
-                    alert("🔔 ¡Tu Higo Driver ha llegado!");
+                    toast.success("🔔 ¡Tu Higo Driver ha llegado!");
                 }
 
                 if (payload.new.driver_id) {
@@ -237,7 +238,7 @@ const RideStatusPage = () => {
             .update(updates)
             .eq('id', id);
         if (error) {
-            alert(`No se pudo confirmar el pago: ${error.message}`);
+            toast.error(`No se pudo confirmar el pago: ${error.message}`);
         } else {
             setRide(prev => ({ ...prev, ...updates }));
         }
@@ -255,16 +256,16 @@ const RideStatusPage = () => {
                 // share failed — fallback to clipboard handled below
             }
         } else {
-            alert('Enlace copiado al portapapeles');
+            toast.success('Enlace copiado al portapapeles');
         }
     };
 
     const handleSecurity = () => {
-        alert("¡MODO EMERGENCIA ACTIVADO! \nSe ha notificado a tus contactos de confianza y al soporte Higo.");
+        toast.warning("¡MODO EMERGENCIA ACTIVADO! Se ha notificado a tus contactos de confianza y al soporte Higo.");
     };
 
     const handleDestination = () => {
-        alert(`Destino: ${ride?.dropoff || 'Desconocido'}\nETA: 10:45 PM`);
+        toast.info(`Destino: ${ride?.dropoff || 'Desconocido'} · ETA: 10:45 PM`);
     };
 
     const handleOpenChat = () => {

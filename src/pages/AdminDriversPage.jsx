@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, getUserProfile } from '../services/supabase';
 import AdminNav from '../components/AdminNav';
+import { toast } from '../components/Toast';
 
 // Helper to format date
 const formatDate = (dateString) => {
@@ -210,7 +211,7 @@ const AdminDriversPage = () => {
             })
             .eq('id', doc.id);
         if (error) {
-            alert(`Error aprobando: ${error.message}`);
+            toast.error(`Error aprobando: ${error.message}`);
             return;
         }
         // Refetch.
@@ -234,7 +235,7 @@ const AdminDriversPage = () => {
             })
             .eq('id', doc.id);
         if (error) {
-            alert(`Error rechazando: ${error.message}`);
+            toast.error(`Error rechazando: ${error.message}`);
             return;
         }
         setDocsList(prev => prev.map(d => d.id === doc.id

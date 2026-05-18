@@ -10,6 +10,7 @@ import { App } from '@capacitor/app';
 import { calculateBearing, getDistanceFromLatLonInKm } from '../utils/geoUtils';
 import { triggerEmergencyAlert } from '../utils/triggerEmergencyAlert';
 import { useDriverMembership } from '../hooks/useDriverMembership';
+import { toast } from '../components/Toast';
 
 const BackgroundGeolocation = Capacitor.isNativePlatform() ? registerPlugin('BackgroundGeolocation') : null;
 
@@ -354,12 +355,12 @@ const DriverDashboard = () => {
                                 .eq('id', rideId)
                                 .eq('status', 'requested');
 
-                            alert("¡Viaje aceptado desde notificación!");
+                            toast.success("¡Viaje aceptado desde notificación!");
                             window.location.reload();
                         }
                     } catch (e) {
                         console.error("Deep Link Accept Error:", e);
-                        alert("Error al aceptar viaje.");
+                        toast.error("Error al aceptar viaje.");
                     }
                 }
             }
@@ -384,7 +385,7 @@ const DriverDashboard = () => {
     const checkUser = async () => {
         const userProfile = await getUserProfile();
         if (!userProfile || userProfile.role !== 'driver') {
-            alert("Access denied: Drivers only.");
+            toast.error("Access denied: Drivers only.");
             navigate('/');
             return;
         }
@@ -392,7 +393,7 @@ const DriverDashboard = () => {
         // Single Session Enforcement (Check on Load)
         const localSessionId = localStorage.getItem('session_id');
         if (userProfile.current_session_id && localSessionId !== userProfile.current_session_id) {
-            alert("⚠️ Se ha iniciado sesión en otro dispositivo. Cerrando sesión...");
+            toast.error("⚠️ Se ha iniciado sesión en otro dispositivo. Cerrando sesión...");
             await supabase.auth.signOut();
             navigate('/auth');
             return;
@@ -427,7 +428,7 @@ const DriverDashboard = () => {
                 const localSessionId = localStorage.getItem('session_id');
 
                 if (newSessionId && newSessionId !== localSessionId) {
-                    alert("⚠️ Tu sesión ha sido cerrada porque se ingresó desde otro equipo.");
+                    toast.error("⚠️ Tu sesión ha sido cerrada porque se ingresó desde otro equipo.");
                     supabase.auth.signOut().then(() => navigate('/auth'));
                 }
             })
@@ -468,7 +469,7 @@ const DriverDashboard = () => {
                     }]
                 }).catch(e => console.error("Cancel Notification Fail:", e));
 
-                alert("El pasajero ha cancelado el viaje. Volviendo al mapa...");
+                toast.error("El pasajero ha cancelado el viaje. Volviendo al mapa...");
                 window.location.reload();
             })
             .subscribe();
@@ -550,7 +551,7 @@ const DriverDashboard = () => {
                 speak("You are now online. Waiting for requests.");
             } catch (e) {
                 console.error("Error going online:", e);
-                alert("Error al conectar: " + e.message);
+                toast.error("Error al conectar: " + e.message);
             }
         } else {
             // Going OFFLINE
@@ -1022,7 +1023,7 @@ const DriverDashboard = () => {
             if (error) throw error;
 
             if (!data || data.length === 0) {
-                alert("⚠️ Lo sentimos, este viaje ya fue tomado por otro conductor.");
+                toast.error("⚠️ Lo sentimos, este viaje ya fue tomado por otro conductor.");
                 setRequests(prev => prev.filter(r => r.id !== ride.id));
                 return;
             }
@@ -1034,7 +1035,7 @@ const DriverDashboard = () => {
             speak(`Viaje aceptado. Navegando a ${ride.pickup}`);
         } catch (error) {
             console.error("Accept Ride Error:", error);
-            alert("Error al aceptar viaje: " + error.message);
+            toast.error("Error al aceptar viaje: " + error.message);
         }
     };
 
@@ -1107,7 +1108,7 @@ const DriverDashboard = () => {
                     .eq('id', activeRide.id);
 
                 if (completeErr) {
-                    alert(`No se pudo completar el viaje: ${completeErr.message}`);
+                    toast.error(`No se pudo completar el viaje: ${completeErr.message}`);
                     setCompleting(false);
                     return;
                 }
@@ -1135,7 +1136,7 @@ const DriverDashboard = () => {
                 }
             } catch (err) {
                 console.error('Error completando viaje:', err);
-                alert(`Error inesperado al completar el viaje: ${err?.message || err}`);
+                toast.error(`Error inesperado al completar el viaje: ${err?.message || err}`);
                 setCompleting(false);
             }
         }
@@ -1151,7 +1152,7 @@ const DriverDashboard = () => {
         }
         const { error } = await supabase.from('rides').update(updates).eq('id', activeRide.id);
         if (error) {
-            alert(`No se pudo confirmar el pago: ${error.message}`);
+            toast.error(`No se pudo confirmar el pago: ${error.message}`);
             return;
         }
         setActiveRide({ ...activeRide, ...updates });
@@ -1205,7 +1206,7 @@ const DriverDashboard = () => {
 
     const handleLogout = async () => {
         if (activeRide) {
-            alert("Completa el viaje actual antes de salir.");
+            toast.error("Completa el viaje actual antes de salir.");
             return;
         }
         await supabase.auth.signOut();
@@ -1397,7 +1398,7 @@ const DriverDashboard = () => {
                                                         window.dispatchEvent(new CustomEvent('open-chat', { detail: { rideId: activeRide.id, title: 'Chat con Pasajero' } }));
                                                     } else {
                                                         console.error("Cannot open chat: Missing activeRide ID", activeRide);
-                                                        alert("Error al abrir el chat: No se encontró el ID del viaje.");
+                                                        toast.error("Error al abrir el chat: No se encontró el ID del viaje.");
                                                     }
                                                 }}
                                                 className="w-11 h-11 bg-[#252A3A] rounded-full flex items-center justify-center border border-white/5 hover:bg-[#2C3345] hover:text-blue-400 transition-colors"
@@ -1657,12 +1658,12 @@ const DriverDashboard = () => {
 
                                             if (updateError) throw updateError;
 
-                                            alert("QR Cargado Exitosamente!");
+                                            toast.success("QR Cargado Exitosamente!");
                                             window.location.reload();
 
                                         } catch (error) {
                                             console.error("Error uploading QR:", error);
-                                            alert("Error al cargar QR: " + error.message);
+                                            toast.error("Error al cargar QR: " + error.message);
                                         }
                                     }}
                                 />
