@@ -300,6 +300,17 @@ const RequestRidePage = () => {
                     </div>
                 </div>
 
+                <div className="flex items-center gap-2">
+                {/* Botón Historial: solo visible logueado, atajo a /history */}
+                {currentUser && (
+                    <button
+                        onClick={() => navigate('/history')}
+                        title="Mis viajes"
+                        className="w-10 h-10 rounded-full bg-[#1A1F2E]/80 backdrop-blur-md flex items-center justify-center border border-white/10 shadow-lg hover:bg-[#252A3A] active:scale-95 transition"
+                    >
+                        <span className="material-symbols-outlined text-white text-[20px]">history</span>
+                    </button>
+                )}
                 {/* Profile Pill */}
                 <div onClick={handleProfileClick} className="bg-[#1A1F2E]/80 backdrop-blur-md rounded-full pl-1 pr-4 py-1 flex items-center gap-2 border border-white/10 shadow-lg cursor-pointer hover:bg-[#252A3A] transition-colors max-w-[60%]">
                     <div className="w-8 h-8 rounded-full bg-blue-600 p-[1px] flex-shrink-0">
@@ -308,6 +319,7 @@ const RequestRidePage = () => {
                         </div>
                     </div>
                     <span className="font-bold text-sm truncate">{currentUser ? "Mi Perfil" : "Iniciar Sesión"}</span>
+                </div>
                 </div>
             </header>
 

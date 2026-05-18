@@ -31,6 +31,7 @@ const AdminSupportPage        = lazy(() => import('./pages/AdminSupportPage'));
 const AdminSupportStatsPage   = lazy(() => import('./pages/AdminSupportStatsPage'));
 const DriverLandingPage       = lazy(() => import('./pages/DriverLandingPage'));
 const HigoPayPage             = lazy(() => import('./pages/HigoPayPage'));
+const RideHistoryPage         = lazy(() => import('./pages/RideHistoryPage'));
 const AuthPage                = lazy(() => import('./pages/AuthPage'));
 
 import { useEffect, useState } from 'react';
@@ -168,6 +169,7 @@ const App = () => {
         <Route path="/driver" element={<DriverDashboard />} />
         <Route path="/driver/stats" element={<DriverStatsPage />} />
         <Route path="/higo-pay" element={<HigoPayPage />} />
+        <Route path="/history" element={<RideHistoryPage />} />
         <Route path="/ride/:id" element={<RideStatusPage />} />
         <Route path="/admin" element={<AdminLoginPage />} />
         <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
