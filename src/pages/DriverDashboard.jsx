@@ -95,6 +95,7 @@ const DriverDashboard = () => {
     const [isCardMinimized, setIsCardMinimized] = useState(false); // New: Card Minimized State
     const [completing, setCompleting] = useState(false); // Terminar Viaje in-flight
     const [podRequired, setPodRequired] = useState(null); // 'pickup' | 'delivery' | null — gate envío
+    const [showCodConfirm, setShowCodConfirm] = useState(false); // gate cobro COD
     const lastLocationRef = React.useRef(null);
     const profileRef = React.useRef(null);
     const headingRef = React.useRef(0);
@@ -1071,9 +1072,33 @@ const DriverDashboard = () => {
                 setPodRequired('pickup');
                 return;
             }
-            if (navStep === 2 && !activeRide.delivery_pod_url) {
-                setPodRequired('delivery');
-                return;
+            if (navStep === 2) {
+                // E3.1: marcar "Llegué al destino" antes de poder entregar
+                if (!activeRide.arrived_at_dropoff_at) {
+                    const { error } = await supabase
+                        .from('rides')
+                        .update({ status: 'arrived_at_dropoff' })
+                        .eq('id', activeRide.id);
+                    if (error) {
+                        toast.error(`No se pudo marcar llegada: ${error.message}`);
+                        return;
+                    }
+                    const arrivedAt = new Date().toISOString();
+                    setActiveRide({ ...activeRide, status: 'arrived_at_dropoff', arrived_at_dropoff_at: arrivedAt });
+                    speak('Llegada al destino marcada. Coordiná entrega con el destinatario.');
+                    sendDeliveryMilestone({ rideId: activeRide.id, status: 'arrived_at_dropoff' });
+                    return;
+                }
+                // E4.1 gate: COD pendiente
+                if ((Number(activeRide.cod_amount) || 0) > 0 && !activeRide.cod_collected) {
+                    setShowCodConfirm(true);
+                    return;
+                }
+                // POD obligatorio para cerrar
+                if (!activeRide.delivery_pod_url) {
+                    setPodRequired('delivery');
+                    return;
+                }
             }
         }
 
@@ -1520,12 +1545,22 @@ const DriverDashboard = () => {
                                         <span className="material-symbols-outlined animate-spin text-xl">progress_activity</span>
                                         <span>Completando…</span>
                                     </>
-                                ) : (
-                                    <>
-                                        <span>{navStep === 1 ? "Iniciar Viaje" : "Terminar Viaje"}</span>
-                                        <span className="material-symbols-outlined">arrow_forward</span>
-                                    </>
-                                )}
+                                ) : (() => {
+                                    const isDeliveryActive = activeRide && (activeRide.service_type === 'delivery' || activeRide.delivery_info);
+                                    let label = navStep === 1 ? 'Iniciar Viaje' : 'Terminar Viaje';
+                                    if (isDeliveryActive && navStep === 2) {
+                                        if (!activeRide.arrived_at_dropoff_at) label = 'Llegué al destino';
+                                        else if ((Number(activeRide.cod_amount) || 0) > 0 && !activeRide.cod_collected) label = 'Confirmar cobro COD';
+                                        else if (!activeRide.delivery_pod_url) label = 'Foto y entregar';
+                                        else label = 'Confirmar Entrega';
+                                    }
+                                    return (
+                                        <>
+                                            <span>{label}</span>
+                                            <span className="material-symbols-outlined">arrow_forward</span>
+                                        </>
+                                    );
+                                })()}
                             </button>
                         </div>
                     </div>
@@ -1790,6 +1825,24 @@ const DriverDashboard = () => {
                                                 <p className="text-[10px] text-yellow-500/70 font-bold uppercase mb-1">📍 QUIEN ENVÍA (REMITENTE)</p>
                                                 <p className="text-white font-bold text-sm">{activeRide.delivery_info?.senderName || "Usuario"}</p>
                                                 <p className="text-gray-400 text-xs mb-2">{activeRide.delivery_info?.senderPhone || activeRide.passenger_phone || "--"}</p>
+                                                {(activeRide.delivery_info?.senderPhone || activeRide.passenger_phone) && (() => {
+                                                    const rawPhone = activeRide.delivery_info?.senderPhone || activeRide.passenger_phone;
+                                                    const phone = String(rawPhone).replace(/[^0-9]/g, '');
+                                                    const name = (profile?.full_name || '').split(' ')[0] || 'Higo';
+                                                    const waText = encodeURIComponent(`Hola, soy ${name} de Higo Envíos. Voy a retirar tu paquete.`);
+                                                    return (
+                                                        <div className="flex gap-2 mb-2">
+                                                            <a href={`tel:${rawPhone}`} className="flex-1 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-lg py-2 text-xs font-bold flex items-center justify-center gap-1 border border-blue-500/30">
+                                                                <span className="material-symbols-outlined text-base">call</span>
+                                                                Llamar
+                                                            </a>
+                                                            <a href={`https://wa.me/${phone}?text=${waText}`} target="_blank" rel="noopener noreferrer" className="flex-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-lg py-2 text-xs font-bold flex items-center justify-center gap-1 border border-emerald-500/30">
+                                                                <span className="material-symbols-outlined text-base">chat</span>
+                                                                WhatsApp
+                                                            </a>
+                                                        </div>
+                                                    );
+                                                })()}
                                                 <div className="text-xs text-gray-300 bg-black/20 p-2 rounded-lg">
                                                     <span className="font-bold block mb-0.5 text-gray-500">Instrucciones de Retiro:</span>
                                                     {activeRide.delivery_info?.originInstructions || "Llamar al llegar."}
@@ -1801,6 +1854,31 @@ const DriverDashboard = () => {
                                                 <p className="text-[10px] text-yellow-500/70 font-bold uppercase mb-1">🏁 QUIEN RECIBE (DESTINATARIO)</p>
                                                 <p className="text-white font-bold text-sm">{activeRide.delivery_info?.receiverName || "--"}</p>
                                                 <p className="text-gray-400 text-xs mb-2">{activeRide.delivery_info?.receiverPhone || "--"}</p>
+                                                {activeRide.delivery_info?.receiverPhone && (() => {
+                                                    const phone = String(activeRide.delivery_info.receiverPhone).replace(/[^0-9]/g, '');
+                                                    const name = (profile?.full_name || '').split(' ')[0] || 'Higo';
+                                                    const waText = encodeURIComponent(`Hola, soy ${name} de Higo Envíos. Voy en camino con tu paquete.`);
+                                                    return (
+                                                        <div className="flex gap-2 mb-2">
+                                                            <a
+                                                                href={`tel:${activeRide.delivery_info.receiverPhone}`}
+                                                                className="flex-1 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-lg py-2 text-xs font-bold flex items-center justify-center gap-1 border border-blue-500/30"
+                                                            >
+                                                                <span className="material-symbols-outlined text-base">call</span>
+                                                                Llamar
+                                                            </a>
+                                                            <a
+                                                                href={`https://wa.me/${phone}?text=${waText}`}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="flex-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-lg py-2 text-xs font-bold flex items-center justify-center gap-1 border border-emerald-500/30"
+                                                            >
+                                                                <span className="material-symbols-outlined text-base">chat</span>
+                                                                WhatsApp
+                                                            </a>
+                                                        </div>
+                                                    );
+                                                })()}
                                                 <div className="text-xs text-gray-300 bg-black/20 p-2 rounded-lg">
                                                     <span className="font-bold block mb-0.5 text-gray-500">Instrucciones de Entrega:</span>
                                                     {activeRide.delivery_info?.destInstructions || activeRide.instructions || "Entregar en puerta."}
@@ -1864,6 +1942,59 @@ const DriverDashboard = () => {
                         setTimeout(() => handleCompleteStep(), 0);
                     }}
                 />
+            )}
+
+            {/* COD: confirmar cobro en efectivo antes de cerrar el envío */}
+            {showCodConfirm && activeRide && (
+                <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+                    <div className="bg-[#0a101f] rounded-3xl border border-amber-500/30 p-6 w-full max-w-sm">
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center">
+                                <span className="material-symbols-outlined text-amber-400 text-2xl">payments</span>
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-bold text-white">Cobro Contra Entrega</h2>
+                                <p className="text-xs text-gray-400">Antes de marcar entregado</p>
+                            </div>
+                        </div>
+                        <p className="text-sm text-gray-200 mb-1">
+                            El remitente declaró un cobro de:
+                        </p>
+                        <p className="text-3xl font-extrabold text-amber-400 mb-3">
+                            USD {Number(activeRide.cod_amount).toFixed(2)}
+                        </p>
+                        <p className="text-xs text-gray-400 mb-5 leading-relaxed">
+                            Cobrá este monto <strong>en efectivo</strong> al destinatario al entregar.
+                            Higo no maneja este dinero — queda con vos. Solo se audita en la app.
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setShowCodConfirm(false)}
+                                className="flex-1 py-3 rounded-full border border-gray-700 text-gray-300 font-bold text-sm"
+                            >
+                                Aún no
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    const { error } = await supabase
+                                        .from('rides')
+                                        .update({ cod_collected: true })
+                                        .eq('id', activeRide.id);
+                                    if (error) {
+                                        toast.error(`No se pudo marcar cobrado: ${error.message}`);
+                                        return;
+                                    }
+                                    setActiveRide({ ...activeRide, cod_collected: true, cod_collected_at: new Date().toISOString() });
+                                    setShowCodConfirm(false);
+                                    setTimeout(() => handleCompleteStep(), 0);
+                                }}
+                                className="flex-1 py-3 rounded-full bg-amber-500 hover:bg-amber-600 text-black font-bold text-sm"
+                            >
+                                Cobré
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
