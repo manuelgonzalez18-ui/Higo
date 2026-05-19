@@ -122,5 +122,5 @@ jobs:
           set ftp:use-allo off;
           set mirror:parallel-transfer-count 1;
           open -u '$HIGODRIVER_FTP_USERNAME','$HIGODRIVER_FTP_PASSWORD' '$HIGODRIVER_FTP_SERVER';
-          mirror --reverse --verbose --parallel=1 --exclude-glob .ftp-deploy-sync-state.json --exclude '(^|\/)\.builds(\/|$)' ./higodriver/ ./public_html/;
+          mirror --reverse --verbose --parallel=1 --exclude-glob .ftp-deploy-sync-state.json --exclude '(^|\/)\.builds(\/|$)' ./higodriver/ ./;
           "
