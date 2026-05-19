@@ -1,6 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import DeliveryClaimModal from '../components/DeliveryClaimModal';
+
+const CLAIM_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 // Historial de viajes del pasajero. Lista paginada (cursor por
 // created_at) de los rides donde user_id = auth.uid() con status
@@ -55,6 +58,8 @@ const RideHistoryPage = () => {
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
+    const [claimsByRide, setClaimsByRide] = useState({}); // ride_id → claim row
+    const [activeClaimRide, setActiveClaimRide] = useState(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -102,7 +107,7 @@ const RideHistoryPage = () => {
 
         let q = supabase
             .from('rides')
-            .select('id, created_at, pickup, dropoff, price, status, driver_id, rating, ride_type, service_type, wait_fee, tip_amount')
+            .select('id, created_at, pickup, dropoff, price, status, driver_id, rating, ride_type, service_type, delivery_info, delivered_at, wait_fee, tip_amount')
             .eq('user_id', userId)
             .order('created_at', { ascending: false })
             .limit(PAGE_SIZE);
@@ -122,6 +127,24 @@ const RideHistoryPage = () => {
         setRides(next);
         setHasMore((data || []).length === PAGE_SIZE);
         hydrateDrivers(data || []);
+
+        // Cargar claims de los envíos de esta página (mig 58)
+        const deliveryIds = (data || [])
+            .filter(r => r.service_type === 'delivery')
+            .map(r => r.id);
+        if (deliveryIds.length > 0) {
+            const { data: cs } = await supabase
+                .from('delivery_claims')
+                .select('id, ride_id, status, type, created_at')
+                .in('ride_id', deliveryIds);
+            if (cs?.length) {
+                setClaimsByRide(prev => {
+                    const map = { ...prev };
+                    cs.forEach(c => { map[c.ride_id] = c; });
+                    return map;
+                });
+            }
+        }
     }, [userId, filter, rides, hydrateDrivers]);
 
     // Refresh cuando cambia user o filtro.
@@ -257,6 +280,32 @@ const RideHistoryPage = () => {
                                                     )}
                                                 </div>
                                             </div>
+
+                                            {/* Botón reportar problema (solo envíos, ventana 48h) */}
+                                            {isDelivery && ride.status === 'completed' && (() => {
+                                                const existingClaim = claimsByRide[ride.id];
+                                                const withinWindow = ride.delivered_at && (Date.now() - new Date(ride.delivered_at).getTime()) < CLAIM_WINDOW_MS;
+                                                if (existingClaim) {
+                                                    return (
+                                                        <div className="mt-2 text-[11px] flex items-center gap-1.5 text-amber-400">
+                                                            <span className="material-symbols-outlined text-[14px]">flag</span>
+                                                            Reclamo abierto · estado: <strong>{existingClaim.status}</strong>
+                                                        </div>
+                                                    );
+                                                }
+                                                if (withinWindow) {
+                                                    return (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); setActiveClaimRide(ride); }}
+                                                            className="mt-2 text-[11px] text-orange-400 hover:text-orange-300 flex items-center gap-1 underline"
+                                                        >
+                                                            <span className="material-symbols-outlined text-[14px]">report_problem</span>
+                                                            Reportar problema con este envío
+                                                        </button>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
                                         </div>
                                     </div>
                                 </li>
@@ -282,6 +331,23 @@ const RideHistoryPage = () => {
                     </p>
                 )}
             </main>
+
+            {activeClaimRide && (
+                <DeliveryClaimModal
+                    ride={activeClaimRide}
+                    onClose={() => setActiveClaimRide(null)}
+                    onSubmitted={() => {
+                        // Refetch para mostrar el badge
+                        setRides([]);
+                        setHasMore(true);
+                        setLoading(true);
+                        (async () => {
+                            await fetchPage(true);
+                            setLoading(false);
+                        })();
+                    }}
+                />
+            )}
         </div>
     );
 };
