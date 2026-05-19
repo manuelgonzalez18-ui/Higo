@@ -114,7 +114,12 @@ $planLabel = [
     'camioneta' => 'Higo Camioneta · $25/mes',
 ][$plan];
 
-$to      = 'admin@higodriver.com';
+// IMPORTANTE: destino tiene que ser un mailbox que existe en Hostinger.
+// admin@higoapp.com es el inbox real configurado (verificable en
+// mail.hostinger.com). admin@higodriver.com no existía y por eso los
+// correos rebotaban silenciosamente (mail() retorna true pero el MTA
+// no encuentra la cuenta y bouncea).
+$to      = 'admin@higoapp.com';
 $subject = '=?UTF-8?B?' . base64_encode("Nueva solicitud Higo App — {$fullName}") . '?=';
 
 $safe = fn(string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
@@ -193,7 +198,7 @@ foreach ($attachments as $att) {
 }
 $body .= "--{$mixedBoundary}--\r\n";
 
-$headers  = "From: noreply@higodriver.com\r\n";
+$headers  = "From: noreply@higoapp.com\r\n";
 $headers .= "Reply-To: {$email}\r\n";
 $headers .= "MIME-Version: 1.0\r\n";
 $headers .= "Content-Type: multipart/mixed; boundary=\"{$mixedBoundary}\"\r\n";
