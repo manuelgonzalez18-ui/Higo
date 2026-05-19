@@ -1,6 +1,10 @@
 # Logs
 logs
 *.log
+
+# Credenciales SMTP del form de higodriver (subido a mano al VPS)
+higodriver/api/_smtp_config.php
+public/api/_smtp_config.php
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

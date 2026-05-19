@@ -31,6 +31,22 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     rd_send(405, ['ok' => false, 'error' => 'method_not_allowed']);
 }
 
+// ═══ Cargar config SMTP ════════════════════════════════════════════════
+// _smtp_config.php vive al lado de este archivo y NO se commitea (está
+// en .gitignore). Debe definir un array con: host, port, username,
+// password, from_email, from_name (opcional), ehlo (opcional).
+// Si falta, fallamos rápido para no perder solicitudes silenciosamente.
+$smtpConfigPath = __DIR__ . '/_smtp_config.php';
+if (!is_file($smtpConfigPath)) {
+    error_log('register-driver: falta _smtp_config.php en ' . __DIR__);
+    rd_send(503, ['ok' => false, 'error' => 'mail_config_missing']);
+}
+$smtpCfg = require $smtpConfigPath;
+if (!is_array($smtpCfg) || empty($smtpCfg['host']) || empty($smtpCfg['username']) || empty($smtpCfg['password'])) {
+    error_log('register-driver: _smtp_config.php inválido');
+    rd_send(503, ['ok' => false, 'error' => 'mail_config_invalid']);
+}
+
 // ═══ Anti-abuso muy básico ════════════════════════════════════════════
 // Honeypot opcional (si en algún momento agregamos un campo invisible).
 if (!empty($_POST['website'] ?? '')) {
@@ -202,15 +218,107 @@ foreach ($attachments as $att) {
 }
 $body .= "--{$mixedBoundary}--\r\n";
 
-$headers  = "From: noreply@higodriver.com\r\n";
+$headers  = "From: " . ($smtpCfg['from_name'] ?? 'Higo Driver') . " <{$smtpCfg['from_email']}>\r\n";
 $headers .= "Reply-To: {$email}\r\n";
 $headers .= "MIME-Version: 1.0\r\n";
 $headers .= "Content-Type: multipart/mixed; boundary=\"{$mixedBoundary}\"\r\n";
 
-$sent = @mail($to, $subject, $body, $headers);
+// ═══ Envío via SMTP autenticado ════════════════════════════════════════
+// NO usamos mail() porque el VPS de Hostinger tiene puerto 25 saliente
+// bloqueado (anti-spam default de planes KVM). Postfix local aceptaba
+// el mensaje pero nunca lograba relayarlo a ningún MX, devolviendo true
+// silenciosamente. Hablamos directo con smtp.hostinger.com:465 (TLS) y
+// nos autenticamos como admin@higodriver.com (mailbox real del dominio).
+$sent = rd_smtp_send($smtpCfg, $to, $subject, $body, $headers);
 
 if (!$sent) {
     rd_send(502, ['ok' => false, 'error' => 'mail_failed']);
 }
 
 rd_send(200, ['ok' => true]);
+
+// ─── Cliente SMTP minimal ──────────────────────────────────────────────
+// Reemplazo de mail(). Sin dependencias (no PHPMailer, no Composer).
+// Soporta SSL/TLS implícito (puerto 465) y STARTTLS (puerto 587).
+function rd_smtp_send(array $cfg, string $to, string $subject, string $body, string $headers): bool {
+    $host = $cfg['host'];
+    $port = (int) $cfg['port'];
+    $user = $cfg['username'];
+    $pass = $cfg['password'];
+    $from = $cfg['from_email'];
+
+    $url = ($port === 465 ? 'ssl://' : '') . $host;
+    $ctx = stream_context_create(['ssl' => ['verify_peer' => false, 'verify_peer_name' => false]]);
+    $fp  = @stream_socket_client("$url:$port", $errno, $errstr, 15, STREAM_CLIENT_CONNECT, $ctx);
+    if (!$fp) {
+        error_log("rd_smtp_send: connect failed $host:$port — $errno $errstr");
+        return false;
+    }
+    stream_set_timeout($fp, 30);
+
+    $read = function () use ($fp) {
+        $out = '';
+        while ($line = fgets($fp, 1024)) {
+            $out .= $line;
+            if (isset($line[3]) && $line[3] === ' ') break;
+        }
+        return $out;
+    };
+    $write = function (string $cmd) use ($fp) { fwrite($fp, $cmd . "\r\n"); };
+    $expect = function (string $resp, string $code) {
+        if (strpos($resp, $code) !== 0) {
+            error_log('rd_smtp_send: expected ' . $code . ' got ' . trim($resp));
+            return false;
+        }
+        return true;
+    };
+
+    if (!$expect($read(), '220')) { fclose($fp); return false; }
+
+    $write('EHLO ' . ($cfg['ehlo'] ?? 'higodriver.com'));
+    if (!$expect($read(), '250')) { fclose($fp); return false; }
+
+    // STARTTLS si estamos en 587
+    if ($port === 587) {
+        $write('STARTTLS');
+        if (!$expect($read(), '220')) { fclose($fp); return false; }
+        if (!@stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+            error_log('rd_smtp_send: STARTTLS handshake failed');
+            fclose($fp); return false;
+        }
+        $write('EHLO ' . ($cfg['ehlo'] ?? 'higodriver.com'));
+        if (!$expect($read(), '250')) { fclose($fp); return false; }
+    }
+
+    $write('AUTH LOGIN');
+    if (!$expect($read(), '334')) { fclose($fp); return false; }
+    $write(base64_encode($user));
+    if (!$expect($read(), '334')) { fclose($fp); return false; }
+    $write(base64_encode($pass));
+    if (!$expect($read(), '235')) { fclose($fp); return false; }
+
+    $write("MAIL FROM:<{$from}>");
+    if (!$expect($read(), '250')) { fclose($fp); return false; }
+    $write("RCPT TO:<{$to}>");
+    if (!$expect($read(), '250')) { fclose($fp); return false; }
+
+    $write('DATA');
+    if (!$expect($read(), '354')) { fclose($fp); return false; }
+
+    $msg  = "Subject: {$subject}\r\n";
+    $msg .= "To: {$to}\r\n";
+    $msg .= $headers;
+    $msg .= "\r\n";
+    $msg .= $body;
+    // RFC 5321: líneas que empiezan con '.' se doblan a '..' para no
+    // confundirlas con el terminador.
+    $msg = preg_replace('/(^|\r\n)\./', '$1..', $msg);
+
+    fwrite($fp, $msg);
+    fwrite($fp, "\r\n.\r\n");
+    if (!$expect($read(), '250')) { fclose($fp); return false; }
+
+    $write('QUIT');
+    fclose($fp);
+    return true;
+}
