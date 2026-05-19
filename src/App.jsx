@@ -30,6 +30,7 @@ const AdminAnalyticsPage      = lazy(() => import('./pages/AdminAnalyticsPage'))
 const AdminZonesPage          = lazy(() => import('./pages/AdminZonesPage'));
 const AdminFraudPage          = lazy(() => import('./pages/AdminFraudPage'));
 const AdminDeliveriesPage     = lazy(() => import('./pages/AdminDeliveriesPage'));
+const DeliveryReceiptPage     = lazy(() => import('./pages/DeliveryReceiptPage'));
 const AdminSupportPage        = lazy(() => import('./pages/AdminSupportPage'));
 const AdminSupportStatsPage   = lazy(() => import('./pages/AdminSupportStatsPage'));
 const DriverLandingPage       = lazy(() => import('./pages/DriverLandingPage'));
@@ -253,6 +254,7 @@ const App = () => {
         <Route path="/join" element={<DriverLandingPage />} />
         <Route path="/terms/envios" element={<TermsOfDeliveryPage />} />
         <Route path="/track/:token" element={<PublicTrackingPage />} />
+        <Route path="/delivery/:rideId/receipt" element={<DeliveryReceiptPage />} />
       </Routes>
       </Suspense>
       <ChatWidget />

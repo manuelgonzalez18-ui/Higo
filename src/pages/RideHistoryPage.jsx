@@ -281,31 +281,43 @@ const RideHistoryPage = () => {
                                                 </div>
                                             </div>
 
-                                            {/* Botón reportar problema (solo envíos, ventana 48h) */}
-                                            {isDelivery && ride.status === 'completed' && (() => {
-                                                const existingClaim = claimsByRide[ride.id];
-                                                const withinWindow = ride.delivered_at && (Date.now() - new Date(ride.delivered_at).getTime()) < CLAIM_WINDOW_MS;
-                                                if (existingClaim) {
-                                                    return (
-                                                        <div className="mt-2 text-[11px] flex items-center gap-1.5 text-amber-400">
-                                                            <span className="material-symbols-outlined text-[14px]">flag</span>
-                                                            Reclamo abierto · estado: <strong>{existingClaim.status}</strong>
-                                                        </div>
-                                                    );
-                                                }
-                                                if (withinWindow) {
-                                                    return (
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); setActiveClaimRide(ride); }}
-                                                            className="mt-2 text-[11px] text-orange-400 hover:text-orange-300 flex items-center gap-1 underline"
-                                                        >
-                                                            <span className="material-symbols-outlined text-[14px]">report_problem</span>
-                                                            Reportar problema con este envío
-                                                        </button>
-                                                    );
-                                                }
-                                                return null;
-                                            })()}
+                                            {/* Acciones para envíos completados */}
+                                            {isDelivery && ride.status === 'completed' && (
+                                                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+                                                    {/* Recibo PDF (E4.2) */}
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); navigate(`/delivery/${ride.id}/receipt`); }}
+                                                        className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 underline"
+                                                    >
+                                                        <span className="material-symbols-outlined text-[14px]">receipt_long</span>
+                                                        Comprobante / PDF
+                                                    </button>
+                                                    {(() => {
+                                                        const existingClaim = claimsByRide[ride.id];
+                                                        const withinWindow = ride.delivered_at && (Date.now() - new Date(ride.delivered_at).getTime()) < CLAIM_WINDOW_MS;
+                                                        if (existingClaim) {
+                                                            return (
+                                                                <span className="flex items-center gap-1.5 text-amber-400">
+                                                                    <span className="material-symbols-outlined text-[14px]">flag</span>
+                                                                    Reclamo · <strong>{existingClaim.status}</strong>
+                                                                </span>
+                                                            );
+                                                        }
+                                                        if (withinWindow) {
+                                                            return (
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); setActiveClaimRide(ride); }}
+                                                                    className="text-orange-400 hover:text-orange-300 flex items-center gap-1 underline"
+                                                                >
+                                                                    <span className="material-symbols-outlined text-[14px]">report_problem</span>
+                                                                    Reportar problema
+                                                                </button>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    })()}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </li>
