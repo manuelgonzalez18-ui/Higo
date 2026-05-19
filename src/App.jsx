@@ -36,6 +36,8 @@ const HigoPayPage             = lazy(() => import('./pages/HigoPayPage'));
 const RideHistoryPage         = lazy(() => import('./pages/RideHistoryPage'));
 const OnboardingPage          = lazy(() => import('./pages/OnboardingPage'));
 const AuthPage                = lazy(() => import('./pages/AuthPage'));
+const TermsOfDeliveryPage     = lazy(() => import('./pages/TermsOfDeliveryPage'));
+const PublicTrackingPage      = lazy(() => import('./pages/PublicTrackingPage'));
 
 import { useEffect, useState } from 'react';
 import { initGlobalAudio } from './services/notificationService';
@@ -247,6 +249,8 @@ const App = () => {
         <Route path="/admin/support" element={<AdminGuard><AdminSupportPage /></AdminGuard>} />
         <Route path="/admin/support/stats" element={<AdminGuard><AdminSupportStatsPage /></AdminGuard>} />
         <Route path="/join" element={<DriverLandingPage />} />
+        <Route path="/terms/envios" element={<TermsOfDeliveryPage />} />
+        <Route path="/track/:token" element={<PublicTrackingPage />} />
       </Routes>
       </Suspense>
       <ChatWidget />

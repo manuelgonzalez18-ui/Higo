@@ -45,26 +45,58 @@ const DriverRequestCard = ({ request, onAccept, onDecline, isVisible }) => {
                     />
                 </div>
 
+                {/* Service-type badge (delivery vs ride) */}
+                {request.service_type === 'delivery' && (
+                    <div className="mb-3 inline-flex items-center gap-2 bg-orange-500/15 border border-orange-500/40 px-3 py-1.5 rounded-full">
+                        <span className="material-symbols-outlined text-orange-400 text-base">inventory_2</span>
+                        <span className="text-orange-400 text-xs font-bold tracking-wider uppercase">Envío</span>
+                        {request.delivery_info?.is_fragile && (
+                            <span className="text-red-400 text-xs font-bold ml-1">· FRÁGIL</span>
+                        )}
+                    </div>
+                )}
+
                 {/* Header */}
                 <div className="flex justify-between items-start mb-6 mt-2">
                     <div className="flex flex-col">
                         <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
-                            <h2 className="text-2xl font-bold leading-none">Solicitud<br />Nueva</h2>
+                            <div className={`w-3 h-3 ${request.service_type === 'delivery' ? 'bg-orange-500' : 'bg-blue-500'} rounded-full animate-pulse`}></div>
+                            <h2 className="text-2xl font-bold leading-none">
+                                {request.service_type === 'delivery' ? <>Envío<br />Nuevo</> : <>Solicitud<br />Nueva</>}
+                            </h2>
                         </div>
                     </div>
                     <div className="flex flex-col items-end">
-                        {/* Timer visual mimicking the image's top right bar if needed, or just text */}
                         <span className="text-gray-400 text-sm font-medium">{timeLeft}s restantes</span>
-                        {/* Creating the visual bar from the image in top right */}
                         <div className="w-24 h-1.5 bg-gray-700 rounded-full mt-1 overflow-hidden">
                             <div
-                                className="h-full bg-blue-500 rounded-full transition-all duration-1000 ease-linear"
+                                className={`h-full ${request.service_type === 'delivery' ? 'bg-orange-500' : 'bg-blue-500'} rounded-full transition-all duration-1000 ease-linear`}
                                 style={{ width: `${(timeLeft / 15) * 100}%` }}
                             />
                         </div>
                     </div>
                 </div>
+
+                {/* Package details (delivery only) */}
+                {request.service_type === 'delivery' && request.delivery_info && (
+                    <div className="mb-4 bg-orange-500/10 border border-orange-500/30 p-3 rounded-xl">
+                        <p className="text-xs text-orange-400 font-bold uppercase mb-1.5">Paquete</p>
+                        <p className="text-sm text-gray-100 leading-snug">
+                            {request.delivery_info.package_description || 'Sin descripción'}
+                        </p>
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-400 mt-1.5">
+                            {request.delivery_info.package_weight_kg && (
+                                <span>⚖ {request.delivery_info.package_weight_kg} kg</span>
+                            )}
+                            {request.delivery_info.package_value_usd && (
+                                <span>$ {request.delivery_info.package_value_usd}</span>
+                            )}
+                            {request.delivery_info.category && request.delivery_info.category !== 'normal' && (
+                                <span className="uppercase">· {request.delivery_info.category}</span>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {/* Instructions / Mandado Details */}
                 {(request.instructions || request.delivery_instructions) && (
@@ -131,9 +163,13 @@ const DriverRequestCard = ({ request, onAccept, onDecline, isVisible }) => {
 
                     <button
                         onClick={onAccept}
-                        className="flex-1 h-14 bg-blue-600 hover:bg-blue-500 rounded-full flex items-center justify-between px-6 text-white font-bold text-lg shadow-[0_4px_20px_rgba(37,99,235,0.4)] transition-all transform active:scale-95"
+                        className={`flex-1 h-14 rounded-full flex items-center justify-between px-6 text-white font-bold text-lg transition-all transform active:scale-95 ${
+                            request.service_type === 'delivery'
+                                ? 'bg-orange-600 hover:bg-orange-500 shadow-[0_4px_20px_rgba(234,88,12,0.4)]'
+                                : 'bg-blue-600 hover:bg-blue-500 shadow-[0_4px_20px_rgba(37,99,235,0.4)]'
+                        }`}
                     >
-                        <span>Aceptar Viaje</span>
+                        <span>{request.service_type === 'delivery' ? 'Aceptar Envío' : 'Aceptar Viaje'}</span>
                         <ArrowRight size={24} />
                     </button>
                 </div>

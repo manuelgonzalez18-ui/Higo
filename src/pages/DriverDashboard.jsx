@@ -11,6 +11,7 @@ import { calculateBearing, getDistanceFromLatLonInKm } from '../utils/geoUtils';
 import { triggerEmergencyAlert } from '../utils/triggerEmergencyAlert';
 import { useDriverMembership } from '../hooks/useDriverMembership';
 import { toast } from '../components/Toast';
+import DeliveryPodCapture from '../components/DeliveryPodCapture';
 
 const BackgroundGeolocation = Capacitor.isNativePlatform() ? registerPlugin('BackgroundGeolocation') : null;
 
@@ -92,6 +93,7 @@ const DriverDashboard = () => {
     const [showTripDetails, setShowTripDetails] = useState(false); // Floating Info State
     const [isCardMinimized, setIsCardMinimized] = useState(false); // New: Card Minimized State
     const [completing, setCompleting] = useState(false); // Terminar Viaje in-flight
+    const [podRequired, setPodRequired] = useState(null); // 'pickup' | 'delivery' | null — gate envío
     const lastLocationRef = React.useRef(null);
     const profileRef = React.useRef(null);
     const headingRef = React.useRef(0);
@@ -1054,6 +1056,21 @@ const DriverDashboard = () => {
         // Determine Service Type
         const isDelivery = activeRide.service_type === 'delivery' || activeRide.delivery_info;
 
+        // Gate POD para envíos: foto obligatoria antes de cada transición.
+        // Si el ride no tiene la foto correspondiente, abrimos el modal y
+        // esperamos a que el chofer la suba. El modal llama de vuelta a
+        // handleCompleteStep al terminar (vía handlePodUploaded).
+        if (isDelivery) {
+            if (navStep === 1 && !activeRide.pickup_pod_url) {
+                setPodRequired('pickup');
+                return;
+            }
+            if (navStep === 2 && !activeRide.delivery_pod_url) {
+                setPodRequired('delivery');
+                return;
+            }
+        }
+
         if (navStep === 1) {
             // STARTING THE TRIP from pickup. Compute wait fee if driver marked arrival.
             const elapsedSec = arrivalTime ? Math.floor((Date.now() - arrivalTime) / 1000) : 0;
@@ -1811,6 +1828,22 @@ const DriverDashboard = () => {
                     </div>
                 )}
             </div>
+
+            {/* POD obligatorio antes de transición de envío */}
+            {podRequired && activeRide && (
+                <DeliveryPodCapture
+                    rideId={activeRide.id}
+                    kind={podRequired}
+                    onCancel={() => setPodRequired(null)}
+                    onUploaded={(path) => {
+                        const column = podRequired === 'pickup' ? 'pickup_pod_url' : 'delivery_pod_url';
+                        setActiveRide({ ...activeRide, [column]: path });
+                        setPodRequired(null);
+                        // Re-disparar la transición que pidió la foto
+                        setTimeout(() => handleCompleteStep(), 0);
+                    }}
+                />
+            )}
         </div>
     );
 };

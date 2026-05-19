@@ -122,6 +122,9 @@ const ConfirmTripPage = () => {
         }
 
         try {
+            const isDelivery = serviceType === 'delivery';
+            const codAmount = isDelivery && deliveryData?.cod_amount ? Number(deliveryData.cod_amount) : null;
+
             const { data, error } = await supabase
                 .from('rides')
                 .insert([{
@@ -139,11 +142,24 @@ const ConfirmTripPage = () => {
                     dropoff_lng: dropoffCoords?.lng || null,
                     service_type: serviceType || 'ride',
                     delivery_info: deliveryData || null,
-                    payer: deliveryData?.payer || 'sender'
+                    payer: deliveryData?.payer || (isDelivery ? 'sender' : null),
+                    cod_amount: codAmount,
+                    cod_currency: codAmount ? 'USD' : null,
                 }])
                 .select();
 
             if (error) throw error;
+
+            // Audit de aceptación de T&C de envíos (mig 63)
+            if (data && data[0] && isDelivery && deliveryData?.terms_version) {
+                await supabase.from('terms_acceptances').insert({
+                    user_id: session.user.id,
+                    terms_kind: 'delivery',
+                    terms_version: deliveryData.terms_version,
+                    accepted_at: deliveryData.terms_accepted_at || new Date().toISOString(),
+                    ride_id: data[0].id,
+                });
+            }
 
             // Si hay código promo, registrarlo contra el ride recién creado.
             if (data && data[0] && appliedPromo) {
