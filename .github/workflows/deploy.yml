@@ -94,3 +94,33 @@ jobs:
           open -u '$FTP_USERNAME','$FTP_PASSWORD' '$FTP_SERVER';
           mirror --reverse --verbose --parallel=1 --exclude-glob .ftp-deploy-sync-state.json --exclude '(^|\/)\.builds(\/|$)' ./dist/ ./;
           "
+
+      # higodriver.com vive en un hosting Hostinger separado (FTP user
+      # u841591024.higodriver.com, path public_html). Subimos ./higodriver/
+      # entero, no solo el .php — incluye también el index.html del landing.
+      #
+      # Guard: si el secret HIGODRIVER_FTP_PASSWORD no está configurado,
+      # skipeamos sin romper el job — útil mientras se cargan los secrets.
+      - name: Deploy higodriver via lftp
+        env:
+          HIGODRIVER_FTP_SERVER: ${{ secrets.HIGODRIVER_FTP_SERVER }}
+          HIGODRIVER_FTP_USERNAME: ${{ secrets.HIGODRIVER_FTP_USERNAME }}
+          HIGODRIVER_FTP_PASSWORD: ${{ secrets.HIGODRIVER_FTP_PASSWORD }}
+        run: |
+          if [ -z "$HIGODRIVER_FTP_PASSWORD" ]; then
+            echo "::warning::HIGODRIVER_FTP_PASSWORD no está configurado — skipeando deploy de higodriver.com. Agregalo en Settings > Secrets para habilitar."
+            exit 0
+          fi
+          lftp -c "
+          set ftp:ssl-allow no;
+          set ssl:verify-certificate no;
+          set net:timeout 60;
+          set net:max-retries 10;
+          set net:reconnect-interval-base 5;
+          set net:reconnect-interval-multiplier 1.5;
+          set xfer:clobber on;
+          set ftp:use-allo off;
+          set mirror:parallel-transfer-count 1;
+          open -u '$HIGODRIVER_FTP_USERNAME','$HIGODRIVER_FTP_PASSWORD' '$HIGODRIVER_FTP_SERVER';
+          mirror --reverse --verbose --parallel=1 --exclude-glob .ftp-deploy-sync-state.json --exclude '(^|\/)\.builds(\/|$)' ./higodriver/ ./public_html/;
+          "
