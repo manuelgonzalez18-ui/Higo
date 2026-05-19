@@ -114,18 +114,16 @@ $planLabel = [
     'camioneta' => 'Higo Camioneta · $25/mes',
 ][$plan];
 
-// IMPORTANTE: destino = mailbox real (admin@higoapp.com está
-// configurado y verificable en mail.hostinger.com).
+// Destino: admin@higodriver.com — mailbox que vive en el mismo hosting
+// que el VPS donde corre este script. Entregar al mismo proveedor evita
+// el bloqueo de puerto 25 saliente que tiene el VPS (típico anti-spam
+// de planes KVM de Hostinger). Cualquier intento de mandar a un dominio
+// externo (incluido admin@higoapp.com) se perdía silenciosamente — el
+// mail() retornaba true pero el MTA local no podía relayar.
 //
-// IMPORTANTE 2: el `From:` queda en noreply@higodriver.com (no
-// noreply@higoapp.com) porque este script corre en el VPS de
-// higodriver.com, NO en el shared hosting de higoapp.com. Si firmamos
-// como noreply@higoapp.com, el receptor (Hostinger mail de higoapp)
-// corre SPF check para higoapp.com, no encuentra la IP del VPS en el
-// record, y descarta el mail sin avisar. Con From: noreply@higodriver
-// el SPF de higodriver.com sí incluye al VPS, pasa el check, y el
-// mensaje entra a inbox.
-$to      = 'admin@higoapp.com';
+// El From queda en noreply@higodriver.com — mismo dominio que el host
+// que ejecuta el script (SPF de higodriver.com incluye al VPS).
+$to      = 'admin@higodriver.com';
 $subject = '=?UTF-8?B?' . base64_encode("Nueva solicitud Higo App — {$fullName}") . '?=';
 
 $safe = fn(string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
