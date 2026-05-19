@@ -59,6 +59,14 @@ jobs:
       - name: Install lftp
         run: sudo apt-get update && sudo apt-get install -y lftp
 
+      # NOTA sobre --no-perms:
+      # Hostinger no le permite a este FTP user hacer `SITE CHMOD`. lftp
+      # por default intenta preservar permisos del archivo local y emite
+      # un chmod después de cada PUT, lo que devuelve 550 y aborta todo
+      # el mirror. `--no-perms` lo saltea — los archivos quedan con los
+      # perms default del usuario FTP (typically 644 / 755), que es lo
+      # que necesitamos.
+      #
       # NOTA sobre --delete:
       # Con chunks hasheados (vite.config.js: chunkFileNames con [hash])
       # cada build produce nombres únicos. `mirror --delete` intenta
@@ -92,7 +100,7 @@ jobs:
           set ftp:use-allo off;
           set mirror:parallel-transfer-count 1;
           open -u '$FTP_USERNAME','$FTP_PASSWORD' '$FTP_SERVER';
-          mirror --reverse --verbose --parallel=1 --exclude-glob .ftp-deploy-sync-state.json --exclude '(^|\/)\.builds(\/|$)' ./dist/ ./;
+          mirror --reverse --verbose --parallel=1 --no-perms --exclude-glob .ftp-deploy-sync-state.json --exclude '(^|\/)\.builds(\/|$)' ./dist/ ./;
           "
 
       # higodriver.com vive en un hosting Hostinger separado (FTP user
@@ -122,5 +130,5 @@ jobs:
           set ftp:use-allo off;
           set mirror:parallel-transfer-count 1;
           open -u '$HIGODRIVER_FTP_USERNAME','$HIGODRIVER_FTP_PASSWORD' '$HIGODRIVER_FTP_SERVER';
-          mirror --reverse --verbose --parallel=1 --exclude-glob .ftp-deploy-sync-state.json --exclude '(^|\/)\.builds(\/|$)' ./higodriver/ ./;
+          mirror --reverse --verbose --parallel=1 --no-perms --exclude-glob .ftp-deploy-sync-state.json --exclude '(^|\/)\.builds(\/|$)' ./higodriver/ ./;
           "
