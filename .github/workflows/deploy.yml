@@ -6,6 +6,13 @@ on:
       - main
       - master
 
+# Si entra un nuevo push mientras el deploy anterior sigue corriendo,
+# cancelamos el viejo. Evita stacks de runs colgados (clásico con lftp
+# trabado por antivirus de Hostinger lockeando archivos).
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   web-deploy:
     name: Deploy
@@ -67,13 +74,17 @@ jobs:
       # perms default del usuario FTP (typically 644 / 755), que es lo
       # que necesitamos.
       #
-      # NOTA sobre --loop:
-      # El antivirus de Hostinger a veces lockea un archivo
-      # individual durante el upload y devuelve 550 transiente. Sin
-      # --loop, lftp termina con exit 1 aunque solo falló 1/80 files.
-      # Con --loop, lftp repite el mirror entero hasta que pasa limpio
-      # (los archivos ya subidos los detecta por size+timestamp y los
-      # saltea, así que solo reintenta el que falló — costo casi cero).
+      # NOTA sobre --ignore-time + bash retry (en vez de --loop):
+      # El antivirus de Hostinger lockea archivos individuales durante
+      # el upload (550 transiente) Y modifica el mtime tras escanear.
+      # Con --loop nativo de lftp, el cambio de mtime hacía que cada
+      # iteración detectara TODOS los archivos como modificados → loop
+      # infinito (corrida real: 24min sin terminar).
+      #
+      # Fix: --ignore-time compara solo por size (el AV no toca el size,
+      # solo el mtime). Y envolvemos el lftp en un retry bash con tope
+      # de 3 intentos — total bounded a ~5-10 min worst case en vez de
+      # loop infinito.
       #
       # NOTA sobre --delete:
       # Con chunks hasheados (vite.config.js: chunkFileNames con [hash])
@@ -97,7 +108,9 @@ jobs:
           FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
         run: |
-          lftp -c "
+          attempt=0
+          max=3
+          until lftp -c "
           set ftp:ssl-allow no;
           set ssl:verify-certificate no;
           set net:timeout 60;
@@ -108,8 +121,16 @@ jobs:
           set ftp:use-allo off;
           set mirror:parallel-transfer-count 1;
           open -u '$FTP_USERNAME','$FTP_PASSWORD' '$FTP_SERVER';
-          mirror --reverse --verbose --parallel=1 --no-perms --loop --exclude-glob .ftp-deploy-sync-state.json --exclude '(^|\/)\.builds(\/|$)' ./dist/ ./;
-          "
+          mirror --reverse --verbose --parallel=1 --no-perms --ignore-time --exclude-glob .ftp-deploy-sync-state.json --exclude '(^|\/)\.builds(\/|$)' ./dist/ ./;
+          " || [ $attempt -ge $max ]; do
+            attempt=$((attempt + 1))
+            echo "::warning::lftp mirror falló (intento $attempt/$max). Reintentando en 15s..."
+            sleep 15
+          done
+          if [ $attempt -ge $max ]; then
+            echo "::error::lftp mirror falló después de $max intentos."
+            exit 1
+          fi
 
       # higodriver.com vive en un hosting Hostinger separado (FTP user
       # u841591024.higodriver.com, path public_html). Subimos ./higodriver/
@@ -127,7 +148,9 @@ jobs:
             echo "::warning::HIGODRIVER_FTP_PASSWORD no está configurado — skipeando deploy de higodriver.com. Agregalo en Settings > Secrets para habilitar."
             exit 0
           fi
-          lftp -c "
+          attempt=0
+          max=3
+          until lftp -c "
           set ftp:ssl-allow no;
           set ssl:verify-certificate no;
           set net:timeout 60;
@@ -138,5 +161,13 @@ jobs:
           set ftp:use-allo off;
           set mirror:parallel-transfer-count 1;
           open -u '$HIGODRIVER_FTP_USERNAME','$HIGODRIVER_FTP_PASSWORD' '$HIGODRIVER_FTP_SERVER';
-          mirror --reverse --verbose --parallel=1 --no-perms --loop --exclude-glob .ftp-deploy-sync-state.json --exclude '(^|\/)\.builds(\/|$)' ./higodriver/ ./;
-          "
+          mirror --reverse --verbose --parallel=1 --no-perms --ignore-time --exclude-glob .ftp-deploy-sync-state.json --exclude '(^|\/)\.builds(\/|$)' ./higodriver/ ./;
+          " || [ $attempt -ge $max ]; do
+            attempt=$((attempt + 1))
+            echo "::warning::lftp higodriver mirror falló (intento $attempt/$max). Reintentando en 15s..."
+            sleep 15
+          done
+          if [ $attempt -ge $max ]; then
+            echo "::error::lftp higodriver mirror falló después de $max intentos."
+            exit 1
+          fi
