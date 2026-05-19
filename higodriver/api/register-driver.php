@@ -114,11 +114,17 @@ $planLabel = [
     'camioneta' => 'Higo Camioneta · $25/mes',
 ][$plan];
 
-// IMPORTANTE: destino tiene que ser un mailbox que existe en Hostinger.
-// admin@higoapp.com es el inbox real configurado (verificable en
-// mail.hostinger.com). admin@higodriver.com no existía y por eso los
-// correos rebotaban silenciosamente (mail() retorna true pero el MTA
-// no encuentra la cuenta y bouncea).
+// IMPORTANTE: destino = mailbox real (admin@higoapp.com está
+// configurado y verificable en mail.hostinger.com).
+//
+// IMPORTANTE 2: el `From:` queda en noreply@higodriver.com (no
+// noreply@higoapp.com) porque este script corre en el VPS de
+// higodriver.com, NO en el shared hosting de higoapp.com. Si firmamos
+// como noreply@higoapp.com, el receptor (Hostinger mail de higoapp)
+// corre SPF check para higoapp.com, no encuentra la IP del VPS en el
+// record, y descarta el mail sin avisar. Con From: noreply@higodriver
+// el SPF de higodriver.com sí incluye al VPS, pasa el check, y el
+// mensaje entra a inbox.
 $to      = 'admin@higoapp.com';
 $subject = '=?UTF-8?B?' . base64_encode("Nueva solicitud Higo App — {$fullName}") . '?=';
 
@@ -198,7 +204,7 @@ foreach ($attachments as $att) {
 }
 $body .= "--{$mixedBoundary}--\r\n";
 
-$headers  = "From: noreply@higoapp.com\r\n";
+$headers  = "From: noreply@higodriver.com\r\n";
 $headers .= "Reply-To: {$email}\r\n";
 $headers .= "MIME-Version: 1.0\r\n";
 $headers .= "Content-Type: multipart/mixed; boundary=\"{$mixedBoundary}\"\r\n";
