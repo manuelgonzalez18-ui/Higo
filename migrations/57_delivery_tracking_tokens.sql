@@ -12,7 +12,7 @@ BEGIN;
 
 CREATE TABLE IF NOT EXISTS public.delivery_tracking_tokens (
   token       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  ride_id     UUID NOT NULL REFERENCES public.rides(id) ON DELETE CASCADE,
+  ride_id     BIGINT NOT NULL REFERENCES public.rides(id) ON DELETE CASCADE,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at  TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '7 days')
 );

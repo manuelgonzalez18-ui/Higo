@@ -14,7 +14,7 @@ BEGIN;
 
 CREATE TABLE IF NOT EXISTS public.delivery_receipts (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  ride_id         UUID NOT NULL REFERENCES public.rides(id) ON DELETE CASCADE,
+  ride_id         BIGINT NOT NULL REFERENCES public.rides(id) ON DELETE CASCADE,
   receipt_number  BIGSERIAL UNIQUE,
   generated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   pdf_url         TEXT,

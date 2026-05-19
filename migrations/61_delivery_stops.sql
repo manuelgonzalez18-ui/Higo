@@ -10,7 +10,7 @@ BEGIN;
 
 CREATE TABLE IF NOT EXISTS public.delivery_stops (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  ride_id             UUID NOT NULL REFERENCES public.rides(id) ON DELETE CASCADE,
+  ride_id             BIGINT NOT NULL REFERENCES public.rides(id) ON DELETE CASCADE,
   stop_order          INT NOT NULL,
   recipient_name      TEXT NOT NULL,
   recipient_phone     TEXT,

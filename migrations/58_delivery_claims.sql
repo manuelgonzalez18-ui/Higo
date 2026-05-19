@@ -21,7 +21,7 @@ CREATE INDEX IF NOT EXISTS profiles_suspended_idx
 -- 2. Tabla de claims
 CREATE TABLE IF NOT EXISTS public.delivery_claims (
   id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  ride_id                   UUID NOT NULL REFERENCES public.rides(id) ON DELETE CASCADE,
+  ride_id                   BIGINT NOT NULL REFERENCES public.rides(id) ON DELETE CASCADE,
   claimant_id               UUID NOT NULL REFERENCES auth.users(id),
   type                      TEXT NOT NULL,
   description               TEXT,

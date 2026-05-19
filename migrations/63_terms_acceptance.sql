@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS public.terms_acceptances (
   terms_version   TEXT NOT NULL,
   accepted_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   ip              TEXT,
-  ride_id         UUID REFERENCES public.rides(id) ON DELETE SET NULL,
+  ride_id         BIGINT REFERENCES public.rides(id) ON DELETE SET NULL,
   CONSTRAINT terms_acceptances_kind_check
     CHECK (terms_kind IN ('delivery','ride','general'))
 );
