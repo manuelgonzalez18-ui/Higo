@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { supabase } from '../services/supabase';
 
 export const TERMS_VERSION_DELIVERY = '2026-05-19';
 
@@ -22,6 +23,8 @@ const CATEGORIES = [
 
 const DeliveryFormSteps = ({ onSubmit, onCancel }) => {
     const [step, setStep] = useState(1);
+    const [contacts, setContacts] = useState([]);
+    const [showSaveContact, setShowSaveContact] = useState(false);
     const [data, setData] = useState({
         senderName: '',
         senderPhone: '',
@@ -39,7 +42,35 @@ const DeliveryFormSteps = ({ onSubmit, onCancel }) => {
         terms_version: TERMS_VERSION_DELIVERY,
         terms_accepted_at: null,
         payer: 'sender',
+        save_contact: false,
+        contact_label: '',
     });
+
+    // Cargar address book del remitente
+    useEffect(() => {
+        let active = true;
+        (async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user || !active) return;
+            const { data: rows } = await supabase
+                .from('recipient_contacts')
+                .select('id,name,phone,address_label,instructions')
+                .eq('user_id', user.id)
+                .order('last_used_at', { ascending: false, nullsFirst: false })
+                .limit(20);
+            if (active) setContacts(rows || []);
+        })();
+        return () => { active = false; };
+    }, []);
+
+    const applyContact = (c) => {
+        setData(prev => ({
+            ...prev,
+            receiverName: c.name || prev.receiverName,
+            receiverPhone: c.phone || prev.receiverPhone,
+            destInstructions: c.instructions || prev.destInstructions,
+        }));
+    };
 
     const handleChange = (field, value) => {
         setData(prev => {
@@ -97,6 +128,30 @@ const DeliveryFormSteps = ({ onSubmit, onCancel }) => {
             <div className="flex-1 overflow-y-auto p-6 pt-0">
                 {step === 1 && (
                     <div className="flex flex-col gap-6">
+                        {contacts.length > 0 && (
+                            <div className="bg-[#1A1F2E] p-4 rounded-2xl border border-emerald-500/20">
+                                <label className="text-emerald-400 text-xs font-bold uppercase mb-2 block">
+                                    Destinatario frecuente
+                                </label>
+                                <select
+                                    onChange={e => {
+                                        const c = contacts.find(c => c.id === e.target.value);
+                                        if (c) applyContact(c);
+                                    }}
+                                    className="w-full bg-[#0a101f] rounded-xl p-3 text-sm text-white border border-white/10 outline-none focus:border-emerald-500"
+                                    defaultValue=""
+                                >
+                                    <option value="">Selecciona uno (autocompleta abajo)</option>
+                                    {contacts.map(c => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.name} · {c.phone}
+                                            {c.address_label ? ` · ${c.address_label}` : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
                         <div className="bg-[#1A1F2E] p-4 rounded-2xl border border-white/5">
                             <h3 className="text-emerald-400 text-sm font-bold uppercase mb-4 flex items-center gap-2">
                                 <span className="material-symbols-outlined text-lg">call_made</span> Quien Envía
@@ -302,6 +357,27 @@ const DeliveryFormSteps = ({ onSubmit, onCancel }) => {
                             <span className="text-white text-sm leading-snug">
                                 He leído y acepto los Términos y Condiciones de Envíos. Declaro bajo juramento que el paquete no contiene ningún elemento prohibido y asumo el riesgo del valor declarado.
                             </span>
+                        </label>
+
+                        <label className="flex items-start gap-3 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={data.save_contact}
+                                onChange={e => handleChange('save_contact', e.target.checked)}
+                                className="w-5 h-5 accent-emerald-500 mt-0.5 shrink-0"
+                            />
+                            <div className="flex-1">
+                                <span className="text-white text-sm">Guardar destinatario para próximos envíos</span>
+                                {data.save_contact && (
+                                    <input
+                                        type="text"
+                                        placeholder="Etiqueta (opcional): casa de mamá, oficina, etc."
+                                        className="w-full mt-2 bg-[#1A1F2E] rounded-xl px-3 py-2 text-sm text-white border border-white/10 outline-none focus:border-emerald-500"
+                                        value={data.contact_label}
+                                        onChange={e => handleChange('contact_label', e.target.value)}
+                                    />
+                                )}
+                            </div>
                         </label>
                     </div>
                 )}

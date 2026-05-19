@@ -161,6 +161,45 @@ const ConfirmTripPage = () => {
                 });
             }
 
+            // Guardar destinatario en address book si el remitente lo pidió (mig 60)
+            if (data && data[0] && isDelivery && deliveryData?.save_contact && deliveryData?.receiverName && deliveryData?.receiverPhone) {
+                try {
+                    // Upsert por (user_id, phone): si ya existe, actualizamos last_used_at
+                    const { data: existing } = await supabase
+                        .from('recipient_contacts')
+                        .select('id')
+                        .eq('user_id', session.user.id)
+                        .eq('phone', deliveryData.receiverPhone)
+                        .maybeSingle();
+                    if (existing?.id) {
+                        await supabase.from('recipient_contacts').update({
+                            name: deliveryData.receiverName,
+                            address_label: deliveryData.contact_label || null,
+                            address: dropoff,
+                            lat: dropoffCoords?.lat || null,
+                            lng: dropoffCoords?.lng || null,
+                            instructions: deliveryData.destInstructions || null,
+                            last_used_at: new Date().toISOString(),
+                        }).eq('id', existing.id);
+                    } else {
+                        await supabase.from('recipient_contacts').insert({
+                            user_id: session.user.id,
+                            name: deliveryData.receiverName,
+                            phone: deliveryData.receiverPhone,
+                            address_label: deliveryData.contact_label || null,
+                            address: dropoff,
+                            lat: dropoffCoords?.lat || null,
+                            lng: dropoffCoords?.lng || null,
+                            instructions: deliveryData.destInstructions || null,
+                            last_used_at: new Date().toISOString(),
+                        });
+                    }
+                } catch (err) {
+                    console.warn('No se pudo guardar el destinatario:', err);
+                    // No bloquear el ride por esto
+                }
+            }
+
             // Si hay código promo, registrarlo contra el ride recién creado.
             if (data && data[0] && appliedPromo) {
                 await supabase.rpc('apply_promo_code', {

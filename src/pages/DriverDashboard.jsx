@@ -12,6 +12,7 @@ import { triggerEmergencyAlert } from '../utils/triggerEmergencyAlert';
 import { useDriverMembership } from '../hooks/useDriverMembership';
 import { toast } from '../components/Toast';
 import DeliveryPodCapture from '../components/DeliveryPodCapture';
+import { sendDeliveryMilestone } from '../utils/sendDeliveryMilestone';
 
 const BackgroundGeolocation = Capacitor.isNativePlatform() ? registerPlugin('BackgroundGeolocation') : null;
 
@@ -1035,6 +1036,11 @@ const DriverDashboard = () => {
             stopLoopingRequestAlert(); // Stop sound
             setNavStep(1);
             speak(`Viaje aceptado. Navegando a ${ride.pickup}`);
+
+            // Push al remitente si es envío (fire-and-forget)
+            if (ride.service_type === 'delivery' || ride.delivery_info) {
+                sendDeliveryMilestone({ rideId: ride.id, status: 'accepted' });
+            }
         } catch (error) {
             console.error("Accept Ride Error:", error);
             toast.error("Error al aceptar viaje: " + error.message);
@@ -1112,6 +1118,10 @@ const DriverDashboard = () => {
                     price: finalPrice
                 }).eq('id', activeRide.id);
                 setActiveRide({ ...activeRide, price: finalPrice, wait_fee: fee, wait_seconds: elapsedSec });
+
+                if (isDelivery) {
+                    sendDeliveryMilestone({ rideId: activeRide.id, status: 'in_progress' });
+                }
             }
 
         } else if (navStep === 2) {
@@ -1128,6 +1138,10 @@ const DriverDashboard = () => {
                     toast.error(`No se pudo completar el viaje: ${completeErr.message}`);
                     setCompleting(false);
                     return;
+                }
+
+                if (isDelivery) {
+                    sendDeliveryMilestone({ rideId: activeRide.id, status: 'completed' });
                 }
 
                 // Acreditar referido pendiente del pasajero (si aplica)
@@ -1185,11 +1199,18 @@ const DriverDashboard = () => {
             setArrivalTime(null); // Stop the wait timer once trip starts
             speak(`Pago confirmado. Iniciando viaje al destino.`);
             await supabase.from('rides').update({ status: 'in_progress' }).eq('id', activeRide.id);
+            if (activeRide?.service_type === 'delivery' || activeRide?.delivery_info) {
+                sendDeliveryMilestone({ rideId: activeRide.id, status: 'in_progress' });
+            }
         } else {
             // navStep 2: ride is already 'completed' in DB — just clean up local state
             closeRide();
         }
     };
+
+    // Notificar al remitente cuando el chofer pasa por handleQRClosed
+    // (sender-payer en pickup → in_progress)
+
 
     const closeRide = () => {
         setShowPaymentQR(false); // 1. Close UI immediately
