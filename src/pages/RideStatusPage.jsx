@@ -18,6 +18,62 @@ const RideStatusPage = () => {
     const [showDriverDetails, setShowDriverDetails] = useState(true);
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [selectedReason, setSelectedReason] = useState(null);
+    const [trackingToken, setTrackingToken] = useState(null);
+    const [generatingToken, setGeneratingToken] = useState(false);
+
+    const isDelivery = ride?.service_type === 'delivery' || !!ride?.delivery_info;
+
+    const shareTracking = async () => {
+        if (generatingToken) return;
+        setGeneratingToken(true);
+        try {
+            let token = trackingToken;
+            if (!token) {
+                // Buscar uno vigente
+                const { data: existing } = await supabase
+                    .from('delivery_tracking_tokens')
+                    .select('token,expires_at')
+                    .eq('ride_id', ride.id)
+                    .gt('expires_at', new Date().toISOString())
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                if (existing?.token) {
+                    token = existing.token;
+                } else {
+                    const { data: created, error } = await supabase
+                        .from('delivery_tracking_tokens')
+                        .insert({ ride_id: ride.id })
+                        .select('token')
+                        .single();
+                    if (error) throw error;
+                    token = created.token;
+                }
+                setTrackingToken(token);
+            }
+
+            const url = `${window.location.origin}/#/track/${token}`;
+            const receiverName = ride?.delivery_info?.receiverName || 'destinatario';
+            const text = `Hola ${receiverName}, te envío un paquete con Higo Envíos. Podés ver el estado en tiempo real acá: ${url}`;
+
+            // Si hay Web Share API, usarla. Si no, abrir WhatsApp con el destinatario.
+            if (navigator.share) {
+                await navigator.share({ title: 'Higo Envíos · Tracking', text, url });
+            } else {
+                const receiverPhone = (ride?.delivery_info?.receiverPhone || '').replace(/[^0-9]/g, '');
+                const waUrl = receiverPhone
+                    ? `https://wa.me/${receiverPhone}?text=${encodeURIComponent(text)}`
+                    : `https://wa.me/?text=${encodeURIComponent(text)}`;
+                window.open(waUrl, '_blank');
+            }
+        } catch (err) {
+            console.error(err);
+            toast.error(`No se pudo generar el link: ${err.message || err}`);
+        } finally {
+            setGeneratingToken(false);
+        }
+    };
 
     const cancelReasons = [
         { icon: 'schedule', text: "La espera fue demasiado larga" },
@@ -331,7 +387,19 @@ const RideStatusPage = () => {
                 {/* Status Pill Removed as per user request to clear map */}
 
 
-                <div className="w-12"></div>
+                {isDelivery && ride?.status !== 'cancelled' && ride?.status !== 'completed' ? (
+                    <button
+                        onClick={shareTracking}
+                        disabled={generatingToken}
+                        className="px-4 h-12 bg-emerald-500 hover:bg-emerald-600 rounded-full flex items-center gap-2 shadow-lg shadow-emerald-500/30 active:scale-95 transition-all disabled:opacity-50"
+                        title="Compartir link de tracking con el destinatario"
+                    >
+                        <span className="material-symbols-outlined text-white text-base">share</span>
+                        <span className="text-white text-xs font-bold">Compartir</span>
+                    </button>
+                ) : (
+                    <div className="w-12"></div>
+                )}
             </div>
 
             {/* Simulated Overlay Removed */}
