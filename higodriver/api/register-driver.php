@@ -4,12 +4,13 @@ declare(strict_types=1);
 /**
  * api/register-driver.php — Recibe el formulario público de "Unirme como
  * conductor" desde higodriver.com y envía un correo a admin@higodriver.com
- * con los datos y las 4 fotos como adjuntos.
+ * con los datos y las 7 fotos como adjuntos.
  *
  * Form fields (multipart/form-data):
  *   full_name, cedula, phone, email, city, plan,
  *   vehicle_brand, vehicle_model, vehicle_color, license_plate,
- *   photo_driver, photo_cedula, photo_health, photo_circulation
+ *   photo_driver, photo_cedula, photo_licencia, photo_rcv,
+ *   photo_circulation, photo_health, photo_vehicle
  *
  * Salida: { ok:true } o { ok:false, error, detail? }
  */
@@ -83,10 +84,13 @@ if (!in_array($plan, ['moto', 'carro', 'camioneta'], true)) {
 // ═══ Validación de archivos ═══════════════════════════════════════════
 
 $fileKeys = [
-    'photo_driver'      => 'Foto del conductor',
+    'photo_driver'      => 'Foto del chofer',
     'photo_cedula'      => 'Foto de la cédula',
+    'photo_licencia'    => 'Foto de la licencia',
+    'photo_rcv'         => 'RCV (Responsabilidad Civil del Vehículo)',
+    'photo_circulation' => 'Certificado de circulación del vehículo',
     'photo_health'      => 'Certificado de salud',
-    'photo_circulation' => 'Carnet de circulación',
+    'photo_vehicle'     => 'Foto del vehículo',
 ];
 
 $maxBytes  = 8 * 1024 * 1024;
@@ -176,7 +180,7 @@ $html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head>'
     . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">'
     . $rowsHtml
     . '</table>'
-    . '<p style="margin:18px 0 0;font-size:13px;color:#6b7280;">Las 4 fotos están adjuntas en este correo.</p>'
+    . '<p style="margin:18px 0 0;font-size:13px;color:#6b7280;">Las 7 fotos están adjuntas en este correo.</p>'
     . '</td></tr>'
     . '<tr><td style="padding:14px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:12px;color:#6b7280;text-align:center;">'
     . 'Higo App · higodriver.com'
@@ -188,7 +192,7 @@ $plain = "Nueva solicitud de conductor recibida en higodriver.com\n"
 foreach ($rows as $k => $v) {
     $plain .= str_pad($k . ':', 22) . $v . "\n";
 }
-$plain .= "\nLas 4 fotos están adjuntas en este correo.\n";
+$plain .= "\nLas 7 fotos están adjuntas en este correo.\n";
 
 // ═══ Armado MIME (multipart/mixed con alternative anidado) ═════════════
 

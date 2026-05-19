@@ -326,7 +326,7 @@
             <div class="card">
                 <div class="ico">1️⃣</div>
                 <h3>Llena el formulario</h3>
-                <p>Completa tus datos y sube las 4 fotos: foto tuya, cédula, certificado de salud y carnet de circulación del vehículo. Toma menos de 5 minutos.</p>
+                <p>Completa tus datos y sube las 7 fotos: tú, cédula, licencia, RCV, certificado de circulación, certificado de salud y foto del vehículo. Toma menos de 5 minutos.</p>
             </div>
             <div class="card">
                 <div class="ico">2️⃣</div>
@@ -348,7 +348,7 @@
 
     <section id="unirme">
         <h2 style="text-align:center;">Regístrate como conductor</h2>
-        <p class="sub" style="text-align:center;">Llena el formulario con tus datos y sube las 4 fotos requeridas. Te respondemos por correo en menos de 24 horas.</p>
+        <p class="sub" style="text-align:center;">Llena el formulario con tus datos y sube las 7 fotos requeridas. Te respondemos por correo en menos de 24 horas.</p>
 
         <form id="driverRegisterForm" class="register-form" enctype="multipart/form-data" novalidate>
             <div class="row">
@@ -415,7 +415,7 @@
 
             <div class="row">
                 <div class="field">
-                    <label for="photo_driver">Foto del conductor</label>
+                    <label for="photo_driver">Foto del chofer</label>
                     <input id="photo_driver" name="photo_driver" type="file" accept="image/*" capture="user" required>
                     <span class="hint">Cara visible, buena iluminación.</span>
                 </div>
@@ -428,14 +428,35 @@
 
             <div class="row">
                 <div class="field">
+                    <label for="photo_licencia">Foto de la licencia</label>
+                    <input id="photo_licencia" name="photo_licencia" type="file" accept="image/*,application/pdf" capture="environment" required>
+                    <span class="hint">Vigente, frente y dorso si aplica.</span>
+                </div>
+                <div class="field">
+                    <label for="photo_rcv">RCV (Responsabilidad Civil del Vehículo)</label>
+                    <input id="photo_rcv" name="photo_rcv" type="file" accept="image/*,application/pdf" capture="environment" required>
+                    <span class="hint">Póliza vigente.</span>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="field">
+                    <label for="photo_circulation">Certificado de circulación del vehículo</label>
+                    <input id="photo_circulation" name="photo_circulation" type="file" accept="image/*,application/pdf" capture="environment" required>
+                    <span class="hint">A tu nombre o con autorización.</span>
+                </div>
+                <div class="field">
                     <label for="photo_health">Certificado de salud</label>
                     <input id="photo_health" name="photo_health" type="file" accept="image/*,application/pdf" capture="environment" required>
                     <span class="hint">Vigente.</span>
                 </div>
+            </div>
+
+            <div class="row">
                 <div class="field">
-                    <label for="photo_circulation">Carnet de circulación del vehículo</label>
-                    <input id="photo_circulation" name="photo_circulation" type="file" accept="image/*,application/pdf" capture="environment" required>
-                    <span class="hint">A tu nombre o con autorización.</span>
+                    <label for="photo_vehicle">Foto del vehículo</label>
+                    <input id="photo_vehicle" name="photo_vehicle" type="file" accept="image/*" capture="environment" required>
+                    <span class="hint">Placa visible.</span>
                 </div>
             </div>
 
@@ -489,7 +510,7 @@
         status.className = 'status';
         status.textContent = '';
 
-        var files = ['photo_driver', 'photo_cedula', 'photo_health', 'photo_circulation'];
+        var files = ['photo_driver', 'photo_cedula', 'photo_licencia', 'photo_rcv', 'photo_circulation', 'photo_health', 'photo_vehicle'];
         for (var i = 0; i < files.length; i++) {
             var input = form.querySelector('input[name="' + files[i] + '"]');
             var f = input && input.files && input.files[0];
@@ -514,10 +535,13 @@
             vehicle_model: 'Modelo',
             vehicle_color: 'Color',
             license_plate: 'Placa',
-            photo_driver: 'Foto del conductor',
+            photo_driver: 'Foto del chofer',
             photo_cedula: 'Foto de la cédula',
+            photo_licencia: 'Foto de la licencia',
+            photo_rcv: 'RCV (Responsabilidad Civil del Vehículo)',
+            photo_circulation: 'Certificado de circulación del vehículo',
             photo_health: 'Certificado de salud',
-            photo_circulation: 'Carnet de circulación'
+            photo_vehicle: 'Foto del vehículo'
         };
         var errorLabels = {
             missing_field: 'Falta completar el campo',
