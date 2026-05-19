@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, getUserProfile } from '../services/supabase';
 import AdminNav from '../components/AdminNav';
+import AdminDeliveryClaimsPanel from '../components/AdminDeliveryClaimsPanel';
 
 // Un viaje está "en disputa" si:
 //   - Alguna de las partes marcó pago (payment_reference, user o driver confirmó)
@@ -23,6 +24,7 @@ const AdminDisputesPage = () => {
     const [filter, setFilter] = useState('pending');
     const [message, setMessage] = useState(null);
     const [profiles, setProfiles] = useState({});
+    const [tab, setTab] = useState('payments'); // 'payments' | 'deliveries'
 
     useEffect(() => {
         (async () => {
@@ -32,9 +34,10 @@ const AdminDisputesPage = () => {
                 return;
             }
             setAuthorized(true);
-            await fetchDisputes();
+            if (tab === 'payments') await fetchDisputes();
+            else setLoading(false);
         })();
-    }, [navigate, filter]);
+    }, [navigate, filter, tab]);
 
     const fetchDisputes = async () => {
         setLoading(true);
@@ -161,11 +164,41 @@ const AdminDisputesPage = () => {
                     <span className="material-symbols-outlined text-white text-2xl">report</span>
                 </div>
                 <div>
-                    <h1 className="text-2xl font-black tracking-tight text-white">Disputas de Pago</h1>
-                    <p className="text-gray-400 text-sm font-medium">Viajes con confirmación bilateral pendiente o contradictoria</p>
+                    <h1 className="text-2xl font-black tracking-tight text-white">Disputas y Reclamos</h1>
+                    <p className="text-gray-400 text-sm font-medium">
+                        {tab === 'payments'
+                            ? 'Viajes con confirmación bilateral pendiente o contradictoria'
+                            : 'Reclamos de envíos (daño, pérdida, no entrega)'}
+                    </p>
                 </div>
             </div>
 
+            {/* Tab switcher Pagos / Envíos */}
+            <div className="flex gap-2 mb-6 border-b border-white/5">
+                <button
+                    onClick={() => setTab('payments')}
+                    className={`px-5 py-3 font-bold text-sm border-b-2 transition-all ${tab === 'payments'
+                        ? 'border-red-500 text-white'
+                        : 'border-transparent text-gray-500 hover:text-white'}`}
+                >
+                    <span className="material-symbols-outlined text-base mr-2 align-middle">payments</span>
+                    Pagos
+                </button>
+                <button
+                    onClick={() => setTab('deliveries')}
+                    className={`px-5 py-3 font-bold text-sm border-b-2 transition-all ${tab === 'deliveries'
+                        ? 'border-orange-500 text-white'
+                        : 'border-transparent text-gray-500 hover:text-white'}`}
+                >
+                    <span className="material-symbols-outlined text-base mr-2 align-middle">inventory_2</span>
+                    Envíos
+                </button>
+            </div>
+
+            {tab === 'deliveries' ? (
+                <AdminDeliveryClaimsPanel />
+            ) : (
+            <>
             <div className="bg-[#1A1F2E] p-3 rounded-[20px] border border-white/5 mb-6 flex gap-2 overflow-x-auto">
                 {FILTERS.map(f => (
                     <button
@@ -284,6 +317,8 @@ const AdminDisputesPage = () => {
                     );
                 })}
             </div>
+            </>
+            )}
         </div>
     );
 };

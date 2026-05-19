@@ -10,6 +10,7 @@ const TABS = [
     { to: '/admin/pricing',   label: 'Tarifas',     icon: 'payments',       shortcut: 'g p' },
     { to: '/admin/promos',    label: 'Promos',      icon: 'local_offer',    shortcut: 'g r' },
     { to: '/admin/disputes',  label: 'Disputas',    icon: 'report',         shortcut: 'g t' },
+    { to: '/admin/deliveries',label: 'Envíos',      icon: 'inventory_2',    shortcut: 'g e' },
     { to: '/admin/support',   label: 'Soporte',     icon: 'support_agent',  shortcut: 'g s', badge: 'support' },
     { to: '/admin/fraud',     label: 'Fraud',       icon: 'crisis_alert',   shortcut: 'g f' },
     { to: '/admin/analytics', label: 'Analytics',   icon: 'bar_chart',      shortcut: 'g a' },

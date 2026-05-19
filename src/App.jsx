@@ -29,6 +29,7 @@ const AdminDashboardPage      = lazy(() => import('./pages/AdminDashboardPage'))
 const AdminAnalyticsPage      = lazy(() => import('./pages/AdminAnalyticsPage'));
 const AdminZonesPage          = lazy(() => import('./pages/AdminZonesPage'));
 const AdminFraudPage          = lazy(() => import('./pages/AdminFraudPage'));
+const AdminDeliveriesPage     = lazy(() => import('./pages/AdminDeliveriesPage'));
 const AdminSupportPage        = lazy(() => import('./pages/AdminSupportPage'));
 const AdminSupportStatsPage   = lazy(() => import('./pages/AdminSupportStatsPage'));
 const DriverLandingPage       = lazy(() => import('./pages/DriverLandingPage'));
@@ -246,6 +247,7 @@ const App = () => {
         <Route path="/admin/analytics" element={<AdminGuard><AdminAnalyticsPage /></AdminGuard>} />
         <Route path="/admin/zones" element={<AdminGuard><AdminZonesPage /></AdminGuard>} />
         <Route path="/admin/fraud" element={<AdminFraudPage />} />
+        <Route path="/admin/deliveries" element={<AdminGuard><AdminDeliveriesPage /></AdminGuard>} />
         <Route path="/admin/support" element={<AdminGuard><AdminSupportPage /></AdminGuard>} />
         <Route path="/admin/support/stats" element={<AdminGuard><AdminSupportStatsPage /></AdminGuard>} />
         <Route path="/join" element={<DriverLandingPage />} />
