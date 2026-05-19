@@ -40,6 +40,7 @@ const AdminAnalyticsPage = () => {
     const [dailyRides, setDailyRides] = useState([]);
     const [weeklyUsers, setWeeklyUsers] = useState([]);
     const [kpis, setKpis] = useState({ totalRides: 0, totalRevenue: 0, retentionPct: 0, activeDrivers: 0 });
+    const [deliveryStats, setDeliveryStats] = useState(null);
 
     useEffect(() => {
         (async () => {
@@ -116,6 +117,17 @@ const AdminAnalyticsPage = () => {
         const retentionPct = unique > 0 ? Math.round((returning / unique) * 100) : 0;
 
         setKpis({ totalRides, totalRevenue, retentionPct, activeDrivers: activeDriversRes.count || 0 });
+
+        // E6.2: stats de envíos via RPC delivery_analytics (mig 59)
+        try {
+            const from = new Date(Date.now() - range * 86400e3).toISOString();
+            const to   = new Date().toISOString();
+            const { data: dStats, error: dErr } = await supabase.rpc('delivery_analytics', { p_from: from, p_to: to });
+            if (!dErr && dStats) setDeliveryStats(dStats);
+        } catch (err) {
+            console.warn('delivery_analytics failed:', err);
+        }
+
         setLoading(false);
     };
 
@@ -219,6 +231,78 @@ const AdminAnalyticsPage = () => {
                             <p className="text-center text-gray-500 text-sm py-6">Sin ingresos confirmados en este período.</p>
                         )}
                     </div>
+
+                    {/* Higo Envíos — stats (E6.2) */}
+                    {deliveryStats && (
+                        <div className="bg-[#1A1F2E] rounded-2xl border border-orange-500/20 p-5">
+                            <div className="flex items-center gap-2 mb-4">
+                                <span className="material-symbols-outlined text-orange-400 text-xl">inventory_2</span>
+                                <h2 className="text-sm font-bold text-orange-400 uppercase tracking-wider">Higo Envíos · últimos {range} días</h2>
+                            </div>
+
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+                                <div className="bg-[#0F1014] rounded-xl p-3">
+                                    <p className="text-[10px] text-gray-500 uppercase">Total envíos</p>
+                                    <p className="text-2xl font-black text-white">{deliveryStats.total || 0}</p>
+                                </div>
+                                <div className="bg-[#0F1014] rounded-xl p-3">
+                                    <p className="text-[10px] text-gray-500 uppercase">Tasa éxito</p>
+                                    <p className="text-2xl font-black text-emerald-400">
+                                        {Math.round((deliveryStats.success_rate || 0) * 100)}%
+                                    </p>
+                                </div>
+                                <div className="bg-[#0F1014] rounded-xl p-3">
+                                    <p className="text-[10px] text-gray-500 uppercase">Tiempo prom. pickup→deliv</p>
+                                    <p className="text-2xl font-black text-white">
+                                        {deliveryStats.avg_pickup_to_delivery_min || 0} <span className="text-sm text-gray-400">min</span>
+                                    </p>
+                                </div>
+                                <div className="bg-[#0F1014] rounded-xl p-3">
+                                    <p className="text-[10px] text-gray-500 uppercase">Tasa de reclamos</p>
+                                    <p className={`text-2xl font-black ${(deliveryStats.claims_rate || 0) > 0.05 ? 'text-red-400' : 'text-amber-400'}`}>
+                                        {Math.round((deliveryStats.claims_rate || 0) * 100)}%
+                                    </p>
+                                    <p className="text-[10px] text-gray-500">{deliveryStats.claims_total || 0} claims</p>
+                                </div>
+                            </div>
+
+                            {/* Top destinos */}
+                            {Array.isArray(deliveryStats.top_destinations) && deliveryStats.top_destinations.length > 0 && (
+                                <div className="mb-4">
+                                    <p className="text-xs text-gray-400 font-bold uppercase mb-2">Top destinos</p>
+                                    <div className="space-y-1.5">
+                                        {deliveryStats.top_destinations.slice(0, 5).map((d, i) => {
+                                            const maxDest = deliveryStats.top_destinations[0].count;
+                                            return (
+                                                <Bar
+                                                    key={i}
+                                                    value={d.count}
+                                                    max={maxDest}
+                                                    color="bg-orange-500"
+                                                    label={i + 1 + '.'}
+                                                    sub={`${d.count} · ${(d.dropoff || '').slice(0, 30)}`}
+                                                />
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Distribución por vehículo */}
+                            {deliveryStats.by_vehicle && Object.keys(deliveryStats.by_vehicle).length > 0 && (
+                                <div>
+                                    <p className="text-xs text-gray-400 font-bold uppercase mb-2">Por tipo de vehículo</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {Object.entries(deliveryStats.by_vehicle).map(([type, count]) => (
+                                            <span key={type} className="px-3 py-1.5 rounded-full bg-orange-500/10 text-orange-300 text-xs font-bold border border-orange-500/20">
+                                                {type}: {count}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Nuevos usuarios por semana */}
                     <div className="bg-[#1A1F2E] rounded-2xl border border-white/5 p-5">
