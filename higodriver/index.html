@@ -503,6 +503,34 @@
 
         var fd = new FormData(form);
 
+        var fieldLabels = {
+            full_name: 'Nombre y apellido',
+            cedula: 'Cédula',
+            phone: 'Teléfono',
+            email: 'Correo',
+            city: 'Ciudad / zona',
+            plan: 'Plan',
+            vehicle_brand: 'Marca',
+            vehicle_model: 'Modelo',
+            vehicle_color: 'Color',
+            license_plate: 'Placa',
+            photo_driver: 'Foto del conductor',
+            photo_cedula: 'Foto de la cédula',
+            photo_health: 'Certificado de salud',
+            photo_circulation: 'Carnet de circulación'
+        };
+        var errorLabels = {
+            missing_field: 'Falta completar el campo',
+            missing_file: 'Falta subir el archivo',
+            invalid_email: 'El correo no es válido.',
+            invalid_plan: 'El plan seleccionado no es válido.',
+            invalid_file_type: 'Formato de archivo no soportado en',
+            file_too_large: 'El archivo supera el tamaño máximo (8 MB):',
+            file_read_failed: 'No pudimos leer el archivo',
+            mail_failed: 'No pudimos enviar el correo. Intenta de nuevo en unos minutos.',
+            method_not_allowed: 'Método HTTP no permitido.'
+        };
+
         fetch('/api/register-driver.php', { method: 'POST', body: fd })
             .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
             .then(function (res) {
@@ -510,7 +538,12 @@
                     setStatus('ok', '¡Solicitud enviada! Te respondemos a tu correo en menos de 24 horas.');
                     form.reset();
                 } else {
-                    var msg = (res.body && (res.body.error || res.body.detail)) || 'No pudimos enviar la solicitud. Intenta de nuevo o escríbenos por WhatsApp.';
+                    var body = res.body || {};
+                    var errKey = body.error || '';
+                    var detail = body.detail || '';
+                    var detailLabel = fieldLabels[detail] || detail;
+                    var prefix = errorLabels[errKey] || 'No pudimos enviar la solicitud';
+                    var msg = detailLabel ? (prefix + ': ' + detailLabel) : (errorLabels[errKey] || prefix + '. Intenta de nuevo o escríbenos por WhatsApp.');
                     setStatus('err', msg);
                 }
             })
