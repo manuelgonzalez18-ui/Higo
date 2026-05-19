@@ -67,6 +67,14 @@ jobs:
       # perms default del usuario FTP (typically 644 / 755), que es lo
       # que necesitamos.
       #
+      # NOTA sobre --loop:
+      # El antivirus de Hostinger a veces lockea un archivo
+      # individual durante el upload y devuelve 550 transiente. Sin
+      # --loop, lftp termina con exit 1 aunque solo falló 1/80 files.
+      # Con --loop, lftp repite el mirror entero hasta que pasa limpio
+      # (los archivos ya subidos los detecta por size+timestamp y los
+      # saltea, así que solo reintenta el que falló — costo casi cero).
+      #
       # NOTA sobre --delete:
       # Con chunks hasheados (vite.config.js: chunkFileNames con [hash])
       # cada build produce nombres únicos. `mirror --delete` intenta
@@ -100,7 +108,7 @@ jobs:
           set ftp:use-allo off;
           set mirror:parallel-transfer-count 1;
           open -u '$FTP_USERNAME','$FTP_PASSWORD' '$FTP_SERVER';
-          mirror --reverse --verbose --parallel=1 --no-perms --exclude-glob .ftp-deploy-sync-state.json --exclude '(^|\/)\.builds(\/|$)' ./dist/ ./;
+          mirror --reverse --verbose --parallel=1 --no-perms --loop --exclude-glob .ftp-deploy-sync-state.json --exclude '(^|\/)\.builds(\/|$)' ./dist/ ./;
           "
 
       # higodriver.com vive en un hosting Hostinger separado (FTP user
@@ -130,5 +138,5 @@ jobs:
           set ftp:use-allo off;
           set mirror:parallel-transfer-count 1;
           open -u '$HIGODRIVER_FTP_USERNAME','$HIGODRIVER_FTP_PASSWORD' '$HIGODRIVER_FTP_SERVER';
-          mirror --reverse --verbose --parallel=1 --no-perms --exclude-glob .ftp-deploy-sync-state.json --exclude '(^|\/)\.builds(\/|$)' ./higodriver/ ./;
+          mirror --reverse --verbose --parallel=1 --no-perms --loop --exclude-glob .ftp-deploy-sync-state.json --exclude '(^|\/)\.builds(\/|$)' ./higodriver/ ./;
           "
