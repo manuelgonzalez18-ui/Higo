@@ -49,7 +49,7 @@ import DriverRequestCard from './components/DriverRequestCard';
 import { supabase } from './services/supabase';
 import { useGeolocation } from './hooks/useGeolocation';
 import LocationDisclosure from './components/LocationDisclosure';
-import { ToastProvider } from './components/Toast';
+import { ToastProvider, toast } from './components/Toast';
 
 // Rutas donde NO chequeamos onboarding (sino entraríamos en loop o
 // gateamos a usuarios que no son pasajeros).
