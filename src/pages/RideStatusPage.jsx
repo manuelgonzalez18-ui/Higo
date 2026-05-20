@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { LocalNotifications } from '@capacitor/local-notifications';
@@ -20,6 +20,11 @@ const RideStatusPage = () => {
     const [selectedReason, setSelectedReason] = useState(null);
     const [trackingToken, setTrackingToken] = useState(null);
     const [generatingToken, setGeneratingToken] = useState(false);
+
+    const [showDeliverySuccessModal, setShowDeliverySuccessModal] = useState(false);
+    const [pickupPodSignedUrl, setPickupPodSignedUrl] = useState(null);
+    const [deliveryPodSignedUrl, setDeliveryPodSignedUrl] = useState(null);
+    const statusRef = useRef(null);
 
     const isDelivery = ride?.service_type === 'delivery' || !!ride?.delivery_info;
 
@@ -126,30 +131,85 @@ const RideStatusPage = () => {
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rides', filter: `id=eq.${id}` }, async (payload) => {
                 setRide(payload.new);
 
-                // NOTIFICATION: Driver Arrived (in_progress)
-                if (payload.new.status === 'in_progress') {
-                    // Always vibrate and alert as backup
-                    if (navigator.vibrate) navigator.vibrate([500, 300, 500]);
+                const prevStatus = statusRef.current;
+                const newStatus = payload.new.status;
+                statusRef.current = newStatus;
 
-                    try {
-                        await LocalNotifications.schedule({
-                            notifications: [{
-                                title: "Higo",
-                                body: "🚗 ¡Tu Higo Driver ha llegado!",
-                                id: new Date().getTime(),
-                                schedule: { at: new Date(Date.now()) },
-                                sound: 'beep.wav',
-                                attachments: null,
-                                actionTypeId: "",
-                                extra: null
-                            }]
-                        });
-                    } catch (e) {
-                        console.error("Notification Error:", e);
+                const isDel = payload.new.service_type === 'delivery' || !!payload.new.delivery_info;
+
+                if (prevStatus !== newStatus) {
+                    // Transition detected!
+                    if (isDel) {
+                        if (newStatus === 'in_progress') {
+                            if (navigator.vibrate) navigator.vibrate([500, 300, 500]);
+                            try {
+                                await LocalNotifications.schedule({
+                                    notifications: [{
+                                        title: "Higo Envíos",
+                                        body: "📦 ¡Tu paquete ha sido recolectado! El conductor está en camino al destino.",
+                                        id: new Date().getTime(),
+                                        schedule: { at: new Date(Date.now()) },
+                                        sound: 'beep.wav',
+                                    }]
+                                });
+                            } catch (e) {
+                                console.error("Notification Error:", e);
+                            }
+                            toast.success("📦 ¡Tu paquete ha sido recolectado! El conductor está en camino al destino.");
+                        } else if (newStatus === 'arrived_at_dropoff') {
+                            if (navigator.vibrate) navigator.vibrate([500, 300, 500]);
+                            try {
+                                await LocalNotifications.schedule({
+                                    notifications: [{
+                                        title: "Higo Envíos",
+                                        body: "📍 ¡El conductor ha llegado al destino de entrega!",
+                                        id: new Date().getTime(),
+                                        schedule: { at: new Date(Date.now()) },
+                                        sound: 'beep.wav',
+                                    }]
+                                });
+                            } catch (e) {
+                                console.error("Notification Error:", e);
+                            }
+                            toast.info("📍 ¡El conductor ha llegado al destino de entrega!");
+                        } else if (newStatus === 'completed') {
+                            if (navigator.vibrate) navigator.vibrate([800, 200, 800]);
+                            try {
+                                await LocalNotifications.schedule({
+                                    notifications: [{
+                                        title: "Higo Envíos",
+                                        body: "🎉 ¡Tu envío ha sido entregado con éxito!",
+                                        id: new Date().getTime(),
+                                        schedule: { at: new Date(Date.now()) },
+                                        sound: 'beep.wav',
+                                    }]
+                                });
+                            } catch (e) {
+                                console.error("Notification Error:", e);
+                            }
+                            toast.success("🎉 ¡Tu envío ha sido entregado con éxito!");
+                            setShowDeliverySuccessModal(true);
+                        }
+                    } else {
+                        // Standard Ride Transitions
+                        if (newStatus === 'in_progress') {
+                            if (navigator.vibrate) navigator.vibrate([500, 300, 500]);
+                            try {
+                                await LocalNotifications.schedule({
+                                    notifications: [{
+                                        title: "Higo",
+                                        body: "🚗 ¡Tu Higo Driver ha llegado!",
+                                        id: new Date().getTime(),
+                                        schedule: { at: new Date(Date.now()) },
+                                        sound: 'beep.wav',
+                                    }]
+                                });
+                            } catch (e) {
+                                console.error("Notification Error:", e);
+                            }
+                            toast.success("🔔 ¡Tu Higo Driver ha llegado!");
+                        }
                     }
-
-                    // Fallback visual alert (Guaranteed to show if app is open)
-                    toast.success("🔔 ¡Tu Higo Driver ha llegado!");
                 }
 
                 if (payload.new.driver_id) {
@@ -213,18 +273,49 @@ const RideStatusPage = () => {
         return () => clearInterval(interval);
     }, [lastPacketTime]);
 
+    useEffect(() => {
+        if (ride?.pickup_pod_url && !pickupPodSignedUrl) {
+            supabase.storage
+                .from('delivery-pods')
+                .createSignedUrl(ride.pickup_pod_url, 3600)
+                .then(({ data }) => {
+                    if (data?.signedUrl) setPickupPodSignedUrl(data.signedUrl);
+                })
+                .catch(err => console.error("Error creating signed URL for pickup POD:", err));
+        }
+    }, [ride?.pickup_pod_url, pickupPodSignedUrl]);
+
+    useEffect(() => {
+        if (ride?.delivery_pod_url && !deliveryPodSignedUrl) {
+            supabase.storage
+                .from('delivery-pods')
+                .createSignedUrl(ride.delivery_pod_url, 3600)
+                .then(({ data }) => {
+                    if (data?.signedUrl) setDeliveryPodSignedUrl(data.signedUrl);
+                })
+                .catch(err => console.error("Error creating signed URL for delivery POD:", err));
+        }
+    }, [ride?.delivery_pod_url, deliveryPodSignedUrl]);
+
     const fetchRide = async () => {
         const { data, error } = await supabase.from('rides').select('*').eq('id', id).single();
         if (data) {
-            setRide(prev => {
-                return data;
-            });
+            setRide(data);
+            
+            const isDel = data.service_type === 'delivery' || !!data.delivery_info;
+            if (!statusRef.current) {
+                statusRef.current = data.status;
+                // If already completed on load, show modal
+                if (data.status === 'completed' && isDel) {
+                    setShowDeliverySuccessModal(true);
+                }
+            }
+
             if (data.driver_id) {
                 // Fetch driver specifically to bypass Realtime lag if needed
                 const { data: driverData, error: driverError } = await supabase.from('profiles').select('*').eq('id', data.driver_id).single();
 
                 if (driverData) {
-                    // console.log("📍 Polling Driver Loc:", driverData.curr_lat, driverData.curr_lng);
                     setDriver(driverData);
                     setPollingStatus("OK");
                 } else {
@@ -468,7 +559,7 @@ const RideStatusPage = () => {
                 )}
 
                 {/* Payment Confirmation (after trip is completed) */}
-                {ride.status === 'completed' && !submitted && (
+                {ride.status === 'completed' && !isDelivery && !submitted && (
                     <div className="mt-6 pt-6 border-t border-white/10">
                         <h3 className="text-center font-bold mb-2">Confirmación de pago</h3>
                         <p className="text-center text-gray-400 text-xs mb-4">
@@ -505,7 +596,7 @@ const RideStatusPage = () => {
                 )}
 
                 {/* Rating if Completed */}
-                {ride.status === 'completed' && !submitted && (
+                {ride.status === 'completed' && !isDelivery && !submitted && (
                     <div className="mt-6 pt-6 border-t border-white/10">
                         <h3 className="text-center font-bold mb-4">Califica tu viaje</h3>
                         <div className="flex justify-center gap-4 mb-5">
@@ -579,6 +670,155 @@ const RideStatusPage = () => {
                     >
                         Listo
                     </button>
+                </div>
+            )}
+
+            {/* Delivery Success Modal */}
+            {showDeliverySuccessModal && (
+                <div className="fixed inset-0 z-50 bg-[#0F1014]/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
+                    <div className="bg-[#1A1F2E] border border-emerald-500/20 rounded-3xl p-6 w-full max-w-md shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]">
+                        {/* Glow effect in background */}
+                        <div className="absolute -top-24 -left-24 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                        <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+                        {/* Centered Check Icon */}
+                        <div className="flex flex-col items-center text-center mt-4 mb-6">
+                            <div className="relative mb-4">
+                                <div className="absolute inset-0 bg-emerald-500/20 rounded-full animate-ping [animation-duration:2s]"></div>
+                                <div className="w-20 h-20 bg-emerald-500/10 border border-emerald-500/30 rounded-full flex items-center justify-center relative z-10">
+                                    <span className="material-symbols-outlined text-emerald-400 text-5xl animate-pulse">check_circle</span>
+                                </div>
+                            </div>
+                            <h2 className="text-2xl font-black text-white tracking-tight">¡Envío Entregado!</h2>
+                            <p className="text-gray-400 text-sm mt-1 max-w-[280px]">Tu paquete ha llegado a su destino y la entrega ha sido completada con éxito.</p>
+                        </div>
+
+                        {/* Scrollable details */}
+                        <div className="flex-1 overflow-y-auto space-y-5 pr-1 py-1">
+                            {/* Route Summary */}
+                            <div className="bg-[#111520] border border-white/5 rounded-2xl p-4">
+                                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Detalles del Envío</h3>
+                                <div className="space-y-3">
+                                    <div className="flex items-start gap-3">
+                                        <span className="material-symbols-outlined text-emerald-400 text-lg mt-0.5">location_on</span>
+                                        <div>
+                                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Origen</p>
+                                            <p className="text-gray-200 text-sm leading-tight mt-0.5">{ride.pickup}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start gap-3">
+                                        <span className="material-symbols-outlined text-red-400 text-lg mt-0.5">distance</span>
+                                        <div>
+                                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Destino</p>
+                                            <p className="text-gray-200 text-sm leading-tight mt-0.5">{ride.dropoff}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Driver Information */}
+                            {driver && (
+                                <div className="bg-[#111520] border border-white/5 rounded-2xl p-4 flex items-center gap-4">
+                                    <div className="w-14 h-14 rounded-full bg-gray-700 bg-center bg-cover border border-white/10"
+                                        style={{ backgroundImage: `url('${driver.avatar_url || "https://picsum.photos/200"}')` }}>
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Conductor Responsable</p>
+                                        <h4 className="text-base font-bold text-white mt-0.5">{driver.full_name}</h4>
+                                        <p className="text-xs text-gray-400 mt-0.5">{driver.vehicle_brand} {driver.vehicle_model} • {driver.vehicle_color}</p>
+                                    </div>
+                                    <div className="px-2.5 py-1.5 rounded-lg border border-white/10 bg-[#1A1F2E] text-center shrink-0">
+                                        <p className="text-[8px] text-gray-400 font-bold uppercase">PLACA</p>
+                                        <p className="font-mono font-bold text-xs text-white tracking-widest mt-0.5">{driver.license_plate}</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Proof of Delivery (POD) Image */}
+                            {deliveryPodSignedUrl && (
+                                <div className="bg-[#111520] border border-white/5 rounded-2xl p-4">
+                                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                                        <span className="material-symbols-outlined text-sm text-emerald-400">photo_camera</span>
+                                        Prueba de Entrega (Foto)
+                                    </h3>
+                                    <div className="relative rounded-xl overflow-hidden border border-white/10 aspect-video bg-black/40 group cursor-pointer"
+                                         onClick={() => window.open(deliveryPodSignedUrl, '_blank')}>
+                                        <img src={deliveryPodSignedUrl} alt="Prueba de Entrega" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-2">
+                                            <span className="material-symbols-outlined text-white text-2xl">fullscreen</span>
+                                            <span className="text-xs text-white font-bold">Ver pantalla completa</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {!deliveryPodSignedUrl && pickupPodSignedUrl && (
+                                <div className="bg-[#111520] border border-white/5 rounded-2xl p-4">
+                                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                                        <span className="material-symbols-outlined text-sm text-emerald-400">photo_camera</span>
+                                        Prueba de Recogida (Foto)
+                                    </h3>
+                                    <div className="relative rounded-xl overflow-hidden border border-white/10 aspect-video bg-black/40 group cursor-pointer"
+                                         onClick={() => window.open(pickupPodSignedUrl, '_blank')}>
+                                        <img src={pickupPodSignedUrl} alt="Prueba de Recogida" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-2">
+                                            <span className="material-symbols-outlined text-white text-2xl">fullscreen</span>
+                                            <span className="text-xs text-white font-bold">Ver pantalla completa</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Ratings Component */}
+                            <div className="bg-[#111520] border border-white/5 rounded-2xl p-4 text-center">
+                                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Calificar la Entrega</h3>
+                                <div className="flex justify-center gap-4 mb-4">
+                                    {[1, 2, 3, 4, 5].map(star => (
+                                        <button
+                                            key={star}
+                                            type="button"
+                                            onClick={() => setRating(star)}
+                                            className="text-4xl focus:outline-none transition-all active:scale-90"
+                                        >
+                                            <span className={`transition-colors duration-200 ${star <= rating ? 'text-yellow-400' : 'text-gray-700'}`}>★</span>
+                                        </button>
+                                    ))}
+                                </div>
+                                <textarea
+                                    value={feedback}
+                                    onChange={(e) => setFeedback(e.target.value)}
+                                    placeholder="Comentarios adicionales sobre el servicio..."
+                                    rows={2}
+                                    className="w-full bg-[#1A1F2E] border border-white/5 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500/40 transition-colors"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Submit button */}
+                        <div className="mt-6">
+                            <button
+                                onClick={async () => {
+                                    if (rating > 0) {
+                                        // Save rating and redirect
+                                        const { error } = await supabase
+                                            .from('rides')
+                                            .update({ rating, feedback })
+                                            .eq('id', id);
+                                        if (error) {
+                                            console.error("Error submitting rating:", error);
+                                        }
+                                    }
+                                    setSubmitted(true);
+                                    setShowDeliverySuccessModal(false);
+                                    navigate('/');
+                                }}
+                                className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-black text-base shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                            >
+                                <span className="material-symbols-outlined text-lg">check</span>
+                                Terminar y Volver al Inicio
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
