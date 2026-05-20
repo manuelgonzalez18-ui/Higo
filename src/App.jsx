@@ -39,6 +39,7 @@ const RideHistoryPage         = lazy(() => import('./pages/RideHistoryPage'));
 const OnboardingPage          = lazy(() => import('./pages/OnboardingPage'));
 const AuthPage                = lazy(() => import('./pages/AuthPage'));
 const TermsOfDeliveryPage     = lazy(() => import('./pages/TermsOfDeliveryPage'));
+const PrivacyPage             = lazy(() => import('./pages/PrivacyPage'));
 const PublicTrackingPage      = lazy(() => import('./pages/PublicTrackingPage'));
 
 import { useEffect, useState } from 'react';
@@ -252,7 +253,9 @@ const App = () => {
         <Route path="/admin/support" element={<AdminGuard><AdminSupportPage /></AdminGuard>} />
         <Route path="/admin/support/stats" element={<AdminGuard><AdminSupportStatsPage /></AdminGuard>} />
         <Route path="/join" element={<DriverLandingPage />} />
+        <Route path="/terms" element={<TermsOfDeliveryPage />} />
         <Route path="/terms/envios" element={<TermsOfDeliveryPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/track/:token" element={<PublicTrackingPage />} />
         <Route path="/delivery/:rideId/receipt" element={<DeliveryReceiptPage />} />
       </Routes>

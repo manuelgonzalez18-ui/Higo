@@ -103,6 +103,9 @@ const TermsOfDeliveryPage = () => (
                 notificarán al Usuario en su próximo acceso o transacción, requiriendo nueva aceptación.
                 Las versiones anteriores permanecen archivadas para referencia legal.
             </p>
+            <p className="text-xs text-gray-500 mt-3">
+                Documento relacionado: <Link to="/privacy" className="text-emerald-400">Política de Privacidad</Link>.
+            </p>
         </div>
     </div>
 );
