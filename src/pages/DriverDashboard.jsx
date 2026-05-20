@@ -687,7 +687,7 @@ const DriverDashboard = () => {
                 <DeliveryPodCapture
                     rideId={activeRide.id}
                     kind={podRequired}
-                    onCancel={() => setPodRequired(null)}
+                    hideCancel={true}
                     onUploaded={(path) => {
                         const column = podRequired === 'pickup' ? 'pickup_pod_url' : 'delivery_pod_url';
                         setActiveRide({ ...activeRide, [column]: path });

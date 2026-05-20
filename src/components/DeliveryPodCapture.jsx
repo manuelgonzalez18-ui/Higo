@@ -1,8 +1,9 @@
 import React, { useRef, useState } from 'react';
 import { supabase } from '../services/supabase';
 import { toast } from './Toast';
+import { triggerPodEmail } from '../utils/triggerPodEmail';
 
-const DeliveryPodCapture = ({ rideId, kind, onUploaded, onCancel }) => {
+const DeliveryPodCapture = ({ rideId, kind, onUploaded, onCancel, hideCancel = false }) => {
     const inputRef = useRef(null);
     const [preview, setPreview] = useState(null);
     const [file, setFile] = useState(null);
@@ -40,6 +41,9 @@ const DeliveryPodCapture = ({ rideId, kind, onUploaded, onCancel }) => {
                 .update({ [column]: path })
                 .eq('id', rideId);
             if (updErr) throw updErr;
+
+            // Disparar la notificación por correo al cliente (fire-and-forget)
+            triggerPodEmail({ rideId, kind, podPath: path });
 
             onUploaded?.(path);
         } catch (err) {
@@ -86,13 +90,15 @@ const DeliveryPodCapture = ({ rideId, kind, onUploaded, onCancel }) => {
                 />
 
                 <div className="flex gap-3">
-                    <button
-                        onClick={onCancel}
-                        disabled={uploading}
-                        className="flex-1 py-3 rounded-full border border-gray-700 text-gray-300 font-bold disabled:opacity-50"
-                    >
-                        Cancelar
-                    </button>
+                    {!hideCancel && (
+                        <button
+                            onClick={onCancel}
+                            disabled={uploading}
+                            className="flex-1 py-3 rounded-full border border-gray-700 text-gray-300 font-bold disabled:opacity-50"
+                        >
+                            Cancelar
+                        </button>
+                    )}
                     <button
                         onClick={handleUpload}
                         disabled={!file || uploading}
