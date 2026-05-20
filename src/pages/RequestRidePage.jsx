@@ -638,7 +638,7 @@ const RequestRidePage = () => {
                                 </button>
                             )}
                             <button
-                                onClick={() => { closeDrawer(); window.location.href = 'https://wa.me/584120330315'; }}
+                                onClick={() => { closeDrawer(); openLegalLink('https://wa.me/584120330315'); }}
                                 className="w-full px-5 py-3 flex items-center gap-4 text-left hover:bg-white/5 transition-colors"
                             >
                                 <span className="material-symbols-outlined text-emerald-400">support_agent</span>

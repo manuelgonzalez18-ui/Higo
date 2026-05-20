@@ -221,7 +221,7 @@ const OnboardingPage = () => {
                             >
                                 Saltar por ahora
                             </button>
-                            <LegalConsentText actionLabel="Continuar" className="mt-4" />
+                            <LegalConsentText actionLabel="Empezar o Saltar" className="mt-4" />
                         </div>
                     </>
                 )}
