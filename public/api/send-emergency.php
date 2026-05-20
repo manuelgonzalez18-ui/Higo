@@ -33,6 +33,31 @@ function emerg_send(int $code, array $payload): void {
     exit;
 }
 
+/**
+ * @return array{0:int,1:string}
+ */
+function bl_http_patch(string $url, string $body, array $headers, int $timeout = 30): array {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_CUSTOMREQUEST  => 'PATCH',
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => $timeout,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => 0,
+        CURLOPT_POSTFIELDS     => $body,
+        CURLOPT_HTTPHEADER     => $headers,
+    ]);
+    $resp   = curl_exec($ch);
+    $err    = curl_error($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($resp === false) {
+        throw new RuntimeException("cURL: {$err}");
+    }
+    return [$status, (string) $resp];
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     emerg_send(405, ['ok' => false, 'error' => 'method_not_allowed']);
 }
@@ -156,6 +181,156 @@ $insertBody = json_encode([
 $sosId = null;
 if ($insStatus >= 200 && $insStatus < 300) {
     $sosId = (json_decode((string) $insBody, true)[0] ?? null)['id'] ?? null;
+}
+
+// ─── Integración con Chat de Soporte Administrativo ──────────────────
+try {
+    // 1. Buscar si ya existe el hilo de soporte para este rol y usuario
+    [$stStatus, $stBody] = bl_http_get(
+        $supaUrl . '/rest/v1/support_threads?user_id=eq.' . rawurlencode($userId) . '&role_context=eq.' . rawurlencode($triggeredBy) . '&select=id',
+        ['apikey: ' . $supaSrv, 'Authorization: Bearer ' . $supaSrv]
+    );
+
+    $threadId = null;
+    if ($stStatus === 200) {
+        $threadsList = json_decode((string) $stBody, true);
+        if (!empty($threadsList[0]['id'])) {
+            $threadId = (int) $threadsList[0]['id'];
+        }
+    }
+
+    if ($threadId === null) {
+        // 2. Si no existe, crear el hilo
+        $stInsert = [
+            'user_id' => $userId,
+            'role_context' => $triggeredBy,
+            'status' => 'open',
+            'unread_for_admin' => true,
+        ];
+        [$stInsStatus, $stInsBody] = bl_http_post(
+            $supaUrl . '/rest/v1/support_threads',
+            (string) json_encode($stInsert),
+            [
+                'apikey: ' . $supaSrv,
+                'Authorization: Bearer ' . $supaSrv,
+                'Content-Type: application/json',
+                'Prefer: return=representation',
+            ]
+        );
+        if ($stInsStatus >= 200 && $stInsStatus < 300) {
+            $newThread = json_decode((string) $stInsBody, true);
+            if (!empty($newThread[0]['id'])) {
+                $threadId = (int) $newThread[0]['id'];
+            }
+        }
+    } else {
+        // 3. Si existe, reabrirlo
+        $stUpdate = [
+            'status' => 'open',
+            'unread_for_admin' => true,
+            'last_message_at' => gmdate('c'),
+        ];
+        bl_http_patch(
+            $supaUrl . '/rest/v1/support_threads?id=eq.' . $threadId,
+            (string) json_encode($stUpdate),
+            [
+                'apikey: ' . $supaSrv,
+                'Authorization: Bearer ' . $supaSrv,
+                'Content-Type: application/json',
+            ]
+        );
+    }
+
+    if ($threadId !== null) {
+        // 4. Construir y enviar el mensaje enriquecido
+        $triggeredLabel = $triggeredBy === 'passenger' ? 'Pasajero' : 'Conductor';
+        $rawCallerName  = (string) ($callerProfile['full_name'] ?? '(sin nombre)');
+        $rawCallerPhone = (string) ($callerProfile['phone']     ?? '—');
+        $rawCpName      = (string) ($counterpartProfile['full_name']    ?? '—');
+        $rawCpPhone     = (string) ($counterpartProfile['phone']        ?? '—');
+        $rawCpPlate     = (string) ($counterpartProfile['license_plate'] ?? '—');
+        $rawCpVehicle   = trim(($counterpartProfile['vehicle_model'] ?? '') . ' ' . ($counterpartProfile['vehicle_color'] ?? '')) ?: '—';
+        $rawPickup      = (string) ($ride['pickup']  ?? '—');
+        $rawDropoff     = (string) ($ride['dropoff'] ?? '—');
+        $rawMapsLink    = ($lat !== null && $lng !== null)
+            ? 'https://www.google.com/maps?q=' . $lat . ',' . $lng
+            : 'Ubicación no disponible';
+
+        $contactsText = '';
+        if (!empty($contacts)) {
+            foreach ($contacts as $c) {
+                $cName  = (string) $c['name'];
+                $cPhone = (string) $c['phone'];
+                $cRel   = (string) ($c['relationship'] ?? '');
+                $waLink = 'https://wa.me/' . preg_replace('/[^0-9]/', '', $cPhone);
+                $contactsText .= sprintf(
+                    "- %s%s: %s (Llamar: tel:%s | WhatsApp: %s)\n",
+                    $cName,
+                    ($cRel !== '' ? ' (' . $cRel . ')' : ''),
+                    $cPhone,
+                    $cPhone,
+                    $waLink
+                );
+            }
+        } else {
+            $contactsText = "(El usuario no tiene contactos de emergencia configurados.)\n";
+        }
+
+        $richMessageText = "🚨 ALERTA DE EMERGENCIA SOS DISPARADA 🚨\n"
+            . "----------------------------------------\n"
+            . "El botón de pánico SOS fue presionado por el " . $triggeredLabel . ".\n\n"
+            . "🧑‍✈️ DETALLES DEL USUARIO QUE ALERTA:\n"
+            . "- Nombre: " . $rawCallerName . "\n"
+            . "- Teléfono: " . $rawCallerPhone . "\n"
+            . "- Correo: " . $userEmail . "\n\n"
+            . "📍 UBICACIÓN EN VIVO:\n"
+            . "- Coordenadas: " . ($lat !== null && $lng !== null ? $lat . ", " . $lng : "No disponibles") . "\n"
+            . "- Google Maps: " . $rawMapsLink . "\n\n"
+            . "🚗 CONTEXTO DEL VIAJE:\n"
+            . "- Viaje ID: " . ($rideId > 0 ? '#' . $rideId : 'Sin viaje activo') . "\n"
+            . "- Origen (Pickup): " . $rawPickup . "\n"
+            . "- Destino (Dropoff): " . $rawDropoff . "\n"
+            . "- Contraparte: " . $rawCpName . " (" . $rawCpPhone . ")\n"
+            . "- Vehículo contraparte: " . $rawCpVehicle . " · Placa: " . $rawCpPlate . "\n\n"
+            . "📞 CONTACTOS DE EMERGENCIA:\n"
+            . $contactsText . "\n"
+            . "⚠️ ACCIÓN REQUERIDA:\n"
+            . "Por favor, póngase en contacto con el usuario de inmediato. Si no responde y las coordenadas muestran anomalías, escale la situación al 911 indicando la ubicación del vehículo.";
+
+        $msgBody = [
+            'thread_id'   => $threadId,
+            'sender_id'   => $userId,
+            'sender_role' => 'user',
+            'content'     => $richMessageText,
+        ];
+
+        [$msgStatus, $msgRes] = bl_http_post(
+            $supaUrl . '/rest/v1/support_messages',
+            (string) json_encode($msgBody),
+            [
+                'apikey: ' . $supaSrv,
+                'Authorization: Bearer ' . $supaSrv,
+                'Content-Type: application/json',
+                'Prefer: return=representation',
+            ]
+        );
+
+        if ($msgStatus >= 200 && $msgStatus < 300) {
+            // 5. Disparar notificaciones push locales a todos los admins
+            $localPushUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER['HTTP_HOST'] . "/api/send-support-push.php";
+            @bl_http_post(
+                $localPushUrl,
+                (string) json_encode(['thread_id' => $threadId]),
+                [
+                    'Authorization: Bearer ' . $token,
+                    'Content-Type: application/json',
+                ],
+                5 // Timeout rápido
+            );
+        }
+    }
+} catch (Throwable $e) {
+    error_log("[SOS Support Integration Error] " . $e->getMessage());
 }
 
 // ─── Email rich a admin@higoapp.com ─────────────────────────────────

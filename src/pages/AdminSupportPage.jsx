@@ -8,6 +8,7 @@ import { useSupportTyping } from '../hooks/useSupportTyping';
 import SupportAttachment from '../components/SupportAttachment';
 import AudioRecorder from '../components/AudioRecorder';
 import { toast } from '../components/Toast';
+import { playIntenseBeep } from '../services/notificationService';
 
 const SIGNED_URL_TTL = 3600;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -80,6 +81,7 @@ const AdminSupportPage = () => {
     const [isRecording, setIsRecording] = useState(false);
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
+    const alarmedThreadsRef = useRef(new Set());
 
     const deleteMessage = async (msg) => {
         setMenuFor(null);
@@ -140,6 +142,32 @@ const AdminSupportPage = () => {
                 return;
             }
             setThreads(data || []);
+
+            // Alarma de sonido y alertas visuales para nuevos eventos SOS no leídos
+            let newEmergencyFound = false;
+            (data || []).forEach(t => {
+                const isEmergency = t.last_message_preview && (t.last_message_preview.includes('🚨') || t.last_message_preview.includes('SOS'));
+                if (isEmergency && t.unread_for_admin) {
+                    if (!alarmedThreadsRef.current.has(t.id)) {
+                        alarmedThreadsRef.current.add(t.id);
+                        newEmergencyFound = true;
+                    }
+                } else if (!t.unread_for_admin) {
+                    // Si ya se leyó, lo quitamos de la lista de ya alertados por si vuelve a sonar después
+                    alarmedThreadsRef.current.delete(t.id);
+                }
+            });
+
+            if (newEmergencyFound) {
+                playIntenseBeep();
+                setTimeout(() => playIntenseBeep(), 300);
+                setTimeout(() => playIntenseBeep(), 600);
+                setTimeout(() => playIntenseBeep(), 900);
+
+                toast.error('🚨 EMERGENCIA SOS DETECTADA 🚨', {
+                    duration: 10000
+                });
+            }
 
             // Cargar perfiles para mostrar nombre/role/avatar.
             const ids = (data || []).map(t => t.user_id);
@@ -438,6 +466,7 @@ const AdminSupportPage = () => {
 
     const selectedThread = threads.find(t => t.id === selectedId);
     const selectedProfile = selectedThread ? profiles[selectedThread.user_id] : null;
+    const selectedIsEmergency = selectedThread?.last_message_preview && (selectedThread.last_message_preview.includes('🚨') || selectedThread.last_message_preview.includes('SOS'));
 
     return (
         <div className="min-h-screen bg-[#0F1014] p-4 md:p-8 font-sans text-white">
@@ -562,11 +591,16 @@ const AdminSupportPage = () => {
                         const p = profiles[t.user_id];
                         const rb = ctxBadge(t.role_context);
                         const active = t.id === selectedId;
+                        const isEmergency = t.last_message_preview && (t.last_message_preview.includes('🚨') || t.last_message_preview.includes('SOS'));
                         return (
                             <button
                                 key={t.id}
                                 onClick={() => { setSelectedId(t.id); setSearchParams({ thread: String(t.id) }); }}
-                                className={`w-full text-left px-4 py-3 border-b border-white/5 flex gap-3 transition-colors ${active ? 'bg-blue-600/10' : 'hover:bg-white/5'}`}
+                                className={`w-full text-left px-4 py-3 border-b border-white/5 flex gap-3 transition-colors relative ${
+                                    active
+                                        ? isEmergency && t.unread_for_admin ? 'bg-red-950/30 border-l-4 border-l-red-500' : 'bg-blue-600/10'
+                                        : isEmergency && t.unread_for_admin ? 'bg-red-500/5 hover:bg-red-500/10 border-l-4 border-l-red-500' : 'hover:bg-white/5'
+                                }`}
                             >
                                 <ThreadAvatar profile={p} ctx={t.role_context} />
                                 <div className="flex-1 min-w-0">
@@ -576,15 +610,20 @@ const AdminSupportPage = () => {
                                         </p>
                                         <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold border ${rb.cls}`}>{rb.label}</span>
                                     </div>
-                                    <p className="text-xs text-gray-400 truncate mt-0.5">
+                                    <p className={`text-xs truncate mt-0.5 ${isEmergency && t.unread_for_admin ? 'text-red-400 font-extrabold animate-pulse' : 'text-gray-400'}`}>
                                         {t.last_message_preview || <span className="italic">sin mensajes</span>}
                                     </p>
                                 </div>
                                 <div className="flex flex-col items-end gap-1 shrink-0">
                                     <span className="text-[10px] text-gray-500">{fmtTime(t.last_message_at)}</span>
-                                    {t.unread_for_admin && (
+                                    {isEmergency && t.unread_for_admin ? (
+                                        <span className="flex h-2.5 w-2.5 relative">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                                        </span>
+                                    ) : t.unread_for_admin ? (
                                         <span className="w-2.5 h-2.5 bg-red-500 rounded-full"></span>
-                                    )}
+                                    ) : null}
                                 </div>
                             </button>
                         );
@@ -602,13 +641,21 @@ const AdminSupportPage = () => {
                         </div>
                     ) : (
                         <>
-                            <div className="p-4 border-b border-white/5 flex justify-between items-center">
+                            <div className={`p-4 border-b border-white/5 flex justify-between items-center transition-all ${selectedIsEmergency ? 'bg-gradient-to-r from-red-950/40 via-[#1A1F2E] to-[#1A1F2E]' : ''}`}>
                                 <div className="flex items-center gap-3 min-w-0">
                                     <ThreadAvatar profile={selectedProfile} ctx={selectedThread?.role_context} />
                                     <div className="min-w-0">
-                                        <p className="font-bold text-white truncate">
-                                            {selectedProfile?.full_name || 'Sin nombre'}
-                                        </p>
+                                        <div className="flex items-center gap-2">
+                                            <p className="font-bold text-white truncate">
+                                                {selectedProfile?.full_name || 'Sin nombre'}
+                                            </p>
+                                            {selectedIsEmergency && (
+                                                <div className="flex items-center gap-1 px-2 py-0.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-full text-[9px] font-black tracking-wider uppercase animate-pulse">
+                                                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping shrink-0"></span>
+                                                    SOS Activo
+                                                </div>
+                                            )}
+                                        </div>
                                         {otherIsTyping ? (
                                             <p className="text-xs text-blue-300 truncate flex items-center gap-1">
                                                 <span className="inline-flex gap-0.5">
