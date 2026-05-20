@@ -113,19 +113,32 @@ const ConfirmTripPage = () => {
 
     const handleConfirm = async () => {
         setLoading(true);
+        console.log("[handleConfirm] Iniciando confirmación de solicitud...");
         const { data: { session } } = await supabase.auth.getSession();
 
         if (!session) {
+            console.error("[handleConfirm] Sesión no encontrada.");
             toast.error("Por favor inicia sesión para confirmar tu viaje.");
             navigate('/auth');
             return;
         }
 
+        // Definimos un límite de tiempo para evitar que se quede colgado indefinidamente (ej. por bloqueos de base de datos)
+        const TIMEOUT_MS = 15000;
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => {
+                reject(new Error("Tiempo de espera agotado al conectar con el servidor. Por favor, verifica que las políticas RLS en Supabase no tengan recursión (Migración 65) o reintenta."));
+            }, TIMEOUT_MS)
+        );
+
         try {
             const isDelivery = serviceType === 'delivery';
             const codAmount = isDelivery && deliveryData?.cod_amount ? Number(deliveryData.cod_amount) : null;
 
-            const { data, error } = await supabase
+            console.log("[handleConfirm] Preparando datos del viaje. Tipo de servicio:", serviceType);
+            toast.info("Enviando solicitud a la plataforma...");
+
+            const insertPromise = supabase
                 .from('rides')
                 .insert([{
                     user_id: session.user.id,
@@ -148,22 +161,36 @@ const ConfirmTripPage = () => {
                 }])
                 .select();
 
-            if (error) throw error;
+            console.log("[handleConfirm] Insertando registro en tabla 'rides' (con select de retorno)...");
+            const { data, error } = await Promise.race([insertPromise, timeoutPromise]);
+
+            if (error) {
+                console.error("[handleConfirm] Error al insertar en rides:", error);
+                throw error;
+            }
+
+            console.log("[handleConfirm] Inserción exitosa de ride. Datos devueltos:", data);
 
             // Audit de aceptación de T&C de envíos (mig 63)
             if (data && data[0] && isDelivery && deliveryData?.terms_version) {
-                await supabase.from('terms_acceptances').insert({
+                console.log("[handleConfirm] Registrando aceptación de términos y condiciones de envío...");
+                toast.info("Registrando aceptación de términos...");
+                const { error: termsError } = await supabase.from('terms_acceptances').insert({
                     user_id: session.user.id,
                     terms_kind: 'delivery',
                     terms_version: deliveryData.terms_version,
                     accepted_at: deliveryData.terms_accepted_at || new Date().toISOString(),
                     ride_id: data[0].id,
                 });
+                if (termsError) {
+                    console.error("[handleConfirm] Error al registrar términos:", termsError);
+                }
             }
 
             // Guardar destinatario en address book si el remitente lo pidió (mig 60)
             if (data && data[0] && isDelivery && deliveryData?.save_contact && deliveryData?.receiverName && deliveryData?.receiverPhone) {
                 try {
+                    console.log("[handleConfirm] Guardando destinatario en libreta de direcciones...");
                     // Upsert por (user_id, phone): si ya existe, actualizamos last_used_at
                     const { data: existing } = await supabase
                         .from('recipient_contacts')
@@ -172,6 +199,7 @@ const ConfirmTripPage = () => {
                         .eq('phone', deliveryData.receiverPhone)
                         .maybeSingle();
                     if (existing?.id) {
+                        console.log("[handleConfirm] Destinatario existente. Actualizando datos...");
                         await supabase.from('recipient_contacts').update({
                             name: deliveryData.receiverName,
                             address_label: deliveryData.contact_label || null,
@@ -182,6 +210,7 @@ const ConfirmTripPage = () => {
                             last_used_at: new Date().toISOString(),
                         }).eq('id', existing.id);
                     } else {
+                        console.log("[handleConfirm] Destinatario nuevo. Insertando en libreta...");
                         await supabase.from('recipient_contacts').insert({
                             user_id: session.user.id,
                             name: deliveryData.receiverName,
@@ -202,6 +231,8 @@ const ConfirmTripPage = () => {
 
             // Si hay código promo, registrarlo contra el ride recién creado.
             if (data && data[0] && appliedPromo) {
+                console.log("[handleConfirm] Aplicando código promocional:", appliedPromo.code);
+                toast.info("Aplicando descuento promocional...");
                 await supabase.rpc('apply_promo_code', {
                     p_code: appliedPromo.code,
                     p_ride_id: data[0].id,
@@ -211,13 +242,17 @@ const ConfirmTripPage = () => {
             }
 
             if (data && data[0]) {
+                console.log("[handleConfirm] Solicitud completada con éxito. Redirigiendo a /ride/" + data[0].id);
+                toast.success("¡Solicitud enviada! Conectando con conductores...");
                 navigate(`/ride/${data[0].id}`);
             } else {
+                console.warn("[handleConfirm] Inserción exitosa pero no se retornó información del ride.");
                 toast.success("¡Viaje Confirmado! Un conductor va en camino.");
                 navigate('/');
             }
         } catch (error) {
-            toast.error("Error: " + error.message);
+            console.error("[handleConfirm] Error capturado en el flujo:", error);
+            toast.error("Error al solicitar: " + error.message);
         } finally {
             setLoading(false);
         }
