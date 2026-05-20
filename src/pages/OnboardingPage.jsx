@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import LegalConsentText from '../components/LegalConsentText';
+import { LEGAL_VERSION } from '../constants/legalUrls';
 
 // Onboarding del pasajero (Fase 9 D.P1). Gateado desde App.jsx tras
 // el primer login si user_preferences.onboarded_at IS NULL y el role
@@ -101,6 +103,16 @@ const OnboardingPage = () => {
         if (!confirm('¿Saltar el onboarding? Podés cargar tus datos más tarde desde Mi Perfil.')) return;
         setSaving(true);
         await markOnboarded();
+        try {
+            await supabase.from('terms_acceptances').insert({
+                user_id: userId,
+                terms_kind: 'general',
+                terms_version: LEGAL_VERSION,
+                accepted_at: new Date().toISOString(),
+            });
+        } catch (err) {
+            console.warn('terms_acceptances insert failed:', err);
+        }
         setSaving(false);
         navigate('/', { replace: true });
     };
@@ -137,6 +149,18 @@ const OnboardingPage = () => {
             default_payment_method: paymentMethod,
             onboarded_at: new Date().toISOString(),
         });
+        // Registro de aceptación de T&C globales al completar onboarding
+        // (mig 63). Best-effort: no bloqueamos el navigate si falla.
+        try {
+            await supabase.from('terms_acceptances').insert({
+                user_id: userId,
+                terms_kind: 'general',
+                terms_version: LEGAL_VERSION,
+                accepted_at: new Date().toISOString(),
+            });
+        } catch (err) {
+            console.warn('terms_acceptances insert failed:', err);
+        }
         setSaving(false);
         navigate('/', { replace: true });
     };
@@ -197,6 +221,7 @@ const OnboardingPage = () => {
                             >
                                 Saltar por ahora
                             </button>
+                            <LegalConsentText actionLabel="Continuar" className="mt-4" />
                         </div>
                     </>
                 )}

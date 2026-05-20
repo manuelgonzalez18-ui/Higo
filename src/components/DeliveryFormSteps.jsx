@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import { openLegalLink } from '../utils/openLegalLink';
+import { DELIVERY_TERMS_URL } from '../constants/legalUrls';
 
 export const TERMS_VERSION_DELIVERY = '2026-05-19';
 
@@ -38,6 +40,10 @@ const DeliveryFormSteps = ({ onSubmit, onCancel }) => {
         is_fragile: false,
         category: 'normal',
         cod_amount: '',
+        // Disclaimer específico de envíos (mercancía prohibida + condiciones
+        // de Sección 3 de los T&C). Se acepta en el step 2, donde el usuario
+        // declara qué envía y su valor.
+        delivery_terms_accepted: false,
         terms_accepted: false,
         terms_version: TERMS_VERSION_DELIVERY,
         terms_accepted_at: null,
@@ -84,7 +90,11 @@ const DeliveryFormSteps = ({ onSubmit, onCancel }) => {
 
     const stepValid = () => {
         if (step === 1) return data.senderName && data.senderPhone && data.receiverName && data.receiverPhone;
-        if (step === 2) return data.package_description.trim().length > 0 && data.package_weight_kg && data.package_value_usd && Number(data.package_value_usd) >= 0;
+        if (step === 2) return data.package_description.trim().length > 0
+            && data.package_weight_kg
+            && data.package_value_usd
+            && Number(data.package_value_usd) >= 0
+            && data.delivery_terms_accepted;
         if (step === 3) return true; // instructions are optional
         if (step === 4) return data.terms_accepted;
         return false;
@@ -94,7 +104,9 @@ const DeliveryFormSteps = ({ onSubmit, onCancel }) => {
     const prevStep = () => setStep(prev => prev - 1);
 
     const handleSubmit = () => {
-        if (!data.terms_accepted) return;
+        // Doble gate: T&C globales (step 4) + disclaimer específico de
+        // envíos (step 2). El botón "Confirmar Envío" no avanza sin ambos.
+        if (!data.terms_accepted || !data.delivery_terms_accepted) return;
         onSubmit({
             ...data,
             terms_accepted_at: new Date().toISOString(),
@@ -257,6 +269,33 @@ const DeliveryFormSteps = ({ onSubmit, onCancel }) => {
                                 className="w-5 h-5 accent-emerald-500"
                             />
                             <span className="text-white">Es frágil — manéjese con cuidado</span>
+                        </label>
+
+                        {/* Disclaimer legal específico de envíos (required).
+                            Bloquea el avance hasta que el remitente declare
+                            bajo juramento que el paquete cumple las
+                            condiciones de Sección 3 de los T&C. */}
+                        <label className="flex items-start gap-3 cursor-pointer bg-amber-500/5 p-4 rounded-2xl border border-amber-500/30">
+                            <input
+                                type="checkbox"
+                                required
+                                checked={data.delivery_terms_accepted}
+                                onChange={e => handleChange('delivery_terms_accepted', e.target.checked)}
+                                className="w-5 h-5 accent-amber-500 mt-0.5 shrink-0"
+                            />
+                            <span className="text-white text-sm leading-snug">
+                                Acepto las{' '}
+                                <button
+                                    type="button"
+                                    onClick={(e) => { e.preventDefault(); openLegalLink(DELIVERY_TERMS_URL); }}
+                                    className="text-amber-400 hover:text-amber-300 underline underline-offset-2 font-bold"
+                                >
+                                    condiciones particulares de Higo Envíos
+                                </button>{' '}
+                                y declaro bajo juramento que el paquete no contiene mercancía prohibida
+                                (armas, drogas, dinero en efectivo, animales vivos, perecederos sin
+                                refrigeración, etc.).
+                            </span>
                         </label>
                     </div>
                 )}

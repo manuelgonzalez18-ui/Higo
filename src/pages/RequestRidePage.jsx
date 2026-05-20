@@ -9,6 +9,8 @@ import ServiceSelection from '../components/ServiceSelection';
 import DeliveryFormSteps from '../components/DeliveryFormSteps';
 import ProhibitedItemsModal from '../components/ProhibitedItemsModal';
 import { toast } from '../components/Toast';
+import { openLegalLink } from '../utils/openLegalLink';
+import { TERMS_URL, PRIVACY_URL } from '../constants/legalUrls';
 
 
 const RequestRidePage = () => {
@@ -34,6 +36,10 @@ const RequestRidePage = () => {
     const [showDeliveryForm, setShowDeliveryForm] = useState(false);
     const [deliveryData, setDeliveryData] = useState(null);
     const [withinCoverage, setWithinCoverage] = useState(true);
+
+    // Sidebar / Drawer del pasajero. Se abre desde el botón ≡ del header.
+    const [showDrawer, setShowDrawer] = useState(false);
+    const closeDrawer = () => setShowDrawer(false);
 
     // Auto-set pickup to user location once found
     useEffect(() => {
@@ -330,6 +336,14 @@ const RequestRidePage = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
+                {/* Botón Menú: abre drawer lateral con links (incluida sección Legal) */}
+                <button
+                    onClick={() => setShowDrawer(true)}
+                    title="Menú"
+                    className="w-10 h-10 rounded-full bg-[#1A1F2E]/80 backdrop-blur-md flex items-center justify-center border border-white/10 shadow-lg hover:bg-[#252A3A] active:scale-95 transition"
+                >
+                    <span className="material-symbols-outlined text-white text-[20px]">menu</span>
+                </button>
                 {/* Botón Historial: solo visible logueado, atajo a /history */}
                 {currentUser && (
                     <button
@@ -547,6 +561,123 @@ const RequestRidePage = () => {
                     onCancel={() => setShowDeliveryForm(false)}
                     onSubmit={handleDeliveryConfirm}
                 />
+            )}
+
+            {/* Drawer lateral del pasajero — links + sección Legal al pie */}
+            {showDrawer && (
+                <div className="fixed inset-0 z-[60]" onClick={closeDrawer}>
+                    {/* Backdrop */}
+                    <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+
+                    {/* Panel */}
+                    <aside
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute left-0 top-0 bottom-0 w-[85%] max-w-sm bg-[#0a101f] border-r border-white/10 shadow-2xl flex flex-col animate-in slide-in-from-left duration-200"
+                    >
+                        {/* Header del drawer */}
+                        <div className="p-5 border-b border-white/5 flex items-center gap-3">
+                            {currentUser ? (
+                                <>
+                                    <div className="w-12 h-12 rounded-full bg-blue-600 p-[1px]">
+                                        <div className="w-full h-full rounded-full bg-black/50 overflow-hidden">
+                                            <img
+                                                src={`https://ui-avatars.com/api/?name=${currentUser.email}&background=random`}
+                                                className="w-full h-full object-cover"
+                                                alt=""
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-white font-bold text-sm truncate">{currentUser.email}</p>
+                                        <p className="text-gray-500 text-xs">Sesión activa</p>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="w-12 h-12 rounded-full bg-[#1A1F2E] flex items-center justify-center">
+                                        <span className="material-symbols-outlined text-gray-500">person</span>
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-white font-bold text-sm">Invitado</p>
+                                        <button
+                                            onClick={() => { closeDrawer(); navigate('/auth'); }}
+                                            className="text-blue-400 text-xs underline"
+                                        >
+                                            Iniciar sesión
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                            <button
+                                onClick={closeDrawer}
+                                className="w-9 h-9 rounded-full bg-white/5 flex items-center justify-center"
+                                aria-label="Cerrar"
+                            >
+                                <span className="material-symbols-outlined text-white text-base">close</span>
+                            </button>
+                        </div>
+
+                        {/* Menú principal */}
+                        <nav className="flex-1 overflow-y-auto py-2">
+                            {currentUser && (
+                                <button
+                                    onClick={() => { closeDrawer(); navigate('/history'); }}
+                                    className="w-full px-5 py-3 flex items-center gap-4 text-left hover:bg-white/5 transition-colors"
+                                >
+                                    <span className="material-symbols-outlined text-blue-400">history</span>
+                                    <span className="text-white font-medium">Historial de viajes</span>
+                                </button>
+                            )}
+                            {currentUser && (
+                                <button
+                                    onClick={() => { closeDrawer(); navigate('/higo-pay'); }}
+                                    className="w-full px-5 py-3 flex items-center gap-4 text-left hover:bg-white/5 transition-colors"
+                                >
+                                    <span className="material-symbols-outlined text-emerald-400">account_balance_wallet</span>
+                                    <span className="text-white font-medium">Higo Pay</span>
+                                </button>
+                            )}
+                            <button
+                                onClick={() => { closeDrawer(); window.location.href = 'https://wa.me/584120330315'; }}
+                                className="w-full px-5 py-3 flex items-center gap-4 text-left hover:bg-white/5 transition-colors"
+                            >
+                                <span className="material-symbols-outlined text-emerald-400">support_agent</span>
+                                <span className="text-white font-medium">Soporte</span>
+                            </button>
+
+                            {/* Sección Legal */}
+                            <div className="mt-4 pt-4 border-t border-white/5">
+                                <p className="px-5 pb-2 text-[10px] uppercase tracking-wider text-gray-500 font-bold">
+                                    Legal
+                                </p>
+                                <button
+                                    onClick={() => { closeDrawer(); openLegalLink(TERMS_URL); }}
+                                    className="w-full px-5 py-3 flex items-center gap-4 text-left hover:bg-white/5 transition-colors"
+                                >
+                                    <span className="material-symbols-outlined text-gray-400">gavel</span>
+                                    <span className="text-white font-medium">Términos y Condiciones</span>
+                                    <span className="material-symbols-outlined text-gray-600 text-base ml-auto">open_in_new</span>
+                                </button>
+                                <button
+                                    onClick={() => { closeDrawer(); openLegalLink(PRIVACY_URL); }}
+                                    className="w-full px-5 py-3 flex items-center gap-4 text-left hover:bg-white/5 transition-colors"
+                                >
+                                    <span className="material-symbols-outlined text-gray-400">shield_lock</span>
+                                    <span className="text-white font-medium">Política de Privacidad</span>
+                                    <span className="material-symbols-outlined text-gray-600 text-base ml-auto">open_in_new</span>
+                                </button>
+                            </div>
+                        </nav>
+
+                        {/* Footer */}
+                        <div className="p-5 border-t border-white/5">
+                            <p className="text-[10px] text-gray-600 leading-relaxed">
+                                Higo Inc. · Higo C.A. · Plataforma de intermediación tecnológica.
+                                <br />v2026-05-19
+                            </p>
+                        </div>
+                    </aside>
+                </div>
             )}
         </div>
     );

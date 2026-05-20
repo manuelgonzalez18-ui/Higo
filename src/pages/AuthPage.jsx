@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
+import LegalConsentText from '../components/LegalConsentText';
 
 // pending_referral_code: lo guardamos al signup cuando el user todavía
 // no está autenticado (espera verificación por email). Antes vivía en
@@ -214,6 +215,10 @@ const AuthPage = () => {
                             >
                                 {loading ? 'Procesando...' : (isLogin ? 'Iniciar Sesión' : 'Registrarse')}
                             </button>
+                            <LegalConsentText
+                                actionLabel={isLogin ? 'Iniciar Sesión' : 'Registrarse'}
+                                className="mt-4"
+                            />
                         </div>
                     </form>
 
