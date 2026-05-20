@@ -164,8 +164,10 @@ const AdminSupportPage = () => {
                 setTimeout(() => playIntenseBeep(), 600);
                 setTimeout(() => playIntenseBeep(), 900);
 
+                // duration: 0 = no auto-dismiss. El admin tiene que cerrarlo
+                // a mano. Mantiene el banner rojo visible hasta que reaccionen.
                 toast.error('🚨 EMERGENCIA SOS DETECTADA 🚨', {
-                    duration: 10000
+                    duration: 0
                 });
             }
 
@@ -650,7 +652,8 @@ const AdminSupportPage = () => {
                                                 {selectedProfile?.full_name || 'Sin nombre'}
                                             </p>
                                             {selectedIsEmergency && (
-                                                <div className="flex items-center gap-1 px-2 py-0.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-full text-[9px] font-black tracking-wider uppercase animate-pulse">
+                                                <div className="flex items-center gap-1 px-2 py-0.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-full text-[10px] font-black tracking-wider uppercase animate-pulse">
+                                                    <span className="text-[11px] leading-none">🚨</span>
                                                     <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping shrink-0"></span>
                                                     SOS Activo
                                                 </div>

@@ -33,30 +33,8 @@ function emerg_send(int $code, array $payload): void {
     exit;
 }
 
-/**
- * @return array{0:int,1:string}
- */
-function bl_http_patch(string $url, string $body, array $headers, int $timeout = 30): array {
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_CUSTOMREQUEST  => 'PATCH',
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => $timeout,
-        CURLOPT_CONNECTTIMEOUT => 10,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => 0,
-        CURLOPT_POSTFIELDS     => $body,
-        CURLOPT_HTTPHEADER     => $headers,
-    ]);
-    $resp   = curl_exec($ch);
-    $err    = curl_error($ch);
-    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    if ($resp === false) {
-        throw new RuntimeException("cURL: {$err}");
-    }
-    return [$status, (string) $resp];
-}
+// bl_http_patch vive en public/banesco-core.php (require_once arriba),
+// junto al resto de los helpers cURL.
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     emerg_send(405, ['ok' => false, 'error' => 'method_not_allowed']);

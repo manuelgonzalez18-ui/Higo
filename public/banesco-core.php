@@ -139,6 +139,34 @@ function bl_http_get(string $url, array $headers, int $timeout = 15): array {
     return [$status, (string) $resp];
 }
 
+/**
+ * PATCH cURL — usado por endpoints que necesitan UPDATEs parciales
+ * contra Supabase (PostgREST). Mismo timeout/SSL profile que bl_http_post.
+ *
+ * @return array{0:int,1:string}
+ */
+function bl_http_patch(string $url, string $body, array $headers, int $timeout = 30): array {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_CUSTOMREQUEST  => 'PATCH',
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => $timeout,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => 0,
+        CURLOPT_POSTFIELDS     => $body,
+        CURLOPT_HTTPHEADER     => $headers,
+    ]);
+    $resp   = curl_exec($ch);
+    $err    = curl_error($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($resp === false) {
+        throw new RuntimeException("cURL: {$err}");
+    }
+    return [$status, (string) $resp];
+}
+
 // ═══ Banesco ═════════════════════════════════════════════════════════
 
 /**
