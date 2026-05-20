@@ -263,50 +263,51 @@ export const searchPlaces = async (query, userLocation) => {
         }
     }
 
-    // METHOD B: Gemini Grounding (Enrichment / Semantic Search) - Only if standard failed or for variety
+    // METHOD B: Gemini Grounding / Semantic Search (Only if standard failed)
     if (aiSuggestions.length === 0) {
         const ai = getAi();
         if (!ai) {
             // Sin AI: saltamos el enrichment y vamos directo al merge final.
         } else try {
             const response = await ai.models.generateContent({
-                model: "gemini-2.0-flash-exp",
-                // Broader prompt: Venezuela > Higuerote priority
-                contents: `Find places matching "${query}" in Venezuela, prioritizing Higuerote and Miranda state. Return the result as a list of places.`,
+                model: "gemini-2.0-flash", // Utiliza un modelo estable que soporta JSON
+                contents: `Eres un asistente de navegación geográfica especializado en Venezuela, con prioridad en Higuerote y el estado Miranda.
+El usuario está buscando: "${query}".
+Devuelve una lista de hasta 5 lugares que coincidan con la búsqueda. Para cada lugar, estima con la mayor precisión posible sus coordenadas geográficas reales (latitud y longitud) basándote en tu conocimiento geográfico de la zona.
+Debes devolver la respuesta en formato JSON estrictamente como una lista de objetos. Cada objeto debe tener la estructura:
+{
+  "title": "Nombre del lugar o comercio",
+  "address": "Dirección descriptiva del lugar en Higuerote/Venezuela",
+  "lat": 10.486, // Coordenada latitud estimada real
+  "lng": -66.094 // Coordenada longitud estimada real
+}
+
+Si las coordenadas no son exactas pero conoces la zona general, proporciona las coordenadas del punto de referencia más cercano en la zona.`,
                 config: {
-                    tools: [{ googleMaps: {} }],
-                    toolConfig: userLocation ? {
-                        retrievalConfig: {
-                            latLng: {
-                                latitude: userLocation.lat,
-                                longitude: userLocation.lng
-                            }
-                        }
-                    } : undefined,
+                    responseMimeType: "application/json",
                 },
             });
 
-            const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-            if (chunks) {
-                chunks.forEach((chunk) => {
-                    if (chunk.web?.uri && chunk.web?.title) {
-                        const baseLat = userLocation?.lat || 10.486;
-                        const baseLng = userLocation?.lng || -66.094;
-                        const randomOffset = () => (Math.random() - 0.5) * 0.05;
-
-                        aiSuggestions.push({
-                            title: chunk.web.title,
-                            address: "Google Maps Result",
-                            uri: chunk.web.uri,
-                            lat: baseLat + randomOffset(),
-                            lng: baseLng + randomOffset(),
-                            isGoogleMaps: true
-                        });
-                    }
-                });
+            const text = response.text;
+            if (text) {
+                const parsed = JSON.parse(text);
+                if (Array.isArray(parsed)) {
+                    parsed.forEach(place => {
+                        if (place.title && typeof place.lat === 'number' && typeof place.lng === 'number') {
+                            aiSuggestions.push({
+                                title: place.title,
+                                address: place.address || "Sugerencia por IA (Higuerote)",
+                                lat: place.lat,
+                                lng: place.lng,
+                                isGoogleMaps: true,
+                                isUncertain: true // Flag to show a warning in the UI
+                            });
+                        }
+                    });
+                }
             }
         } catch (error) {
-            console.error("Maps search error:", error);
+            console.error("Gemini places search error:", error);
         }
     }
 
