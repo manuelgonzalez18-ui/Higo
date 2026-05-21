@@ -21,9 +21,11 @@ require_once __DIR__ . '/_ratelimit.php';
 
 $_cfg = function_exists('bl_load_config') ? bl_load_config() : [];
 api_apply_cors($_cfg, 'POST, OPTIONS');
-// Cap a 3 req/min/IP: un user disparando SOS más de 3 veces en un
-// minuto es spam, no emergencia. Mejor cortar y obligar a llamar 911.
-api_rate_limit('send-emergency', 3, '/tmp/higo_ratelimit.log');
+// Cap a 10 req/min/IP. Suficientemente alto para retests honestos
+// (el usuario suele probar SOS 2-3 veces seguidas para validar) y
+// suficientemente bajo para frenar abuso real (>10 SOS reales por
+// minuto desde la misma IP es spam, no emergencia).
+api_rate_limit('send-emergency', 10, '/tmp/higo_ratelimit.log');
 
 header('Content-Type: application/json; charset=utf-8');
 
