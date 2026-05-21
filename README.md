@@ -1,4 +1,14 @@
-# React + Vite
+# Higo App
+
+Plataforma de movilidad + envíos de Venezuela. Stack React/Vite/Capacitor (cliente) + PHP/Hostinger (endpoints) + Supabase (DB/Auth/Realtime/Storage) + Firebase (FCM push).
+
+## Runbook operacional
+
+Procedimientos comunes (rollback, rotar Supabase key, investigar crashes, suspender chofer): **[docs/OPERATIONS.md](./docs/OPERATIONS.md)**.
+
+---
+
+## React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

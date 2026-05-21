@@ -57,6 +57,18 @@ jobs:
             echo "::error::VITE_GOOGLE_MAPS_API_KEY no tiene formato valido de Google API key (esperado: AIza + 35 chars alfanumericos/_-, total 39; recibido: ${#VITE_GOOGLE_MAPS_API_KEY} chars). Revisa el secret en GitHub: Settings > Secrets and variables > Actions. Causa comun: espacios, saltos de linea o comillas al pegar."
             exit 1
           fi
+          # H1.1 — validar Supabase env vars antes de buildear. Si faltan
+          # o tienen formato invalido, supabase.js hace throw y rompe el
+          # vite build con stack ruidoso; aca fallamos temprano con
+          # mensaje accionable para el dev/ops.
+          if [[ ! "$VITE_SUPABASE_URL" =~ ^https://[a-z0-9-]+\.supabase\.co$ ]]; then
+            echo "::error::VITE_SUPABASE_URL no tiene formato valido (esperado: https://<project-ref>.supabase.co; recibido len=${#VITE_SUPABASE_URL}). Revisa GitHub Secrets."
+            exit 1
+          fi
+          if [[ "${#VITE_SUPABASE_ANON_KEY}" -lt 20 ]]; then
+            echo "::error::VITE_SUPABASE_ANON_KEY es sospechosamente corto (len=${#VITE_SUPABASE_ANON_KEY}, esperado >= 20 chars). Revisa GitHub Secrets."
+            exit 1
+          fi
           npm run build
 
       # lftp con xfer:clobber on + ftp:use-allo off para que suba cada
@@ -131,6 +143,33 @@ jobs:
             echo "::error::lftp mirror falló después de $max intentos."
             exit 1
           fi
+
+      # H7.1 — smoke test post-deploy de higoapp.com.
+      # Verifica que el index.html servido contenga el title canonico.
+      # Hostinger a veces sirve HTML viejo 5-10s post-upload (caché del
+      # MTA / antivirus); reintentamos hasta 3 veces con backoff.
+      # Si las 3 fallan, el workflow se marca rojo aunque el upload haya
+      # completado: el deploy quedo en estado invalido y hay que mirarlo.
+      - name: Smoke test higoapp.com
+        run: |
+          echo "Esperando 10s para que Hostinger sirva el HTML nuevo..."
+          sleep 10
+          for i in 1 2 3; do
+            echo "Smoke test intento $i/3..."
+            if curl -fsS -o /tmp/index.html --max-time 20 "https://higoapp.com/?cb=$(date +%s)"; then
+              if grep -q "Higo - Tecnología" /tmp/index.html; then
+                echo "✓ Smoke test OK — title encontrado en HTML servido."
+                exit 0
+              else
+                echo "::warning::HTML sirvio pero NO contiene 'Higo - Tecnología'. Posible cache o deploy parcial."
+              fi
+            else
+              echo "::warning::curl fallo en intento $i."
+            fi
+            sleep 5
+          done
+          echo "::error::Smoke test fallo despues de 3 intentos. higoapp.com puede estar sirviendo HTML viejo o roto."
+          exit 1
 
       # higodriver.com vive en un hosting Hostinger separado (FTP user
       # u841591024.higodriver.com, path public_html). Subimos ./higodriver/

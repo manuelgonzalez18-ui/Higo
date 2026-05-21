@@ -46,7 +46,10 @@ const AdminDeliveriesPage = () => {
     const navigate = useNavigate();
     const [authorized, setAuthorized] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
     const [items, setItems] = useState([]);
+    const PAGE_SIZE = 50;
     const [profilesMap, setProfilesMap] = useState({});
     const [claimsByRide, setClaimsByRide] = useState({});
     const [statusFilter, setStatusFilter] = useState('active');
@@ -66,16 +69,23 @@ const AdminDeliveriesPage = () => {
         })();
     }, [navigate]);
 
-    const fetchData = useCallback(async () => {
+    // H4.4 — cursor pagination en lugar de .limit(200) arbitrario.
+    // reset=true: empieza de cero (mount + cambio de filtro).
+    // reset=false: pagina con `cursor` (created_at del último item local).
+    // El caller pasa el cursor explícito para evitar dependencias circulares
+    // en el useCallback (si dependiera de `items`, cada llegada de página
+    // dispararía un re-fetch en el useEffect).
+    const fetchData = useCallback(async (reset = true, cursor = null) => {
         if (!authorized) return;
-        setLoading(true);
+        if (reset) setLoading(true);
+        else setLoadingMore(true);
 
         let q = supabase
             .from('rides')
             .select('id,user_id,driver_id,pickup,dropoff,status,price,ride_type,service_type,delivery_info,picked_up_at,arrived_at_dropoff_at,delivered_at,created_at,cod_amount,cod_collected,pickup_pod_url,delivery_pod_url,payer')
             .eq('service_type', 'delivery')
             .order('created_at', { ascending: false })
-            .limit(200);
+            .limit(PAGE_SIZE);
 
         const statusBucket = STATUS_FILTERS.find(s => s.id === statusFilter);
         if (statusBucket?.q) q = q.in('status', statusBucket.q);
@@ -83,13 +93,19 @@ const AdminDeliveriesPage = () => {
         if (codFilter === 'with') q = q.not('cod_amount', 'is', null).gt('cod_amount', 0);
         if (codFilter === 'without') q = q.or('cod_amount.is.null,cod_amount.eq.0');
 
+        if (cursor) q = q.lt('created_at', cursor);
+
         const { data, error } = await q;
         if (error) {
             toast.error(error.message);
             setLoading(false);
+            setLoadingMore(false);
             return;
         }
-        setItems(data || []);
+        const rows = data || [];
+        // Usar functional setter para no depender de `items` en useCallback.
+        setItems(prev => reset ? rows : [...prev, ...rows]);
+        setHasMore(rows.length === PAGE_SIZE);
 
         const userIds = new Set();
         (data || []).forEach(r => {
@@ -118,13 +134,21 @@ const AdminDeliveriesPage = () => {
                 cMap[c.ride_id] = cMap[c.ride_id] || [];
                 cMap[c.ride_id].push(c);
             });
-            setClaimsByRide(cMap);
-        } else {
+            // H4.4 — merge con los claims existentes (no pisa los de páginas previas)
+            setClaimsByRide(prev => reset ? cMap : { ...prev, ...cMap });
+        } else if (reset) {
             setClaimsByRide({});
         }
 
         setLoading(false);
+        setLoadingMore(false);
     }, [authorized, statusFilter, codFilter]);
+
+    const loadMore = async () => {
+        if (loadingMore || !hasMore) return;
+        const cursor = items[items.length - 1]?.created_at;
+        await fetchData(false, cursor);
+    };
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -348,6 +372,24 @@ const AdminDeliveriesPage = () => {
                         );
                     })}
                 </div>
+            )}
+
+            {/* H4.4 — paginación cursor */}
+            {!loading && items.length > 0 && hasMore && (
+                <div className="flex justify-center pt-6">
+                    <button
+                        onClick={loadMore}
+                        disabled={loadingMore}
+                        className="px-6 py-3 rounded-full bg-[#1A1F2E] text-gray-300 text-sm font-bold hover:bg-[#252A3A] disabled:opacity-50 border border-white/10"
+                    >
+                        {loadingMore ? 'Cargando…' : `Cargar más envíos (de a ${PAGE_SIZE})`}
+                    </button>
+                </div>
+            )}
+            {!loading && items.length > 0 && !hasMore && (
+                <p className="text-center text-xs text-gray-500 pt-6">
+                    — fin de la lista ({items.length} envíos) —
+                </p>
             )}
 
             {/* Modal detalle */}

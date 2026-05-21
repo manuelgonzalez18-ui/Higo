@@ -4,6 +4,8 @@ import InteractiveMap from '../components/InteractiveMap';
 
 import { supabase } from '../services/supabase';
 import { toast } from '../components/Toast';
+import { friendlyError } from '../utils/friendlyError';
+import { logger } from '../utils/logger';
 
 
 
@@ -113,7 +115,7 @@ const ConfirmTripPage = () => {
 
     const handleConfirm = async () => {
         setLoading(true);
-        console.log("[handleConfirm] Iniciando confirmación de solicitud...");
+        logger.debug("[handleConfirm] Iniciando confirmación de solicitud...");
         const { data: { session } } = await supabase.auth.getSession();
 
         if (!session) {
@@ -135,7 +137,7 @@ const ConfirmTripPage = () => {
             const isDelivery = serviceType === 'delivery';
             const codAmount = isDelivery && deliveryData?.cod_amount ? Number(deliveryData.cod_amount) : null;
 
-            console.log("[handleConfirm] Preparando datos del viaje. Tipo de servicio:", serviceType);
+            logger.debug("[handleConfirm] Preparando datos del viaje. Tipo de servicio:", serviceType);
             toast.info("Enviando solicitud a la plataforma...");
 
             const insertPromise = supabase
@@ -161,7 +163,7 @@ const ConfirmTripPage = () => {
                 }])
                 .select();
 
-            console.log("[handleConfirm] Insertando registro en tabla 'rides' (con select de retorno)...");
+            logger.debug("[handleConfirm] Insertando registro en tabla 'rides' (con select de retorno)...");
             const { data, error } = await Promise.race([insertPromise, timeoutPromise]);
 
             if (error) {
@@ -169,11 +171,11 @@ const ConfirmTripPage = () => {
                 throw error;
             }
 
-            console.log("[handleConfirm] Inserción exitosa de ride. Datos devueltos:", data);
+            logger.debug("[handleConfirm] Inserción exitosa de ride. Datos devueltos:", data);
 
             // Audit de aceptación de T&C de envíos (mig 63)
             if (data && data[0] && isDelivery && deliveryData?.terms_version) {
-                console.log("[handleConfirm] Registrando aceptación de términos y condiciones de envío...");
+                logger.debug("[handleConfirm] Registrando aceptación de términos y condiciones de envío...");
                 toast.info("Registrando aceptación de términos...");
                 const { error: termsError } = await supabase.from('terms_acceptances').insert({
                     user_id: session.user.id,
@@ -190,7 +192,7 @@ const ConfirmTripPage = () => {
             // Guardar destinatario en address book si el remitente lo pidió (mig 60)
             if (data && data[0] && isDelivery && deliveryData?.save_contact && deliveryData?.receiverName && deliveryData?.receiverPhone) {
                 try {
-                    console.log("[handleConfirm] Guardando destinatario en libreta de direcciones...");
+                    logger.debug("[handleConfirm] Guardando destinatario en libreta de direcciones...");
                     // Upsert por (user_id, phone): si ya existe, actualizamos last_used_at
                     const { data: existing } = await supabase
                         .from('recipient_contacts')
@@ -199,7 +201,7 @@ const ConfirmTripPage = () => {
                         .eq('phone', deliveryData.receiverPhone)
                         .maybeSingle();
                     if (existing?.id) {
-                        console.log("[handleConfirm] Destinatario existente. Actualizando datos...");
+                        logger.debug("[handleConfirm] Destinatario existente. Actualizando datos...");
                         await supabase.from('recipient_contacts').update({
                             name: deliveryData.receiverName,
                             address_label: deliveryData.contact_label || null,
@@ -210,7 +212,7 @@ const ConfirmTripPage = () => {
                             last_used_at: new Date().toISOString(),
                         }).eq('id', existing.id);
                     } else {
-                        console.log("[handleConfirm] Destinatario nuevo. Insertando en libreta...");
+                        logger.debug("[handleConfirm] Destinatario nuevo. Insertando en libreta...");
                         await supabase.from('recipient_contacts').insert({
                             user_id: session.user.id,
                             name: deliveryData.receiverName,
@@ -231,7 +233,7 @@ const ConfirmTripPage = () => {
 
             // Si hay código promo, registrarlo contra el ride recién creado.
             if (data && data[0] && appliedPromo) {
-                console.log("[handleConfirm] Aplicando código promocional:", appliedPromo.code);
+                logger.debug("[handleConfirm] Aplicando código promocional:", appliedPromo.code);
                 toast.info("Aplicando descuento promocional...");
                 await supabase.rpc('apply_promo_code', {
                     p_code: appliedPromo.code,
@@ -242,7 +244,7 @@ const ConfirmTripPage = () => {
             }
 
             if (data && data[0]) {
-                console.log("[handleConfirm] Solicitud completada con éxito. Redirigiendo a /ride/" + data[0].id);
+                logger.debug("[handleConfirm] Solicitud completada con éxito. Redirigiendo a /ride/" + data[0].id);
                 toast.success("¡Solicitud enviada! Conectando con conductores...");
                 navigate(`/ride/${data[0].id}`);
             } else {
@@ -251,8 +253,11 @@ const ConfirmTripPage = () => {
                 navigate('/');
             }
         } catch (error) {
-            console.error("[handleConfirm] Error capturado en el flujo:", error);
-            toast.error("Error al solicitar: " + error.message);
+            // H5.3 — friendlyError mapea codes Postgres/Supabase a
+            // mensajes en español + reporta a public.client_errors con
+            // el original para diagnostico interno.
+            logger.error("[handleConfirm] Error capturado en el flujo:", error);
+            toast.error(friendlyError(error, 'No se pudo solicitar el viaje. Probá de nuevo.', { source: 'ConfirmTripPage.handleConfirm' }));
         } finally {
             setLoading(false);
         }

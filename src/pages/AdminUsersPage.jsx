@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, getUserProfile } from '../services/supabase';
 import AdminNav from '../components/AdminNav';
@@ -16,12 +16,17 @@ const FILTERS = [
     { id: 'admin',  label: 'Admins'    }
 ];
 
+// H4.2 — cursor pagination. PAGE_SIZE=50 (igual que RideHistoryPage).
+const PAGE_SIZE = 50;
+
 const AdminUsersPage = () => {
     const navigate = useNavigate();
     const [authorized, setAuthorized] = useState(false);
     const [me, setMe] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [users, setUsers] = useState([]);
+    const [hasMore, setHasMore] = useState(true);
     const [filter, setFilter] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [message, setMessage] = useState(null);
@@ -35,19 +40,52 @@ const AdminUsersPage = () => {
             }
             setMe(profile);
             setAuthorized(true);
-            await fetchUsers();
         })();
     }, [navigate]);
 
-    const fetchUsers = async () => {
-        setLoading(true);
-        const { data, error } = await supabase
+    // H4.2 — fetch con cursor. Si reset=true arranca de cero (cambio de
+    // filtro); si false, paginá con el created_at del último item local.
+    const fetchPage = useCallback(async (reset = false) => {
+        if (!authorized) return;
+        const cursor = reset ? null : users[users.length - 1]?.created_at;
+
+        let q = supabase
             .from('profiles')
             .select('id, full_name, phone, role, subscription_status, referral_code, referral_credit_balance, created_at')
-            .order('created_at', { ascending: false });
-        if (error) setMessage({ type: 'error', text: error.message });
-        else setUsers(data || []);
-        setLoading(false);
+            .order('created_at', { ascending: false })
+            .limit(PAGE_SIZE);
+
+        if (filter !== 'all') q = q.eq('role', filter);
+        if (cursor) q = q.lt('created_at', cursor);
+
+        const { data, error } = await q;
+        if (error) {
+            setMessage({ type: 'error', text: error.message });
+            return;
+        }
+        const next = reset ? (data || []) : [...users, ...(data || [])];
+        setUsers(next);
+        setHasMore((data || []).length === PAGE_SIZE);
+    }, [authorized, filter, users]);
+
+    // Reset al cambiar filtro
+    useEffect(() => {
+        if (!authorized) return;
+        setLoading(true);
+        setUsers([]);
+        setHasMore(true);
+        (async () => {
+            await fetchPage(true);
+            setLoading(false);
+        })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [authorized, filter]);
+
+    const loadMore = async () => {
+        if (loadingMore || !hasMore) return;
+        setLoadingMore(true);
+        await fetchPage(false);
+        setLoadingMore(false);
     };
 
     const openSupportChat = async (user) => {
@@ -88,18 +126,24 @@ const AdminUsersPage = () => {
         if (error) setMessage({ type: 'error', text: error.message });
         else {
             setMessage({ type: 'success', text: `Rol actualizado a ${newRole}.` });
-            fetchUsers();
+            // Refrescar la lista entera para reflejar el cambio en el filtro activo.
+            setLoading(true);
+            setUsers([]);
+            setHasMore(true);
+            await fetchPage(true);
+            setLoading(false);
         }
     };
 
+    // Búsqueda client-side sobre la página cargada. Si el usuario buscado
+    // está más allá del cursor actual, hay que cargar más.
     const filtered = users.filter(u => {
-        const matchesFilter = filter === 'all' || u.role === filter;
         const s = searchTerm.toLowerCase();
         const matchesSearch = !s ||
             (u.full_name?.toLowerCase().includes(s)) ||
             (u.phone?.toLowerCase().includes(s)) ||
             (u.referral_code?.toLowerCase().includes(s));
-        return matchesFilter && matchesSearch;
+        return matchesSearch;
     });
 
     const roleMeta = (r) => ROLES.find(x => x.id === r) || ROLES[0];
@@ -152,6 +196,12 @@ const AdminUsersPage = () => {
                         ))}
                     </div>
                 </div>
+                {/* H4.2 — hint sobre paginación + búsqueda */}
+                {searchTerm && hasMore && (
+                    <p className="text-xs text-amber-400 mt-3 text-center">
+                        La búsqueda solo cubre los usuarios cargados ({users.length}). Si no encontrás a quien buscás, cargá más resultados.
+                    </p>
+                )}
             </div>
 
             {message && (
@@ -231,6 +281,24 @@ const AdminUsersPage = () => {
                     );
                 })}
             </div>
+
+            {/* H4.2 — botón "Cargar más" */}
+            {!loading && users.length > 0 && hasMore && (
+                <div className="flex justify-center pt-6">
+                    <button
+                        onClick={loadMore}
+                        disabled={loadingMore}
+                        className="px-6 py-3 rounded-full bg-[#1A1F2E] text-gray-300 text-sm font-bold hover:bg-[#252A3A] disabled:opacity-50 border border-white/10"
+                    >
+                        {loadingMore ? 'Cargando…' : `Cargar más (de a ${PAGE_SIZE})`}
+                    </button>
+                </div>
+            )}
+            {!loading && users.length > 0 && !hasMore && (
+                <p className="text-center text-xs text-gray-500 pt-6">
+                    — fin de la lista ({users.length} usuarios) —
+                </p>
+            )}
         </div>
     );
 };

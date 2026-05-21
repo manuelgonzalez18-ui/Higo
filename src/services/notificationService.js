@@ -2,6 +2,8 @@
 // notificationService.js
 // Handles intense sound and vibration for Higo App
 
+import { logger } from '../utils/logger';
+
 let audioContext = null;
 let requestLoopInterval = null;
 
@@ -89,7 +91,7 @@ export const startLoopingRequestAlert = () => {
     // Play immediately
     try {
         const audio = new Audio('/alert_sound.wav');
-        audio.play().catch(e => console.log('Loop Auto-play blocked', e));
+        audio.play().catch(e => logger.debug('Loop Auto-play blocked', e));
 
         // Vibrate
         if (navigator.vibrate) navigator.vibrate([1000, 500, 1000]);
@@ -98,7 +100,7 @@ export const startLoopingRequestAlert = () => {
     requestLoopInterval = setInterval(() => {
         try {
             const audio = new Audio('/alert_sound.wav');
-            audio.play().catch(e => console.log('Loop Auto-play blocked', e));
+            audio.play().catch(e => logger.debug('Loop Auto-play blocked', e));
 
             // Vibrate
             if (navigator.vibrate) navigator.vibrate([1000, 500, 1000]);

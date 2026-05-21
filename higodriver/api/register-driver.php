@@ -15,12 +15,13 @@ declare(strict_types=1);
  * Salida: { ok:true } o { ok:false, error, detail? }
  */
 
-header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Headers: Content-Type');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
+require_once __DIR__ . '/_cors.php';
+// H1.2 — CORS con whitelist explicita. Reemplaza el patron heredado
+// "Access-Control-Allow-Origin: *". El helper corta el preflight
+// OPTIONS y rechaza orígenes no autorizados con 403.
+hd_apply_cors('POST, OPTIONS');
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
+header('Content-Type: application/json; charset=utf-8');
 
 function rd_send(int $code, array $payload): void {
     http_response_code($code);

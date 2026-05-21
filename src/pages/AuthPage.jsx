@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { supabase } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
 import LegalConsentText from '../components/LegalConsentText';
+import { friendlyError } from '../utils/friendlyError';
 
 // pending_referral_code: lo guardamos al signup cuando el user todavía
 // no está autenticado (espera verificación por email). Antes vivía en
@@ -52,7 +53,33 @@ const AuthPage = () => {
     const [referralCode, setReferralCode] = useState('');
     const [isLogin, setIsLogin] = useState(true);
     const [message, setMessage] = useState('');
+    // H3.2 — flujo "Olvidé mi clave"
+    const [showResetModal, setShowResetModal] = useState(false);
+    const [resetEmail, setResetEmail] = useState('');
+    const [resetSending, setResetSending] = useState(false);
     const navigate = useNavigate();
+
+    const handlePasswordReset = async (e) => {
+        e.preventDefault();
+        if (!resetEmail || resetSending) return;
+        setResetSending(true);
+        try {
+            // No leak de existencia: Supabase devuelve OK aunque el email
+            // no exista. Mostramos siempre el mismo mensaje neutral.
+            await supabase.auth.resetPasswordForEmail(resetEmail.trim().toLowerCase(), {
+                redirectTo: `${window.location.origin}/#/reset-password`,
+            });
+            setMessage('Si el email existe en nuestro sistema, te enviamos un enlace para restablecer tu clave. Revisá tu bandeja de entrada (y spam).');
+            setShowResetModal(false);
+            setResetEmail('');
+        } catch (err) {
+            // Tampoco filtramos error real: mensaje genérico.
+            setMessage('Si el email existe en nuestro sistema, te enviamos un enlace para restablecer tu clave.');
+            setShowResetModal(false);
+        } finally {
+            setResetSending(false);
+        }
+    };
 
     const handleAuth = async (e) => {
         e.preventDefault();
@@ -157,7 +184,10 @@ const AuthPage = () => {
                 setMessage('¡Registro exitoso! Por favor verifica tu correo electrónico.');
             }
         } catch (error) {
-            setMessage(error.message);
+            // H5.3 — mensaje friendly en español + reporte interno con
+            // el original. setMessage(error.message) filtraba strings
+            // crudas de Supabase (ej. constraint names).
+            setMessage(friendlyError(error, 'No se pudo completar la operación. Probá de nuevo.', { source: 'AuthPage.handleAuth', isLogin }));
         } finally {
             setLoading(false);
         }
@@ -291,12 +321,75 @@ const AuthPage = () => {
                             >
                                 {loading ? 'Procesando...' : (isLogin ? 'Iniciar Sesión' : 'Registrarse')}
                             </button>
+                            {/* H3.2 — link de password reset, visible solo en modo login */}
+                            {isLogin && (
+                                <div className="mt-3 text-center">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setResetEmail(email); setShowResetModal(true); }}
+                                        className="text-sm text-blue-600 hover:text-blue-500 dark:text-blue-400 underline underline-offset-2"
+                                    >
+                                        ¿Olvidaste tu clave?
+                                    </button>
+                                </div>
+                            )}
                             <LegalConsentText
                                 actionLabel={isLogin ? 'Iniciar Sesión' : 'Registrarse'}
                                 className="mt-4"
                             />
                         </div>
                     </form>
+
+                    {/* H3.2 — modal de reset password */}
+                    {showResetModal && (
+                        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+                            <div className="bg-white dark:bg-[#1a2c2c] rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-700">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                                        Restablecer clave
+                                    </h3>
+                                    <button
+                                        onClick={() => setShowResetModal(false)}
+                                        className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center"
+                                        aria-label="Cerrar"
+                                    >
+                                        <span className="material-symbols-outlined text-sm">close</span>
+                                    </button>
+                                </div>
+                                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 leading-relaxed">
+                                    Ingresá tu email y te enviaremos un enlace para que puedas crear una clave nueva.
+                                </p>
+                                <form onSubmit={handlePasswordReset}>
+                                    <input
+                                        type="email"
+                                        required
+                                        autoComplete="email"
+                                        placeholder="tu@correo.com"
+                                        value={resetEmail}
+                                        onChange={(e) => setResetEmail(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white dark:bg-[#233535] text-gray-900 dark:text-white mb-4"
+                                    />
+                                    <div className="flex gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowResetModal(false)}
+                                            disabled={resetSending}
+                                            className="flex-1 py-2 px-4 rounded-md border border-gray-300 dark:border-gray-600 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+                                        >
+                                            Cancelar
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={resetSending || !resetEmail}
+                                            className="flex-1 py-2 px-4 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                                        >
+                                            {resetSending ? 'Enviando…' : 'Enviar enlace'}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="mt-6">
                         <div className="relative">

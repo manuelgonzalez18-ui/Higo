@@ -1,4 +1,5 @@
 import { supabase } from '../services/supabase';
+import { logger } from './logger';
 
 // Dispara una alerta SOS al backend send-emergency.php.
 //
@@ -77,14 +78,14 @@ export const triggerEmergencyAlert = async ({ rideId, triggeredBy }) => {
         throw new Error(`Emergency endpoint returned ${res.status}: ${text.slice(0, 200)}`);
     }
 
-    if (payload?.support_error) {
-        // El email + sos_event funcionaron pero el chat de soporte falló.
-        // El admin NO va a recibir la alerta visual en /admin/support.
-        console.warn('[SOS] support chat integration failed:', payload.support_error);
+    // H5.1 — el server ya no expone support_error (stack interno).
+    // Solo booleano support_ok + request_id para correlacionar logs.
+    if (payload?.support_ok === false) {
+        console.warn('[SOS] support chat integration failed. Request ID for admin: ' + (payload.request_id || '?'));
     } else if (payload?.support_thread_id) {
-        console.log('[SOS] OK · thread #' + payload.support_thread_id);
+        logger.debug('[SOS] OK · thread #' + payload.support_thread_id + ' · req=' + (payload.request_id || '?'));
     } else {
-        console.log('[SOS] OK · response:', payload);
+        logger.debug('[SOS] OK · response:', payload);
     }
 
     return payload || {};

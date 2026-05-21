@@ -29,7 +29,18 @@ api_rate_limit('send-emergency', 10, '/tmp/higo_ratelimit.log');
 
 header('Content-Type: application/json; charset=utf-8');
 
+// H5.1 — request_id para correlacion. Lo emitimos en TODOS los logs
+// de este request y lo devolvemos al cliente. Si admin pregunta por
+// un caso, el user dice "ID #abc12345" y admin grepea error_log.
+// Esto reemplaza la práctica anterior de devolver $e->getMessage()
+// (stack interno) directamente al cliente.
+$requestId = substr(bin2hex(random_bytes(8)), 0, 12);
+
 function emerg_send(int $code, array $payload): void {
+    global $requestId;
+    if (!isset($payload['request_id'])) {
+        $payload['request_id'] = $requestId;
+    }
     http_response_code($code);
     echo (string) json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     exit;
@@ -336,8 +347,10 @@ try {
         throw new RuntimeException('support_threads: no se pudo obtener thread_id');
     }
 } catch (Throwable $e) {
+    // H5.1 — guardar mensaje internamente para log, pero NO devolverlo
+    // al cliente. La response solo expone $supportOk booleano.
     $supportError = $e->getMessage();
-    error_log("[SOS Support Integration Error] " . $supportError);
+    error_log("[SOS Support Integration Error] [req=$requestId] " . $supportError);
 }
 
 // ─── Email rich a admin@higoapp.com ─────────────────────────────────
@@ -439,11 +452,18 @@ if (!$mailOk) {
     ));
 }
 
+// H5.1 — response sanitizada. NO devolvemos:
+//   - support_error (string crudo de Postgres/RuntimeException)
+//   - stack traces internos
+// El cliente recibe solo booleanos + IDs neutros. Si soporta_ok=false,
+// el cliente puede mostrar al user "Si soporte te pregunta, decile el
+// ID #<request_id>" y el admin busca ese request_id en error_log.
 emerg_send(200, [
     'ok'                 => true,
     'sos_id'             => $sosId,
     'email_ok'           => (bool) $mailOk,
     'contacts'           => count($contacts),
     'support_thread_id'  => $supportThreadId,
-    'support_error'      => $supportError, // null si todo OK
+    'support_ok'         => $supportError === null,
+    'request_id'         => $requestId,
 ]);

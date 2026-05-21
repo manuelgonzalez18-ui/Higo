@@ -1,15 +1,48 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Valores del proyecto Supabase. Son seguros exponer en el cliente:
-// - URL del proyecto: pública por definición
-// - anon key: protegida por Row Level Security en la DB
-// Si en .env o en CI está definida una variable, esa gana. Caso contrario,
-// usamos estos valores fallback para evitar un "Missing env vars" fatal.
-const FALLBACK_URL = 'https://yfgomicdcwifgeumqsvv.supabase.co';
-const FALLBACK_KEY = 'sb_publishable_d0f_4LR1PqQBc87ThKaxqQ_wm9CGAI1';
+// Configuración del cliente Supabase.
+//
+// REGLA: las claves DEBEN venir de env vars de build (Vite / GitHub
+// Actions secrets). Antes existía un fallback hardcoded acá; se
+// removió porque:
+//   1. Dificultaba la rotación: la key vieja quedaba en git history
+//      y en cada bundle aunque se actualizara el secret de CI.
+//   2. Si alguien por error metía una service_role en este fallback,
+//      era catastrófico — RLS no protege contra service_role.
+//   3. Enseñaba a devs nuevos que hardcodear keys es OK.
+//
+// Si VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY no están definidos en
+// build time, el bundle falla con un error claro. CI tiene un check
+// adicional (deploy.yml step "Build Project") que valida formato
+// ANTES de invocar vite build.
+//
+// ROTACIÓN COORDINADA (decisión arquitectónica H1.1):
+// La anon key vieja convive con la nueva en Supabase durante 15-30
+// días para no romper APKs viejos en el Play Store. Pasos:
+//   1. Crear nueva anon key en Supabase dashboard.
+//   2. Actualizar GitHub secret VITE_SUPABASE_ANON_KEY con la nueva.
+//   3. Subir APK nuevo al Play Store con la key nueva.
+//   4. Esperar 15-30 días (ventana de adopción del APK).
+//   5. Recién entonces invalidar la key vieja desde Supabase.
+// Si se invalida la vieja antes del paso 5, todos los users con APK
+// viejo quedan sin acceso. Documentado en docs/OPERATIONS.md.
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || FALLBACK_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || FALLBACK_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+    throw new Error(
+        'Missing Supabase env vars at build time. ' +
+        'VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set in .env.local (dev) ' +
+        'or as GitHub Actions secrets (CI). See docs/OPERATIONS.md.'
+    );
+}
+
+if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(supabaseUrl)) {
+    throw new Error(
+        'VITE_SUPABASE_URL has invalid format. Expected https://<project-ref>.supabase.co, got: ' + supabaseUrl
+    );
+}
 
 export const supabase = createClient(supabaseUrl, supabaseKey)
 
@@ -99,4 +132,3 @@ export const subscribeWithRetry = (channelFactory, opts = {}) => {
         }
     };
 };
-

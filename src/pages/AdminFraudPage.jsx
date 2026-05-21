@@ -41,6 +41,13 @@ const fmtDate = (iso) => {
     });
 };
 
+// H4.5 — la vista materializada fraud_signals se devuelve entera por
+// el RPC get_fraud_signals (no acepta cursor del lado server). Para
+// no colgar la UI con miles de signals, paginamos client-side: la
+// primera carga muestra PAGE_SIZE rows; el botón "Cargar más" expande
+// VISIBLE_COUNT de a tandas. El cap evita render de 5000 nodes DOM.
+const FRAUD_PAGE_SIZE = 50;
+
 const FraudPanel = () => {
     const navigate = useNavigate();
     const [signals, setSignals] = useState([]);
@@ -49,6 +56,7 @@ const FraudPanel = () => {
     const [refreshing, setRefreshing] = useState(false);
     const [filter, setFilter] = useState('all'); // all | passenger | driver | ride
     const [computedAt, setComputedAt] = useState(null);
+    const [visibleCount, setVisibleCount] = useState(FRAUD_PAGE_SIZE);
 
     const load = async () => {
         setLoading(true);
@@ -97,6 +105,11 @@ const FraudPanel = () => {
     const filtered = filter === 'all'
         ? signals
         : signals.filter(s => s.subject_type === filter);
+
+    // H4.5 — slice client-side. Resetear visibleCount al cambiar filtro.
+    useEffect(() => { setVisibleCount(FRAUD_PAGE_SIZE); }, [filter]);
+    const visible = filtered.slice(0, visibleCount);
+    const hasMore = filtered.length > visibleCount;
 
     const countBy = {
         all:       signals.length,
@@ -179,7 +192,7 @@ const FraudPanel = () => {
                     </div>
                 ) : (
                     <ul className="space-y-2">
-                        {filtered.map((s, i) => {
+                        {visible.map((s, i) => {
                             const sig = SIGNAL_LABELS[s.signal] || { label: s.signal, icon: 'warning', color: 'text-gray-400' };
                             const sevCls = SEVERITY_CLS[s.severity] || SEVERITY_CLS.low;
                             const subject = s.subject_type !== 'ride' ? profilesMap[s.subject_id] : null;
@@ -227,6 +240,23 @@ const FraudPanel = () => {
                             );
                         })}
                     </ul>
+                )}
+
+                {/* H4.5 — paginación client-side: botón "Ver más" */}
+                {!loading && hasMore && (
+                    <div className="flex justify-center pt-6">
+                        <button
+                            onClick={() => setVisibleCount(c => c + FRAUD_PAGE_SIZE)}
+                            className="px-6 py-3 rounded-full bg-[#1A1F2E] text-gray-300 text-sm font-bold hover:bg-[#252A3A] border border-white/10"
+                        >
+                            Ver más señales ({filtered.length - visibleCount} restantes)
+                        </button>
+                    </div>
+                )}
+                {!loading && !hasMore && filtered.length > FRAUD_PAGE_SIZE && (
+                    <p className="text-center text-xs text-gray-500 pt-6">
+                        — mostrando todas las {filtered.length} señales —
+                    </p>
                 )}
             </div>
         </div>

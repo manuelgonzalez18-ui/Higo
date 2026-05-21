@@ -109,19 +109,31 @@ $avatarUrl    = (string) ($data['avatar_url']    ?? '');
 $paymentQrUrl = (string) ($data['payment_qr_url']?? '');
 
 // Avatar como archivo (multipart) o base64 (fallback JSON).
+// H5.2 — whitelist estricta de extension. Antes confiábamos en lo que
+// venía en $_FILES['name'] o en $data['avatar_ext'] (strtolower
+// solamente). Un atacante podría enviar 'php' o '../../etc/passwd'.
+// Ahora cualquier valor fuera de la whitelist se normaliza a 'jpg'.
 $avatarBin = '';
 $avatarExt = 'jpg';
+$ALLOWED_AVATAR_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'];
+$normalizeExt = static function (string $candidate) use ($ALLOWED_AVATAR_EXTS): string {
+    $candidate = strtolower(trim($candidate));
+    // Quitar cualquier path o ?query injection (ej. 'jpg/foo' -> 'jpg').
+    $candidate = preg_replace('/[^a-z0-9]/', '', (string) $candidate);
+    return in_array($candidate, $ALLOWED_AVATAR_EXTS, true) ? $candidate : 'jpg';
+};
+
 if ($isMultipart && !empty($_FILES['avatar_file']) && ($_FILES['avatar_file']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
     $tmp = $_FILES['avatar_file']['tmp_name'] ?? '';
     if (is_uploaded_file($tmp)) {
         $avatarBin = (string) file_get_contents($tmp);
         $origExt = strtolower(pathinfo((string) $_FILES['avatar_file']['name'], PATHINFO_EXTENSION));
-        if ($origExt !== '') $avatarExt = $origExt;
+        if ($origExt !== '') $avatarExt = $normalizeExt($origExt);
     }
 } elseif (!empty($data['avatar_base64'])) {
     $decoded = base64_decode((string) $data['avatar_base64'], true);
     if ($decoded !== false) $avatarBin = $decoded;
-    if (!empty($data['avatar_ext'])) $avatarExt = strtolower((string) $data['avatar_ext']);
+    if (!empty($data['avatar_ext'])) $avatarExt = $normalizeExt((string) $data['avatar_ext']);
 }
 
 // ═══ Verificar caller es admin ═══════════════════════════════════════════

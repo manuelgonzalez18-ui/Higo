@@ -16,6 +16,10 @@ const AdminDriversPage = () => {
     const [authorized, setAuthorized] = useState(false);
     const [drivers, setDrivers] = useState([]);
     const [loading, setLoading] = useState(true);
+    // H4.3 — cursor pagination
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const PAGE_SIZE = 50;
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'active', 'suspended'
 
@@ -89,24 +93,39 @@ const AdminDriversPage = () => {
         img.src = url;
     });
 
-    // Fetch Drivers
-    const fetchDrivers = async () => {
-        setLoading(true);
+    // Fetch Drivers — H4.3: cursor pagination con limit PAGE_SIZE.
+    // reset=true (default cuando se invoca sin args): empieza de cero.
+    // reset=false: pagina con el created_at del último driver local.
+    const fetchDrivers = async (reset = true) => {
+        if (reset) setLoading(true);
+        else setLoadingMore(true);
         try {
-            const { data, error } = await supabase
+            const cursor = reset ? null : drivers[drivers.length - 1]?.created_at;
+            let q = supabase
                 .from('profiles')
                 .select('*')
                 .eq('role', 'driver')
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false })
+                .limit(PAGE_SIZE);
+            if (cursor) q = q.lt('created_at', cursor);
 
+            const { data, error } = await q;
             if (error) throw error;
-            setDrivers(data || []);
+            const rows = data || [];
+            setDrivers(reset ? rows : [...drivers, ...rows]);
+            setHasMore(rows.length === PAGE_SIZE);
         } catch (error) {
             console.error('Error fetching drivers:', error);
             setMessage({ type: 'error', text: 'Failed to load drivers.' });
         } finally {
             setLoading(false);
+            setLoadingMore(false);
         }
+    };
+
+    const loadMoreDrivers = async () => {
+        if (loadingMore || !hasMore) return;
+        await fetchDrivers(false);
     };
 
     useEffect(() => {
@@ -649,6 +668,29 @@ const AdminDriversPage = () => {
                         </div>
                         <p className="text-gray-400 font-medium">No se encontraron conductores.</p>
                     </div>
+                )}
+
+                {/* H4.3 — paginación cursor: botón "Cargar más" */}
+                {!loading && drivers.length > 0 && hasMore && (
+                    <div className="flex justify-center pt-6">
+                        <button
+                            onClick={loadMoreDrivers}
+                            disabled={loadingMore}
+                            className="px-6 py-3 rounded-full bg-[#1A1F2E] text-gray-300 text-sm font-bold hover:bg-[#252A3A] disabled:opacity-50 border border-white/10"
+                        >
+                            {loadingMore ? 'Cargando…' : `Cargar más conductores (de a ${PAGE_SIZE})`}
+                        </button>
+                    </div>
+                )}
+                {!loading && drivers.length > 0 && !hasMore && (
+                    <p className="text-center text-xs text-gray-500 pt-6">
+                        — fin de la lista ({drivers.length} conductores) —
+                    </p>
+                )}
+                {searchTerm && hasMore && (
+                    <p className="text-xs text-amber-400 mt-3 text-center">
+                        La búsqueda solo cubre los conductores cargados. Si no encontrás a quien buscás, cargá más.
+                    </p>
                 )}
             </div>
 

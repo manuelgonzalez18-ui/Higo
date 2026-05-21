@@ -3,6 +3,8 @@ import { HashRouter, Routes, Route, useLocation, useNavigate } from 'react-route
 import AdminGuard from './components/AdminGuard';
 import ChatWidget from './components/ChatWidget';
 import SupportChatWidget from './components/SupportChatWidget';
+import ErrorBoundary from './components/ErrorBoundary';
+import OfflineBanner from './components/OfflineBanner';
 import './index.css';         // Ensure Tailwind/global CSS is imported
 
 // ─── Páginas: lazy split ─────────────────────────────────────────────
@@ -38,6 +40,7 @@ const HigoPayPage             = lazy(() => import('./pages/HigoPayPage'));
 const RideHistoryPage         = lazy(() => import('./pages/RideHistoryPage'));
 const OnboardingPage          = lazy(() => import('./pages/OnboardingPage'));
 const AuthPage                = lazy(() => import('./pages/AuthPage'));
+const ResetPasswordPage       = lazy(() => import('./pages/ResetPasswordPage'));
 const TermsOfDeliveryPage     = lazy(() => import('./pages/TermsOfDeliveryPage'));
 const PrivacyPage             = lazy(() => import('./pages/PrivacyPage'));
 const PublicTrackingPage      = lazy(() => import('./pages/PublicTrackingPage'));
@@ -212,8 +215,15 @@ const App = () => {
 
   return (
     <ToastProvider>
+    {/* H2.4 — banner global de conectividad. Fuera del Router para que
+        no se re-mount al cambiar de ruta. */}
+    <OfflineBanner />
     <HashRouter>
       <OnboardingGate />
+      {/* H2.3 — ErrorBoundary global envuelve el Suspense para capturar
+          tanto crashes de pages como fallos de lazy-load chunks. Reporta
+          a public.client_errors via reportError(). */}
+      <ErrorBoundary source="app-root">
       {/* Suspense fallback mientras se carga el chunk de la ruta. */}
       <Suspense fallback={
         <div className="min-h-screen flex items-center justify-center bg-[#0F1014]">
@@ -230,6 +240,7 @@ const App = () => {
           }
         />
         <Route path="/auth" element={<AuthPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/schedule" element={<ScheduleRidePage />} />
         <Route path="/confirm" element={<ConfirmTripPage />} />
         <Route path="/driver" element={<DriverDashboard />} />
@@ -260,6 +271,7 @@ const App = () => {
         <Route path="/delivery/:rideId/receipt" element={<DeliveryReceiptPage />} />
       </Routes>
       </Suspense>
+      </ErrorBoundary>
       <ChatWidget />
       <SupportChatWidget />
 
