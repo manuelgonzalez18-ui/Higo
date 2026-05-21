@@ -643,14 +643,24 @@ const AdminSupportPage = () => {
                         </div>
                     ) : (
                         <>
-                            <div className={`p-4 border-b border-white/5 flex justify-between items-center transition-all ${selectedIsEmergency ? 'bg-gradient-to-r from-red-950/40 via-[#1A1F2E] to-[#1A1F2E]' : ''}`}>
-                                <div className="flex items-center gap-3 min-w-0">
+                            {(() => {
+                                const rawPhone   = selectedProfile?.phone || '';
+                                const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
+                                const waText    = encodeURIComponent('Hola, te escribo desde Higo soporte.');
+                                const hasPhone  = cleanPhone.length >= 8;
+                                const ctxLabel  = ctxBadge(selectedThread?.role_context).label;
+                                return (
+                            <div className={`p-4 border-b border-white/5 flex justify-between items-start gap-3 transition-all ${selectedIsEmergency ? 'bg-gradient-to-r from-red-950/40 via-[#1A1F2E] to-[#1A1F2E]' : ''}`}>
+                                <div className="flex items-center gap-3 min-w-0 flex-1">
                                     <ThreadAvatar profile={selectedProfile} ctx={selectedThread?.role_context} />
-                                    <div className="min-w-0">
-                                        <div className="flex items-center gap-2">
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
                                             <p className="font-bold text-white truncate">
                                                 {selectedProfile?.full_name || 'Sin nombre'}
                                             </p>
+                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${ctxBadge(selectedThread?.role_context).cls}`}>
+                                                {ctxLabel}
+                                            </span>
                                             {selectedIsEmergency && (
                                                 <div className="flex items-center gap-1 px-2 py-0.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-full text-[10px] font-black tracking-wider uppercase animate-pulse">
                                                     <span className="text-[11px] leading-none">🚨</span>
@@ -660,7 +670,7 @@ const AdminSupportPage = () => {
                                             )}
                                         </div>
                                         {otherIsTyping ? (
-                                            <p className="text-xs text-blue-300 truncate flex items-center gap-1">
+                                            <p className="text-xs text-blue-300 truncate flex items-center gap-1 mt-1">
                                                 <span className="inline-flex gap-0.5">
                                                     <span className="w-1 h-1 rounded-full bg-blue-300 animate-bounce" style={{ animationDelay: '0ms' }}></span>
                                                     <span className="w-1 h-1 rounded-full bg-blue-300 animate-bounce" style={{ animationDelay: '150ms' }}></span>
@@ -669,15 +679,38 @@ const AdminSupportPage = () => {
                                                 Escribiendo…
                                             </p>
                                         ) : (
-                                            <p className="text-xs text-gray-400 truncate">
-                                                {selectedProfile?.phone || '—'} · {ctxBadge(selectedThread?.role_context).label}
-                                            </p>
+                                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                {hasPhone ? (
+                                                    <>
+                                                        <a
+                                                            href={`tel:${rawPhone}`}
+                                                            title="Llamar"
+                                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/30 text-blue-300 hover:bg-blue-500/20 text-xs font-bold"
+                                                        >
+                                                            <span className="material-symbols-outlined text-[14px]">call</span>
+                                                            {rawPhone}
+                                                        </a>
+                                                        <a
+                                                            href={`https://wa.me/${cleanPhone}?text=${waText}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            title="WhatsApp"
+                                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20 text-xs font-bold"
+                                                        >
+                                                            <span className="material-symbols-outlined text-[14px]">chat</span>
+                                                            WhatsApp
+                                                        </a>
+                                                    </>
+                                                ) : (
+                                                    <span className="text-[11px] text-amber-400 italic">Sin teléfono registrado</span>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 </div>
                                 <button
                                     onClick={toggleStatus}
-                                    className="px-3 py-2 rounded-lg text-xs font-bold bg-white/5 text-gray-300 hover:bg-white/10 flex items-center gap-1"
+                                    className="px-3 py-2 rounded-lg text-xs font-bold bg-white/5 text-gray-300 hover:bg-white/10 flex items-center gap-1 shrink-0"
                                     title={selectedThread.status === 'open' ? 'Cerrar conversación' : 'Reabrir'}
                                 >
                                     <span className="material-symbols-outlined text-[16px]">
@@ -686,6 +719,8 @@ const AdminSupportPage = () => {
                                     {selectedThread.status === 'open' ? 'Cerrar' : 'Reabrir'}
                                 </button>
                             </div>
+                                );
+                            })()}
 
                             <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#0F1014]">
                                 {messages.length === 0 ? (
