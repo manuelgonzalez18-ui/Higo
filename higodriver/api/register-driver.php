@@ -60,6 +60,7 @@ $fullName     = trim((string) ($_POST['full_name']     ?? ''));
 $cedula       = trim((string) ($_POST['cedula']        ?? ''));
 $phone        = trim((string) ($_POST['phone']         ?? ''));
 $email        = strtolower(trim((string) ($_POST['email'] ?? '')));
+$password     = (string) ($_POST['password']           ?? '');
 $city         = trim((string) ($_POST['city']          ?? ''));
 $plan         = trim((string) ($_POST['plan']          ?? ''));
 $vehicleBrand = trim((string) ($_POST['vehicle_brand'] ?? ''));
@@ -79,6 +80,16 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
 }
 if (!in_array($plan, ['moto', 'carro', 'camioneta'], true)) {
     rd_send(400, ['ok' => false, 'error' => 'invalid_plan']);
+}
+// La clave la elige el chofer en el form (campo password) y la usa para
+// loguearse en la app desde el teléfono. Validamos largo mínimo del
+// lado del server además del client-side. El admin la copia desde el
+// correo al crear el user en Supabase admin.
+if (strlen($password) < 8) {
+    rd_send(400, ['ok' => false, 'error' => 'password_too_short', 'detail' => 'min 8 chars']);
+}
+if (strlen($password) > 128) {
+    rd_send(400, ['ok' => false, 'error' => 'password_too_long', 'detail' => 'max 128 chars']);
 }
 
 // ═══ Validación de archivos ═══════════════════════════════════════════
@@ -168,6 +179,22 @@ foreach ($rows as $k => $v) {
         . '</tr>';
 }
 
+// Bloque destacado con las credenciales que el admin tiene que cargar
+// en Supabase al aprobar al chofer. La clave la eligió el propio
+// chofer en el form (no la inventa el admin) → si en el futuro
+// automatizamos el alta en Supabase desde este endpoint, el chofer
+// puede loguear inmediato sin esperar handoff de credenciales.
+$credsHtml = '<div style="margin:20px 0 0;padding:16px;background:#eff6ff;border:2px solid #3B82F6;border-radius:10px;">'
+    . '<p style="margin:0 0 10px;font-size:11px;color:#1d4ed8;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Datos de acceso para crear el usuario en Supabase</p>'
+    . '<table cellpadding="4" cellspacing="0" style="font-size:13px;color:#111827;border-collapse:collapse;">'
+    . '<tr><td style="color:#6b7280;padding-right:12px;">Email:</td><td><strong style="font-family:monospace;">' . $safe($email) . '</strong></td></tr>'
+    . '<tr><td style="color:#6b7280;padding-right:12px;">Clave:</td><td><strong style="font-family:monospace;background:#fff;padding:2px 8px;border-radius:4px;border:1px solid #cbd5e1;">' . $safe($password) . '</strong></td></tr>'
+    . '</table>'
+    . '<p style="margin:10px 0 0;font-size:11px;color:#7f1d1d;line-height:1.5;">'
+    . '<strong>Aviso:</strong> el chofer eligió esta clave él mismo. Cargala tal cual en Supabase para que pueda iniciar sesión en la app. Borrá este correo después de cargarla.'
+    . '</p>'
+    . '</div>';
+
 $html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head>'
     . '<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">'
     . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:24px 0;"><tr><td align="center">'
@@ -180,6 +207,7 @@ $html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head>'
     . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">'
     . $rowsHtml
     . '</table>'
+    . $credsHtml
     . '<p style="margin:18px 0 0;font-size:13px;color:#6b7280;">Las 7 fotos están adjuntas en este correo.</p>'
     . '</td></tr>'
     . '<tr><td style="padding:14px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:12px;color:#6b7280;text-align:center;">'
@@ -192,6 +220,10 @@ $plain = "Nueva solicitud de conductor recibida en higodriver.com\n"
 foreach ($rows as $k => $v) {
     $plain .= str_pad($k . ':', 22) . $v . "\n";
 }
+$plain .= "\nDATOS DE ACCESO (cargar en Supabase):\n"
+    . str_pad('Email:',  22) . $email . "\n"
+    . str_pad('Clave:',  22) . $password . "\n"
+    . "AVISO: la clave la eligió el chofer. Cargala tal cual y borrá este correo después.\n";
 $plain .= "\nLas 7 fotos están adjuntas en este correo.\n";
 
 // ═══ Armado MIME (multipart/mixed con alternative anidado) ═════════════
