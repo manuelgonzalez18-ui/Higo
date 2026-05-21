@@ -64,8 +64,28 @@ export const triggerEmergencyAlert = async ({ rideId, triggeredBy }) => {
             triggered_by: triggeredBy || 'passenger',
         }),
     });
+
+    // Log explícito del resultado para diagnosticar fallos silenciosos
+    // en producción. El SOS es crítico — necesitamos que cualquier
+    // problema sea visible inmediatamente en DevTools.
+    const text = await res.text();
+    let payload = null;
+    try { payload = JSON.parse(text); } catch (_) { /* respuesta no-JSON */ }
+
     if (!res.ok) {
-        throw new Error(`Emergency endpoint returned ${res.status}`);
+        console.error('[SOS] endpoint failed', res.status, payload || text);
+        throw new Error(`Emergency endpoint returned ${res.status}: ${text.slice(0, 200)}`);
     }
-    return res.json();
+
+    if (payload?.support_error) {
+        // El email + sos_event funcionaron pero el chat de soporte falló.
+        // El admin NO va a recibir la alerta visual en /admin/support.
+        console.warn('[SOS] support chat integration failed:', payload.support_error);
+    } else if (payload?.support_thread_id) {
+        console.log('[SOS] OK · thread #' + payload.support_thread_id);
+    } else {
+        console.log('[SOS] OK · response:', payload);
+    }
+
+    return payload || {};
 };

@@ -164,6 +164,11 @@ if ($insStatus >= 200 && $insStatus < 300) {
 }
 
 // ─── Integración con Chat de Soporte Administrativo ──────────────────
+// Variables expuestas en la response final para debug desde DevTools:
+//   support_thread_id: ID del hilo creado/reabierto (null si falló)
+//   support_error:     mensaje de error si algo falló en la cadena
+$supportThreadId = null;
+$supportError    = null;
 try {
     // 1. Buscar si ya existe el hilo de soporte para este rol y usuario
     [$stStatus, $stBody] = bl_http_get(
@@ -296,6 +301,10 @@ try {
         );
 
         if ($msgStatus >= 200 && $msgStatus < 300) {
+            // Solo ahora declaramos que el thread está "completamente listo"
+            // (tiene mensaje SOS + el trigger DB ya actualizó preview).
+            $supportThreadId = $threadId;
+
             // 5. Disparar notificaciones push locales a todos los admins
             $localPushUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER['HTTP_HOST'] . "/api/send-support-push.php";
             @bl_http_post(
@@ -307,10 +316,22 @@ try {
                 ],
                 5 // Timeout rápido
             );
+        } else {
+            // INSERT del mensaje SOS falló — el hilo quedó creado pero
+            // sin mensaje, lo que produce el síntoma de 'sin mensajes'
+            // en /admin/support sin alarma. Throw para que caiga al catch
+            // y se loguee + se exponga en support_error.
+            throw new RuntimeException(
+                "support_messages INSERT failed (status $msgStatus): "
+                . substr((string) $msgRes, 0, 300)
+            );
         }
+    } else {
+        throw new RuntimeException('support_threads: no se pudo obtener thread_id');
     }
 } catch (Throwable $e) {
-    error_log("[SOS Support Integration Error] " . $e->getMessage());
+    $supportError = $e->getMessage();
+    error_log("[SOS Support Integration Error] " . $supportError);
 }
 
 // ─── Email rich a admin@higoapp.com ─────────────────────────────────
@@ -413,8 +434,10 @@ if (!$mailOk) {
 }
 
 emerg_send(200, [
-    'ok'        => true,
-    'sos_id'    => $sosId,
-    'email_ok'  => (bool) $mailOk,
-    'contacts'  => count($contacts),
+    'ok'                 => true,
+    'sos_id'             => $sosId,
+    'email_ok'           => (bool) $mailOk,
+    'contacts'           => count($contacts),
+    'support_thread_id'  => $supportThreadId,
+    'support_error'      => $supportError, // null si todo OK
 ]);
