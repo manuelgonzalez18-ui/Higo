@@ -47,6 +47,8 @@ const AuthPage = () => {
     const [loading, setLoading] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [fullName, setFullName] = useState('');
+    const [phone, setPhone] = useState('');
     const [referralCode, setReferralCode] = useState('');
     const [isLogin, setIsLogin] = useState(true);
     const [message, setMessage] = useState('');
@@ -104,11 +106,40 @@ const AuthPage = () => {
                 }
             } else {
                 // Register
+                if (!fullName.trim()) {
+                    throw new Error('Por favor ingresá tu nombre completo.');
+                }
+                if (!phone.trim()) {
+                    throw new Error('Por favor ingresá tu número de teléfono.');
+                }
+                // Mandamos full_name + phone en raw_user_meta_data. Si tenés
+                // un trigger handle_new_user en Supabase, puede copiarlos
+                // directo a profiles. Igual los upserteamos manualmente
+                // abajo para garantía.
                 const { data: { user }, error } = await supabase.auth.signUp({
                     email,
                     password,
+                    options: {
+                        data: {
+                            full_name: fullName.trim(),
+                            phone: phone.trim(),
+                        },
+                    },
                 });
                 if (error) throw error;
+
+                // Upsert al profile con los datos del registro. Si el user
+                // necesita verificación por email, user puede ser null —
+                // en ese caso confiamos en raw_user_meta_data + trigger
+                // del lado DB, o el upsert ocurre en el primer login.
+                if (user?.id) {
+                    await supabase.from('profiles').upsert({
+                        id: user.id,
+                        full_name: fullName.trim(),
+                        phone: phone.trim(),
+                    }, { onConflict: 'id' });
+                }
+
                 // Si el usuario quedó autenticado y entró un código de referido,
                 // lo registramos. Si requiere verificación por email, user puede
                 // ser null; en ese caso lo guardamos con TTL de 24h para
@@ -146,6 +177,51 @@ const AuthPage = () => {
             <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
                 <div className="bg-white dark:bg-[#1a2c2c] py-8 px-4 shadow sm:rounded-lg sm:px-10 border border-gray-200 dark:border-gray-700">
                     <form className="space-y-6" onSubmit={handleAuth}>
+                        {!isLogin && (
+                            <>
+                                <div>
+                                    <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        Nombre completo
+                                    </label>
+                                    <div className="mt-1">
+                                        <input
+                                            id="fullName"
+                                            name="fullName"
+                                            type="text"
+                                            autoComplete="name"
+                                            required
+                                            placeholder="Ej: Juan Pérez"
+                                            value={fullName}
+                                            onChange={(e) => setFullName(e.target.value)}
+                                            className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-[#233535] text-gray-900 dark:text-white"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label htmlFor="phone" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        Teléfono
+                                    </label>
+                                    <div className="mt-1">
+                                        <input
+                                            id="phone"
+                                            name="phone"
+                                            type="tel"
+                                            autoComplete="tel"
+                                            required
+                                            placeholder="Ej: +58 412 1234567"
+                                            value={phone}
+                                            onChange={(e) => setPhone(e.target.value)}
+                                            className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-[#233535] text-gray-900 dark:text-white"
+                                        />
+                                    </div>
+                                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                        El chofer lo verá para coordinar el viaje y soporte lo usa en caso de emergencia.
+                                    </p>
+                                </div>
+                            </>
+                        )}
+
                         <div>
                             <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                 Correo electrónico

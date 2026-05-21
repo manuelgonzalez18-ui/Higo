@@ -97,9 +97,13 @@ $ride = null;
 $counterpartId = null;
 $counterpartProfile = null;
 if ($rideId > 0) {
+    // NOTA: vehicle_model y license_plate viven en profiles, NO en rides.
+    // El SELECT viejo los pedía sobre rides y PostgREST devolvía 400,
+    // dejando $ride=null → contexto del viaje y contraparte en blanco
+    // en el mensaje SOS. Fix: pedir solo columnas reales de rides.
     [$rStatus, $rBody] = bl_http_get(
         $supaUrl . '/rest/v1/rides?id=eq.' . $rideId
-            . '&select=id,user_id,driver_id,pickup,dropoff,status,vehicle_model,license_plate,created_at',
+            . '&select=id,user_id,driver_id,pickup,dropoff,status,ride_type,service_type,created_at',
         ['apikey: ' . $supaSrv, 'Authorization: Bearer ' . $supaSrv]
     );
     if ($rStatus === 200) {
@@ -109,6 +113,8 @@ if ($rideId > 0) {
                 ? ($ride['driver_id'] ?? null)
                 : ($ride['user_id'] ?? null);
         }
+    } else {
+        error_log("[SOS] rides GET failed status=$rStatus body=" . substr((string) $rBody, 0, 200));
     }
 }
 if ($counterpartId) {

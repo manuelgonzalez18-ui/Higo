@@ -8,6 +8,29 @@ import { sendDeliveryMilestone } from '../utils/sendDeliveryMilestone';
 
 // Wait fee config
 const WAIT_RATES_PER_MIN = { moto: 0.05, standard: 0.08, van: 0.10 };
+
+// Hidrata el activeRide con datos públicos del pasajero (nombre + tel)
+// para que el chofer vea 'Juan Pérez' en vez de 'Pasajero' en el panel.
+// Usa la RPC get_public_profile (mig 34) que devuelve el subset seguro.
+// Idempotente: si ya hay passenger_name no sobrescribe.
+const hydratePassengerInfo = async (ride) => {
+    if (!ride || !ride.user_id) return ride;
+    if (ride.passenger_name) return ride;
+    try {
+        const { data } = await supabase.rpc('get_public_profile', { p_id: ride.user_id });
+        const p = Array.isArray(data) ? data[0] : data;
+        if (!p) return ride;
+        return {
+            ...ride,
+            passenger_name:  p.full_name || ride.passenger_name || null,
+            passenger_phone: ride.passenger_phone || p.phone || null,
+            passenger_avatar_url: p.avatar_url || null,
+        };
+    } catch (err) {
+        console.warn('hydratePassengerInfo failed:', err?.message || err);
+        return ride;
+    }
+};
 const FREE_WAIT_MINUTES = 3;
 
 const computeWaitFee = (rideType, seconds) => {
@@ -124,7 +147,8 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
                 .maybeSingle();
 
             if (data) {
-                setActiveRide(data);
+                const hydrated = await hydratePassengerInfo(data);
+                setActiveRide(hydrated);
                 setNavStep(data.status === 'accepted' ? 1 : 2);
             }
         };
@@ -175,7 +199,12 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
                 return;
             }
 
+            // Hidratamos asincrónicamente — UI ya puede dibujar con
+            // 'Pasajero' fallback y se actualiza cuando llega el profile.
             setActiveRide(ride);
+            hydratePassengerInfo(ride).then(hydrated => {
+                if (hydrated !== ride) setActiveRide(hydrated);
+            });
             if (setRequests) setRequests([]);
             stopLoopingRequestAlert();
             setNavStep(1);
