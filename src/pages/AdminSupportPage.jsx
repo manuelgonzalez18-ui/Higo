@@ -612,6 +612,15 @@ const AdminSupportPage = () => {
                                         </p>
                                         <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold border ${rb.cls}`}>{rb.label}</span>
                                     </div>
+                                    {/* Teléfono del usuario (subtle, antes del preview) */}
+                                    {p?.phone ? (
+                                        <p className="text-[10px] text-gray-500 truncate mt-0.5 flex items-center gap-1">
+                                            <span className="material-symbols-outlined text-[11px] leading-none">call</span>
+                                            {p.phone}
+                                        </p>
+                                    ) : (
+                                        <p className="text-[10px] text-amber-500/70 italic truncate mt-0.5">sin teléfono</p>
+                                    )}
                                     <p className={`text-xs truncate mt-0.5 ${isEmergency && t.unread_for_admin ? 'text-red-400 font-extrabold animate-pulse' : 'text-gray-400'}`}>
                                         {t.last_message_preview || <span className="italic">sin mensajes</span>}
                                     </p>
