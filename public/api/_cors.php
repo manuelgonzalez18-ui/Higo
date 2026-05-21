@@ -33,7 +33,29 @@ if (basename($_SERVER['SCRIPT_FILENAME'] ?? '') === basename(__FILE__)) {
  */
 function api_apply_cors(array $cfg, string $methods = 'POST, OPTIONS', array $extraHdrs = []): void {
     $origin    = (string) ($_SERVER['HTTP_ORIGIN'] ?? '');
-    $allowed   = (array) ($cfg['HIGOPAY_ALLOWED_ORIGINS'] ?? []);
+
+    // Whitelist desde config + fallback hardcoded de origins oficiales
+    // de producción. Si el config privado tuvo un drift (ej. guardado
+    // con www. y el browser manda sin www., o viceversa), los hosts
+    // canónicos SIEMPRE pasan. Esto evita 403s "fantasma" en endpoints
+    // críticos (SOS) cuando un sysadmin re-deploya el config viejo.
+    //
+    // capacitor://localhost y http://localhost cubren las webviews de
+    // Android/iOS y el dev server respectivamente.
+    $hardcodedAllowed = [
+        'https://higoapp.com',
+        'https://www.higoapp.com',
+        'https://higodriver.com',
+        'https://www.higodriver.com',
+        'capacitor://localhost',
+        'http://localhost',
+        'http://localhost:5173',
+        'http://localhost:5174',
+    ];
+    $allowed   = array_unique(array_merge(
+        $hardcodedAllowed,
+        (array) ($cfg['HIGOPAY_ALLOWED_ORIGINS'] ?? [])
+    ));
     $isAllowed = $origin !== '' && in_array($origin, $allowed, true);
 
     if ($isAllowed) {
