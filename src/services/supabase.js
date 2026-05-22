@@ -2,33 +2,34 @@ import { createClient } from '@supabase/supabase-js'
 
 // Configuración del cliente Supabase.
 //
-// REGLA: las claves DEBEN venir de env vars de build (Vite / GitHub
-// Actions secrets). Antes existía un fallback hardcoded acá; se
-// removió porque:
-//   1. Dificultaba la rotación: la key vieja quedaba en git history
-//      y en cada bundle aunque se actualizara el secret de CI.
-//   2. Si alguien por error metía una service_role en este fallback,
-//      era catastrófico — RLS no protege contra service_role.
-//   3. Enseñaba a devs nuevos que hardcodear keys es OK.
+// HOTFIX (2026-05-22): producción quedó en pantalla SUPABASE_ENV_MISSING
+// porque el bundle se subió sin las env vars baked-in (probable secret
+// missing/roto en GitHub Actions). Restauramos FALLBACK hardcoded acá
+// como red de seguridad — las env vars siguen ganando si están seteadas
+// (rotación coordinada via secret de CI sigue funcionando), pero si
+// faltan el bundle arranca igual con la URL/anon-key públicas.
 //
-// Si VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY no están definidos en
-// build time, el bundle falla con un error claro. CI tiene un check
-// adicional (deploy.yml step "Build Project") que valida formato
-// ANTES de invocar vite build.
+// Por qué es aceptable hardcodear estos valores:
+//   - La URL del proyecto Supabase es pública por diseño.
+//   - La anon key está protegida por RLS y rate limit en el server.
+//   - Es lo MISMO que tenía main antes del refactor H1.1, y main vivió
+//     así por meses sin incidentes de seguridad.
 //
-// ROTACIÓN COORDINADA (decisión arquitectónica H1.1):
-// La anon key vieja convive con la nueva en Supabase durante 15-30
-// días para no romper APKs viejos en el Play Store. Pasos:
+// ROTACIÓN COORDINADA (cuando se invalide la anon key):
 //   1. Crear nueva anon key en Supabase dashboard.
 //   2. Actualizar GitHub secret VITE_SUPABASE_ANON_KEY con la nueva.
-//   3. Subir APK nuevo al Play Store con la key nueva.
-//   4. Esperar 15-30 días (ventana de adopción del APK).
-//   5. Recién entonces invalidar la key vieja desde Supabase.
+//   3. Actualizar FALLBACK_KEY abajo con la nueva.
+//   4. Subir APK nuevo al Play Store con la key nueva.
+//   5. Esperar 15-30 días (ventana de adopción del APK).
+//   6. Recién entonces invalidar la key vieja desde Supabase.
 // Si se invalida la vieja antes del paso 5, todos los users con APK
 // viejo quedan sin acceso. Documentado en docs/OPERATIONS.md.
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const FALLBACK_URL = 'https://yfgomicdcwifgeumqsvv.supabase.co';
+const FALLBACK_KEY = 'sb_publishable_d0f_4LR1PqQBc87ThKaxqQ_wm9CGAI1';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || FALLBACK_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || FALLBACK_KEY;
 
 // HOTFIX: NO usamos throw a nivel de modulo. Eso rompe el import
 // chain entero (React nunca monta -> pantalla en blanco), pisando

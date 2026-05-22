@@ -60,17 +60,17 @@ jobs:
             echo "::error::VITE_GOOGLE_MAPS_API_KEY no tiene formato valido de Google API key (esperado: AIza + 35 chars alfanumericos/_-, total 39; recibido: ${#VITE_GOOGLE_MAPS_API_KEY} chars). Revisa el secret en GitHub: Settings > Secrets and variables > Actions. Causa comun: espacios, saltos de linea o comillas al pegar."
             exit 1
           fi
-          # H1.1 — validar Supabase env vars antes de buildear. Si faltan
-          # o tienen formato invalido, supabase.js hace throw y rompe el
-          # vite build con stack ruidoso; aca fallamos temprano con
-          # mensaje accionable para el dev/ops.
+          # Supabase env vars: warning si faltan/estan rotas, pero NO
+          # exit 1. supabase.js tiene FALLBACK hardcoded (hotfix
+          # 2026-05-22) que arranca el bundle con la URL/anon-key
+          # publicas si las env vars estan vacias. Mejor un deploy
+          # funcionando con fallback que un deploy bloqueado y prod
+          # rota.
           if [[ ! "$VITE_SUPABASE_URL" =~ ^https://[a-z0-9-]+\.supabase\.co$ ]]; then
-            echo "::error::VITE_SUPABASE_URL no tiene formato valido (esperado: https://<project-ref>.supabase.co; recibido len=${#VITE_SUPABASE_URL}). Revisa GitHub Secrets."
-            exit 1
+            echo "::warning::VITE_SUPABASE_URL no tiene formato valido (recibido len=${#VITE_SUPABASE_URL}). El bundle usara FALLBACK_URL de supabase.js. Revisa GitHub Secrets cuando puedas."
           fi
           if [[ "${#VITE_SUPABASE_ANON_KEY}" -lt 20 ]]; then
-            echo "::error::VITE_SUPABASE_ANON_KEY es sospechosamente corto (len=${#VITE_SUPABASE_ANON_KEY}, esperado >= 20 chars). Revisa GitHub Secrets."
-            exit 1
+            echo "::warning::VITE_SUPABASE_ANON_KEY es sospechosamente corto (len=${#VITE_SUPABASE_ANON_KEY}). El bundle usara FALLBACK_KEY de supabase.js. Revisa GitHub Secrets cuando puedas."
           fi
           npm run build
 
