@@ -24,12 +24,29 @@
 //   - Cargamos con `v=beta` porque PlaceAutocompleteElement aún
 //     requiere ese channel (cambiará a stable durante 2026).
 
-// FALLBACK hardcoded (igual que InteractiveMapGoogle): la clave tiene
-// restriccion 'Sitios web' a higoapp.com/* y www.higoapp.com/*.
-const FALLBACK_MAPS_KEY = 'AIzaSyBJ93K-DUeEQ-JVqPoIO1cw_ZUzOJORmJI';
+// FALLBACK hardcoded plataforma-aware (mismo patron que
+// InteractiveMapGoogle). La web key tiene restriccion 'Sitios web'
+// a higoapp.com/*; la Android queda sin restriccion de aplicacion
+// porque la webview Capacitor no lleva los headers que valida la
+// restriccion 'Apps para Android'.
+const FALLBACK_MAPS_KEY_WEB     = 'AIzaSyBJ93K-DUeEQ-JVqPoIO1cw_ZUzOJORmJI';
+const FALLBACK_MAPS_KEY_ANDROID = 'AIzaSyCA3knfvjFKZim2yo7VBPufiKo4WE0uiTM';
 
-const API_KEY = (typeof import.meta !== 'undefined'
-    && import.meta.env?.VITE_GOOGLE_MAPS_API_KEY) || FALLBACK_MAPS_KEY;
+const isCapacitorNative = () => {
+    try {
+        return !!(typeof window !== 'undefined'
+            && window.Capacitor
+            && window.Capacitor.isNativePlatform
+            && window.Capacitor.isNativePlatform());
+    } catch {
+        return false;
+    }
+};
+
+const fromEnv = (typeof import.meta !== 'undefined'
+    && import.meta.env?.VITE_GOOGLE_MAPS_API_KEY) || '';
+const API_KEY = fromEnv
+    || (isCapacitorNative() ? FALLBACK_MAPS_KEY_ANDROID : FALLBACK_MAPS_KEY_WEB);
 
 let loadPromise = null;
 

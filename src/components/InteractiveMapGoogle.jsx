@@ -661,14 +661,42 @@ const MapContent = ({
     );
 };
 
-// FALLBACK hardcoded de la web key de Google Maps. Mismo patrón que
-// supabase.js. La clave tiene restriccion 'Sitios web' a higoapp.com/*
-// y www.higoapp.com/*; otros origins no pueden usarla aunque la vean.
-// Si VITE_GOOGLE_MAPS_API_KEY esta seteada via CI, esa gana.
-const FALLBACK_MAPS_KEY = 'AIzaSyBJ93K-DUeEQ-JVqPoIO1cw_ZUzOJORmJI';
+// FALLBACK hardcoded de las keys de Google Maps. Mismo patron que
+// supabase.js. Tenemos DOS keys porque la restriccion de GCP no
+// puede ser cruzada:
+//   - WEB: restriccion 'Sitios web' a higoapp.com/*, www.higoapp.com/*.
+//     Otros origins reciben RefererNotAllowedMapError.
+//   - ANDROID: restriccion 'Ninguno' (Maps JS API desde la webview
+//     Capacitor no lleva headers X-Android-Package/Cert, asi que la
+//     restriccion 'Apps para Android' no valida. Sin restriccion de
+//     aplicacion las restricciones de API + el quota cap contienen
+//     el blast radius — patron estandar para Capacitor).
+//
+// Detectamos plataforma via window.Capacitor.isNativePlatform() —
+// Capacitor expone este global automaticamente en su webview Android/iOS.
+// Si VITE_GOOGLE_MAPS_API_KEY esta seteada via CI, gana sobre ambos.
+const FALLBACK_MAPS_KEY_WEB     = 'AIzaSyBJ93K-DUeEQ-JVqPoIO1cw_ZUzOJORmJI';
+const FALLBACK_MAPS_KEY_ANDROID = 'AIzaSyCA3knfvjFKZim2yo7VBPufiKo4WE0uiTM';
+
+const isCapacitorNative = () => {
+    try {
+        return !!(typeof window !== 'undefined'
+            && window.Capacitor
+            && window.Capacitor.isNativePlatform
+            && window.Capacitor.isNativePlatform());
+    } catch {
+        return false;
+    }
+};
+
+const getMapsApiKey = () => {
+    const fromEnv = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+    if (fromEnv) return fromEnv;
+    return isCapacitorNative() ? FALLBACK_MAPS_KEY_ANDROID : FALLBACK_MAPS_KEY_WEB;
+};
 
 const InteractiveMap = (props) => {
-    const [apiKey] = useState(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || FALLBACK_MAPS_KEY);
+    const [apiKey] = useState(getMapsApiKey());
     if (!apiKey) return <div className="text-white p-4">Loading Map... (Key Missing)</div>;
 
     return (
