@@ -102,12 +102,41 @@ const Directions = ({ origin, destination, onRouteData, routeColor }) => {
                     nextHeading = Math.atan2(e.lng() - s.lng(), e.lat() - s.lat()) * 180 / Math.PI;
                 }
 
+                // Steps completas para turn-by-turn voice nav. Google
+                // devuelve `instructions` con HTML (ej: "Turn <b>right</b>");
+                // limpiamos para que TTS pronuncie texto plano.
+                const stripHtml = (html) => {
+                    if (!html) return '';
+                    return html
+                        .replace(/<div[^>]*>/gi, '. ')
+                        .replace(/<\/div>/gi, '')
+                        .replace(/<br\s*\/?>/gi, '. ')
+                        .replace(/<[^>]+>/g, '')
+                        .replace(/&nbsp;/g, ' ')
+                        .replace(/&amp;/g, '&')
+                        .replace(/&lt;/g, '<')
+                        .replace(/&gt;/g, '>')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+                };
+
+                const stepsForNav = (leg.steps || []).map(step => ({
+                    instruction:     stripHtml(step.instructions),
+                    htmlInstruction: step.instructions,
+                    distance:        step.distance,
+                    duration:        step.duration,
+                    maneuver:        step.maneuver,
+                    start_location:  { lat: step.start_location.lat(), lng: step.start_location.lng() },
+                    end_location:    { lat: step.end_location.lat(),   lng: step.end_location.lng() },
+                }));
+
                 onRouteData({
                     duration: leg.duration,
                     distance: leg.distance,
                     end_location: leg.end_location,
                     start_location: leg.start_location,
                     overviewPath: overviewPath.map(p => ({ lat: p.lat(), lng: p.lng() })),
+                    steps: stepsForNav,
                     next_step: nextStep ? {
                         instruction: nextStep.instructions,
                         distance: nextStep.distance,
