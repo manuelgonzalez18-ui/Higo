@@ -45,6 +45,10 @@ const TermsOfDeliveryPage     = lazy(() => import('./pages/TermsOfDeliveryPage')
 const PrivacyPage             = lazy(() => import('./pages/PrivacyPage'));
 const PublicTrackingPage      = lazy(() => import('./pages/PublicTrackingPage'));
 
+// Anexo C / M1 — sandbox de Mapbox solo en dev. En producción el chunk
+// no se carga porque la ruta no se monta (gate import.meta.env.DEV abajo).
+const MapboxSandbox           = lazy(() => import('./components/_dev/MapboxSandbox'));
+
 import { useEffect, useState } from 'react';
 import { initGlobalAudio } from './services/notificationService';
 import { ensureFcmRegistration, subscribeForegroundMessages } from './services/pushNotifications';
@@ -262,6 +266,9 @@ const App = () => {
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/track/:token" element={<PublicTrackingPage />} />
         <Route path="/delivery/:rideId/receipt" element={<DeliveryReceiptPage />} />
+        {import.meta.env.DEV && (
+          <Route path="/sandbox-mapbox" element={<MapboxSandbox />} />
+        )}
       </Routes>
       </Suspense>
       <ChatWidget />

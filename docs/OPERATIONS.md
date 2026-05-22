@@ -5,6 +5,52 @@ Cualquier cosa que se haga >2 veces termina acá.
 
 ---
 
+## Cambiar motor de mapas (Mapbox ↔ Google)
+
+El motor visual se controla con la env var `VITE_MAP_ENGINE`:
+
+- `google` (default, legacy): usa `InteractiveMapGoogle.jsx` + `@vis.gl/react-google-maps`.
+- `mapbox`: usa `InteractiveMapMapbox.jsx` + `mapbox-gl`. Requiere `VITE_MAPBOX_TOKEN`.
+
+**Cambiar en producción:**
+
+1. GitHub → Settings → Secrets → `VITE_MAP_ENGINE` = `mapbox` (o viceversa).
+2. Push commit vacío en `main`: `git commit --allow-empty -m "chore: switch map engine" && git push`.
+3. Workflow `Deploy to Hostinger` rehidrata el build con la nueva flag.
+4. Smoke test (workflow lo hace solo): curl + `grep "Higo - Tecnología"`.
+
+**Si Mapbox falla en producción** (errores en `client_errors` con route `/`, `/ride/`, `/driver`):
+
+```bash
+# Rollback inmediato — sin tocar código.
+gh secret set VITE_MAP_ENGINE -b "google"
+git commit --allow-empty -m "rollback: map engine back to google"
+git push origin main
+```
+
+**Restricciones de tokens** (importante para no leak):
+
+- Mapbox dashboard → tokens → URL restrictions: `https://higoapp.com/*`,
+  `https://www.higoapp.com/*`, `https://higodriver.com/*`,
+  `capacitor://localhost/*`, `http://localhost:*`.
+- Google Maps Cloud Console → API key → restricciones: misma lista de
+  HTTP referrers + SHA-1 del APK Android para builds nativos.
+
+**Verificar billing**:
+
+- Mapbox: dashboard → usage. Free tier = 50K map loads/mes + 50K
+  Directions requests/mes. Si el counter se acerca al 80%, escalar
+  el plan o reducir uso (cache de tiles via SW).
+- Google Cloud → Billing → SKU breakdown:
+  - "Places API (New) — Autocomplete Session" debe ser ≪ "Per Request".
+  - "Maps JavaScript Map Loads" debe caer ~ a 0 cuando `VITE_MAP_ENGINE=mapbox`.
+
+**WebGL fallback**: el wrapper `InteractiveMap.jsx` detecta automáticamente
+si el WebView no tiene WebGL y cae a Google aunque la flag sea `mapbox`.
+No requiere intervención.
+
+---
+
 ## Rollback de un deploy roto
 
 El deploy a Hostinger se dispara con cada push a `main` (workflow

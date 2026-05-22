@@ -14,8 +14,11 @@ const getAi = () => {
     return _ai;
 };
 
-// Mock Data for Fallback
-const MOCK_LOCATIONS = [
+// Mock Data for Fallback. Exportado para que LocationInput.jsx (Anexo C)
+// use el dataset como source local antes de ir a Google Places (New)
+// y evite quemar sesiones cobradas en queries que matchean Higuerote
+// trivialmente.
+export const MOCK_HIGUEROTE_LOCATIONS = [
     { title: "Panaderia Bisau", address: "Higuerote, Miranda", lat: 10.48424, lng: -66.09871 },
     { title: "Alamar", address: "Higuerote, Miranda", lat: 10.412485185404462, lng: -66.1378176707 },
     { title: "Asocanales", address: "Higuerote, Miranda", lat: 10.498549543479797, lng: -66.1134562060818 },
@@ -216,7 +219,7 @@ export const searchPlaces = async (query, userLocation) => {
     const getFilteredSuggestions = () => {
         if (!query) return [];
         const lowerQ = query.toLowerCase();
-        return MOCK_LOCATIONS.filter(place =>
+        return MOCK_HIGUEROTE_LOCATIONS.filter(place =>
             place.title.toLowerCase().includes(lowerQ) ||
             place.address.toLowerCase().includes(lowerQ)
         );
