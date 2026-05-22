@@ -39,7 +39,14 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          # Maps key SEPARADO del de web (deploy.yml usa VITE_GOOGLE_MAPS_API_KEY,
+          # restringido a 'Sitios web' con higoapp.com/*). La APK corre dentro de
+          # una webview Capacitor cuyo referer es capacitor://localhost — no matchea
+          # la restriccion web. Por eso usamos otra clave (ANDROID_GOOGLE_MAPS_API_KEY)
+          # restringida a 'Apps para Android' con com.higoapp.ve + SHA-1.
+          # Si al runtime la clave Android no valida via X-Android-Package/Cert
+          # desde la webview, cambiar la restriccion a 'Ninguno' en GCP Console.
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.ANDROID_GOOGLE_MAPS_API_KEY }}
           VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
