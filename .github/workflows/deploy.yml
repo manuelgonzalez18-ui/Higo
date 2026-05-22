@@ -78,6 +78,23 @@ jobs:
           if [[ "${#VITE_SUPABASE_ANON_KEY}" -lt 20 ]]; then
             echo "::warning::VITE_SUPABASE_ANON_KEY es sospechosamente corto (len=${#VITE_SUPABASE_ANON_KEY}). El bundle usara FALLBACK_KEY de supabase.js. Revisa GitHub Secrets cuando puedas."
           fi
+          # Mapbox: si el motor esta seteado a 'mapbox', exigir token con
+          # formato pk.* y longitud razonable. Sin esto, un secret vacio o
+          # malformado se baked-in como '' al bundle y mapbox-gl dibuja
+          # solo los controles DOM sin tiles (incidente 2026-05-22).
+          # Si el motor es 'google' no validamos — el token puede no estar.
+          echo "VITE_MAP_ENGINE: $VITE_MAP_ENGINE"
+          echo "VITE_MAPBOX_TOKEN length: ${#VITE_MAPBOX_TOKEN}"
+          if [[ "$VITE_MAP_ENGINE" == "mapbox" ]]; then
+            if [[ ! "$VITE_MAPBOX_TOKEN" =~ ^pk\.[A-Za-z0-9_-]+$ ]]; then
+              echo "::error::VITE_MAP_ENGINE=mapbox pero VITE_MAPBOX_TOKEN no tiene formato valido (esperado: pk.<base64url>; recibido len=${#VITE_MAPBOX_TOKEN}). El bundle saldria con tiles en blanco. Carga el secret en GitHub > Settings > Secrets and variables > Actions o cambia VITE_MAP_ENGINE a 'google'."
+              exit 1
+            fi
+            if [[ "${#VITE_MAPBOX_TOKEN}" -lt 60 ]]; then
+              echo "::error::VITE_MAPBOX_TOKEN es sospechosamente corto (len=${#VITE_MAPBOX_TOKEN}, esperado >= 60 chars). Probable token truncado al pegar."
+              exit 1
+            fi
+          fi
           npm run build
 
       # lftp con xfer:clobber on + ftp:use-allo off para que suba cada
