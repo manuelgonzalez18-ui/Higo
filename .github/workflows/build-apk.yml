@@ -1,8 +1,10 @@
 name: Build Android APK
 
 # Se dispara manualmente (Actions → Build Android APK → Run workflow)
-# o cuando se crea un tag v*. El APK debug queda disponible como artifact
-# durante 14 días.
+# o cuando se crea un tag v*. Genera:
+#   - AAB release firmado (para subir a Play Store)
+#   - APK release firmado (para instalar y testear en device real)
+# Ambos quedan como artifacts del run durante 14 días.
 on:
   workflow_dispatch:
   push:
@@ -63,26 +65,44 @@ jobs:
       - name: Grant execute permission on gradlew
         run: chmod +x android/gradlew
 
-      - name: Build Debug APK
+      # Genera el AAB (Android App Bundle) firmado para Play Store y el
+      # APK release firmado para testear en dispositivo real. Ambos usan
+      # el signingConfig 'release' definido en android/app/build.gradle
+      # (keystore release-key.jks). bundleRelease produce .aab,
+      # assembleRelease produce .apk — corremos los dos en una sola
+      # invocacion de gradle para reusar el daemon y la cache.
+      - name: Build Release AAB + APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew bundleRelease assembleRelease --no-daemon
 
-      - name: Rename APK with commit SHA
+      - name: Rename artifacts with commit SHA
         run: |
           SHORT_SHA=${GITHUB_SHA::7}
-          cp android/app/build/outputs/apk/debug/app-debug.apk higo-${SHORT_SHA}-debug.apk
-          ls -lh higo-*.apk
+          cp android/app/build/outputs/bundle/release/app-release.aab higo-${SHORT_SHA}-release.aab
+          cp android/app/build/outputs/apk/release/app-release.apk    higo-${SHORT_SHA}-release.apk
+          ls -lh higo-*.aab higo-*.apk
 
-      - name: Upload APK artifact
+      # AAB: para subir a Play Console (Production / Internal testing).
+      - name: Upload AAB artifact (for Play Store)
         uses: actions/upload-artifact@v4
         with:
-          name: higo-debug-apk
-          path: higo-*-debug.apk
+          name: higo-release-aab
+          path: higo-*-release.aab
           retention-days: 14
 
-      - name: Attach APK to release (only on tag push)
+      # APK: para instalar y testear en device antes de subir.
+      - name: Upload APK artifact (for device testing)
+        uses: actions/upload-artifact@v4
+        with:
+          name: higo-release-apk
+          path: higo-*-release.apk
+          retention-days: 14
+
+      - name: Attach to GitHub release (only on tag push)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: higo-*-debug.apk
+          files: |
+            higo-*-release.aab
+            higo-*-release.apk
           generate_release_notes: true
