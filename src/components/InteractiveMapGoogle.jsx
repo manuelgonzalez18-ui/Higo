@@ -661,8 +661,14 @@ const MapContent = ({
     );
 };
 
+// FALLBACK hardcoded de la web key de Google Maps. Mismo patrón que
+// supabase.js. La clave tiene restriccion 'Sitios web' a higoapp.com/*
+// y www.higoapp.com/*; otros origins no pueden usarla aunque la vean.
+// Si VITE_GOOGLE_MAPS_API_KEY esta seteada via CI, esa gana.
+const FALLBACK_MAPS_KEY = 'AIzaSyBJ93K-DUeEQ-JVqPoIO1cw_ZUzOJORmJI';
+
 const InteractiveMap = (props) => {
-    const [apiKey] = useState(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '');
+    const [apiKey] = useState(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || FALLBACK_MAPS_KEY);
     if (!apiKey) return <div className="text-white p-4">Loading Map... (Key Missing)</div>;
 
     return (

@@ -24,8 +24,12 @@
 //   - Cargamos con `v=beta` porque PlaceAutocompleteElement aún
 //     requiere ese channel (cambiará a stable durante 2026).
 
+// FALLBACK hardcoded (igual que InteractiveMapGoogle): la clave tiene
+// restriccion 'Sitios web' a higoapp.com/* y www.higoapp.com/*.
+const FALLBACK_MAPS_KEY = 'AIzaSyBJ93K-DUeEQ-JVqPoIO1cw_ZUzOJORmJI';
+
 const API_KEY = (typeof import.meta !== 'undefined'
-    && import.meta.env?.VITE_GOOGLE_MAPS_API_KEY) || '';
+    && import.meta.env?.VITE_GOOGLE_MAPS_API_KEY) || FALLBACK_MAPS_KEY;
 
 let loadPromise = null;
 
