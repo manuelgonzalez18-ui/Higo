@@ -5,6 +5,7 @@ import InteractiveMap from '../components/InteractiveMap';
 import { useDriverMembership } from '../hooks/useDriverMembership';
 import { useBackgroundLocation } from '../hooks/useBackgroundLocation';
 import { useDriverActiveTrip } from '../hooks/useDriverActiveTrip';
+import { useVoiceNavigation } from '../hooks/useVoiceNavigation';
 
 // Modular overlays
 import IncomingRequestCard from '../components/driver/IncomingRequestCard';
@@ -216,6 +217,17 @@ const DriverDashboard = () => {
         lastSentTimeRef,
         lastLocationRef
     } = useBackgroundLocation(profile, isOnline, activeRide, processRequests);
+
+    // Turn-by-turn voice navigation. Sólo activa cuando hay un viaje
+    // activo (no decimos nada al chofer mientras espera solicitudes).
+    // El hook anuncia cada maniobra a 300m, vuelve a anunciar a 50m,
+    // y dice "Has llegado a tu destino" al final de la ruta.
+    useVoiceNavigation({
+        steps:           navInfo?.steps,
+        currentLocation: currentLoc,
+        enabled:         !!activeRide,
+        speak,
+    });
 
     // Initial User Authentication and session checks
     const checkUser = async () => {
