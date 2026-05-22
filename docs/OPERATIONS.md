@@ -30,9 +30,26 @@ git push origin main
 
 **Restricciones de tokens** (importante para no leak):
 
-- Mapbox dashboard → tokens → URL restrictions: `https://higoapp.com/*`,
-  `https://www.higoapp.com/*`, `https://higodriver.com/*`,
-  `capacitor://localhost/*`, `http://localhost:*`.
+> ⚠️ **NO usar el "Default public token"** del dashboard de Mapbox. Ese
+> token NO soporta URL restrictions ("URL restrictions are not supported
+> for default tokens"). Para producción hay que crear un token nuevo:
+>
+> Mapbox dashboard → Account → Access tokens → **Create a token** →
+> Name: `higoapp-prod` → Scopes públicos default (Styles:Read, Fonts:Read,
+> Datasets:Read, Vision:Read) → URL restrictions: agregar la lista de
+> abajo → **Create token** → copiar el `pk.*` resultante a
+> `VITE_MAPBOX_TOKEN` en GitHub Secrets.
+>
+> Si ya estás usando el default token, generá uno nuevo y rotalo
+> reemplazando el secret. El default queda inactivo (no se borra, sirve
+> para dev local en `.env`).
+
+- Mapbox token de producción → URL restrictions:
+  - `https://higoapp.com/*`
+  - `https://www.higoapp.com/*`
+  - `https://higodriver.com/*`
+  - `capacitor://localhost/*`
+  - `http://localhost:*`
 - Google Maps Cloud Console → API key → restricciones: misma lista de
   HTTP referrers + SHA-1 del APK Android para builds nativos.
 
