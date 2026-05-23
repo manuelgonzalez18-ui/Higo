@@ -140,6 +140,11 @@ const App = () => {
 
     const checkSession = async () => {
       try {
+        const path = window.location.hash.split('?')[0];
+        if (path === '#/auth' || path === '#/admin') {
+          return;
+        }
+
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
@@ -222,6 +227,11 @@ const App = () => {
           table: 'profiles',
           filter: `id=eq.${user.id}`
         }, (payload) => {
+          const path = window.location.hash.split('?')[0];
+          if (path === '#/auth' || path === '#/admin') {
+            return;
+          }
+
           const dbSessionId = payload.new.current_session_id;
           const localSessionId = localStorage.getItem('session_id');
 
