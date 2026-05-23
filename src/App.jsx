@@ -57,6 +57,8 @@ import { supabase } from './services/supabase';
 import { useGeolocation } from './hooks/useGeolocation';
 import LocationDisclosure from './components/LocationDisclosure';
 import { ToastProvider, toast } from './components/Toast';
+import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
 
 // Rutas donde NO chequeamos onboarding (sino entraríamos en loop o
 // gateamos a usuarios que no son pasajeros).
@@ -134,6 +136,32 @@ const App = () => {
   // una fase con bandwidth para coordinar el bump de versión nativa.
   useEffect(() => {
     let channel;
+    let nativeListener;
+
+    const checkSession = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('current_session_id')
+          .eq('id', user.id)
+          .single();
+
+        const localSessionId = localStorage.getItem('session_id');
+
+        if (profile && profile.current_session_id && localSessionId && profile.current_session_id !== localSessionId) {
+          toast.error("⚠️ Tu cuenta se ha abierto en otro dispositivo. Se cerrará la sesión en este equipo.");
+          await supabase.auth.signOut();
+          localStorage.removeItem('session_id');
+          window.location.href = '#/auth';
+          window.location.reload();
+        }
+      } catch (err) {
+        console.error('[SessionWatch] Error checking session:', err);
+      }
+    };
 
     const teardown = () => {
       if (channel) {
@@ -147,7 +175,10 @@ const App = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Monitor local session changes
+      // 1. Comprobación estática inicial al arrancar
+      await checkSession();
+
+      // 2. Suscripción a cambios Postgres en tiempo real
       channel = supabase
         .channel(`global_session:${user.id}`)
         .on('postgres_changes', {
@@ -185,9 +216,37 @@ const App = () => {
       }
     });
 
+    // 3. Listener para visibilidad web (cambios de tab / desenfoque)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkSession();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // 4. Listener para reanudación nativa desde segundo plano (Capacitor)
+    const setupNativeResume = async () => {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          nativeListener = await CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+            if (isActive) {
+              checkSession();
+            }
+          });
+        } catch (e) {
+          console.warn('[SessionWatch] App plugin listener not available:', e);
+        }
+      }
+    };
+    setupNativeResume();
+
     return () => {
       authSub?.subscription?.unsubscribe?.();
       teardown();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (nativeListener) {
+        nativeListener.remove();
+      }
     };
   }, []);
 

@@ -22,8 +22,12 @@ require_once __DIR__ . '/_cors.php';
 require_once __DIR__ . '/_ratelimit.php';
 
 const BCV_URL        = 'https://ve.dolarapi.com/v1/dolares/oficial';
-const BCV_CACHE_FILE = '/tmp/higo-bcv-rate.json';
 const BCV_CACHE_TTL  = 3600; // 1 hora
+
+// Detección dinámica de carpeta temporal portable en Linux/Windows/Hostinger
+$bcv_temp_dir   = (is_dir('/tmp') && is_writable('/tmp')) ? '/tmp' : sys_get_temp_dir();
+$bcv_cache_file = $bcv_temp_dir . '/higo-bcv-rate.json';
+$bcv_ratelimit_file = $bcv_temp_dir . '/higo_ratelimit.log';
 
 function bcv_send(int $status, array $body): void {
     http_response_code($status);
@@ -38,17 +42,17 @@ function bcv_send(int $status, array $body): void {
 // gratis a terceros. Quien quiera la tasa puede ir directo al origen.
 $_cfg_cors = function_exists('bl_load_config') ? bl_load_config() : [];
 api_apply_cors($_cfg_cors, 'GET, OPTIONS');
-api_rate_limit('bcv-rate', 60, '/tmp/higo_ratelimit.log');
+api_rate_limit('bcv-rate', 60, $bcv_ratelimit_file);
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(204);
     exit;
 }
 
 // 1. Intentar servir desde cache fresco.
-if (is_file(BCV_CACHE_FILE)) {
-    $age = time() - (int) @filemtime(BCV_CACHE_FILE);
+if (is_file($bcv_cache_file)) {
+    $age = time() - (int) @filemtime($bcv_cache_file);
     if ($age < BCV_CACHE_TTL) {
-        $cached = @json_decode((string) @file_get_contents(BCV_CACHE_FILE), true);
+        $cached = @json_decode((string) @file_get_contents($bcv_cache_file), true);
         if (is_array($cached) && !empty($cached['rate'])) {
             $cached['cached'] = true;
             bcv_send(200, $cached);
@@ -74,12 +78,12 @@ try {
         'fetchedAt' => $data['fechaActualizacion'] ?? gmdate('c'),
         'cached'    => false,
     ];
-    @file_put_contents(BCV_CACHE_FILE, json_encode($payload));
+    @file_put_contents($bcv_cache_file, json_encode($payload));
     bcv_send(200, $payload);
 } catch (Throwable $e) {
     // 3. Fallback: si tenemos cache vencido, servirlo igual antes que nada.
-    if (is_file(BCV_CACHE_FILE)) {
-        $stale = @json_decode((string) @file_get_contents(BCV_CACHE_FILE), true);
+    if (is_file($bcv_cache_file)) {
+        $stale = @json_decode((string) @file_get_contents($bcv_cache_file), true);
         if (is_array($stale) && !empty($stale['rate'])) {
             $stale['cached'] = true;
             $stale['stale']  = true;

@@ -127,6 +127,8 @@ function bl_http_get(string $url, array $headers, int $timeout = 15): array {
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => $timeout,
         CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => 0,
         CURLOPT_HTTPHEADER     => $headers,
     ]);
     $resp   = curl_exec($ch);
