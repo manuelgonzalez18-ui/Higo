@@ -105,10 +105,14 @@ const AuthPage = () => {
 
                 // Enforce Single Session for all roles
                 const newSessionId = self.crypto.randomUUID();
-                await supabase
+                const { error: sessionError } = await supabase
                     .from('profiles')
                     .update({ current_session_id: newSessionId })
                     .eq('id', user.id);
+
+                if (sessionError) {
+                    console.error('[AuthPage] Error updating session_id in profiles:', sessionError);
+                }
 
                 localStorage.setItem('session_id', newSessionId);
 

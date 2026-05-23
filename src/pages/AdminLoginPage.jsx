@@ -50,10 +50,14 @@ const AdminLoginPage = () => {
 
             // Enforce single session, igual que el AuthPage público.
             const newSessionId = self.crypto.randomUUID();
-            await supabase
+            const { error: sessionError } = await supabase
                 .from('profiles')
                 .update({ current_session_id: newSessionId })
                 .eq('id', user.id);
+
+            if (sessionError) {
+                console.error('[AdminLoginPage] Error updating session_id in profiles:', sessionError);
+            }
             localStorage.setItem('session_id', newSessionId);
 
             navigate('/admin/dashboard', { replace: true });

@@ -143,20 +143,55 @@ const App = () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const { data: profile } = await supabase
+        const { data: profile, error } = await supabase
           .from('profiles')
           .select('current_session_id')
           .eq('id', user.id)
           .single();
 
-        const localSessionId = localStorage.getItem('session_id');
+        if (error) {
+          console.error('[SessionWatch] Error fetching profile:', error);
+          if (error.code === 'PGRST116') {
+            const newSessionId = self.crypto.randomUUID();
+            localStorage.setItem('session_id', newSessionId);
+            await supabase
+              .from('profiles')
+              .upsert({ id: user.id, current_session_id: newSessionId });
+          }
+          return;
+        }
 
-        if (profile && profile.current_session_id && localSessionId && profile.current_session_id !== localSessionId) {
-          toast.error("⚠️ Tu cuenta se ha abierto en otro dispositivo. Se cerrará la sesión en este equipo.");
-          await supabase.auth.signOut();
-          localStorage.removeItem('session_id');
-          window.location.href = '#/auth';
-          window.location.reload();
+        const localSessionId = localStorage.getItem('session_id');
+        const dbSessionId = profile?.current_session_id;
+
+        if (!localSessionId) {
+          if (!dbSessionId) {
+            const newSessionId = self.crypto.randomUUID();
+            localStorage.setItem('session_id', newSessionId);
+            await supabase
+              .from('profiles')
+              .update({ current_session_id: newSessionId })
+              .eq('id', user.id);
+          } else {
+            toast.error("⚠️ Sesión no autorizada. Por favor, inicia sesión de nuevo.");
+            await supabase.auth.signOut();
+            localStorage.removeItem('session_id');
+            window.location.href = '#/auth';
+            window.location.reload();
+          }
+        } else {
+          if (!dbSessionId) {
+            await supabase
+              .from('profiles')
+              .update({ current_session_id: localSessionId })
+              .eq('id', user.id);
+          } else if (dbSessionId !== localSessionId) {
+            toast.error("⚠️ Tu cuenta se ha abierto en otro dispositivo. Se cerrará la sesión en este equipo.");
+            await supabase.auth.signOut();
+            localStorage.removeItem('session_id');
+            window.location.href = '#/auth';
+            window.location.reload();
+          }
         }
       } catch (err) {
         console.error('[SessionWatch] Error checking session:', err);
