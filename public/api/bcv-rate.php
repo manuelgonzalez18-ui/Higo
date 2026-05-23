@@ -40,7 +40,11 @@ function bcv_send(int $status, array $body): void {
 // CORS: aunque la tasa BCV es info pública (la fuente dolarapi.com es
 // abierta), restringimos a nuestros dominios para no servir de cache
 // gratis a terceros. Quien quiera la tasa puede ir directo al origen.
-$_cfg_cors = function_exists('bl_load_config') ? bl_load_config() : [];
+try {
+    $_cfg_cors = function_exists('bl_load_config') ? bl_load_config() : [];
+} catch (Throwable $e) {
+    $_cfg_cors = [];
+}
 api_apply_cors($_cfg_cors, 'GET, OPTIONS');
 api_rate_limit('bcv-rate', 60, $bcv_ratelimit_file);
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {

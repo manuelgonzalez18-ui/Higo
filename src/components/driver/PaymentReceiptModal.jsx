@@ -167,25 +167,6 @@ const PaymentReceiptModal = ({
                     </div>
                 </div>
 
-                {/* Venezuelan Pago Móvil standard parameters (Banesco) */}
-                <div className="bg-blue-900/10 border border-blue-500/10 rounded-2xl p-3.5 text-left mb-6 text-xs space-y-2">
-                    <p className="text-[9px] text-blue-400 font-black uppercase tracking-wider mb-1 flex items-center gap-1">
-                        <span className="material-symbols-outlined text-sm">info</span>
-                        Datos de Pago Móvil (Banesco)
-                    </p>
-                    <div className="flex justify-between text-gray-300">
-                        <span className="text-gray-500">Teléfono:</span>
-                        <span className="font-bold text-white">{profile?.phone || profile?.passenger_phone || "No configurado"}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-300">
-                        <span className="text-gray-500">Cédula:</span>
-                        <span className="font-bold text-white">{profile?.national_id || "No registrada"}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-300">
-                        <span className="text-gray-500">Banco:</span>
-                        <span className="font-bold text-white">Banesco (0134)</span>
-                    </div>
-                </div>
 
                 {/* Bilateral Confirmation Status Indicators (Only during navStep 2 end of trip) */}
                 {navStep === 2 && (

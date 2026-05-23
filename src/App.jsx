@@ -224,7 +224,13 @@ const App = () => {
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // 4. Listener para reanudación nativa desde segundo plano (Capacitor)
+    // 4. Listener para cambios de ruta en HashRouter (navegación activa)
+    window.addEventListener('hashchange', checkSession);
+
+    // 5. Comprobación periódica proactiva cada 10 segundos
+    const periodicTimer = setInterval(checkSession, 10000);
+
+    // 6. Listener para reanudación nativa desde segundo plano (Capacitor)
     const setupNativeResume = async () => {
       if (Capacitor.isNativePlatform()) {
         try {
@@ -244,6 +250,8 @@ const App = () => {
       authSub?.subscription?.unsubscribe?.();
       teardown();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('hashchange', checkSession);
+      clearInterval(periodicTimer);
       if (nativeListener) {
         nativeListener.remove();
       }
