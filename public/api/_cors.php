@@ -40,14 +40,17 @@ function api_apply_cors(array $cfg, string $methods = 'POST, OPTIONS', array $ex
     // canónicos SIEMPRE pasan. Esto evita 403s "fantasma" en endpoints
     // críticos (SOS) cuando un sysadmin re-deploya el config viejo.
     //
-    // capacitor://localhost y http://localhost cubren las webviews de
-    // Android/iOS y el dev server respectivamente.
+    // capacitor://localhost cubre iOS y Android con scheme default;
+    // https://localhost cubre Android cuando capacitor.config tiene
+    // androidScheme:'https' (nuestra config actual). http://localhost
+    // cubre el dev server de Vite.
     $hardcodedAllowed = [
         'https://higoapp.com',
         'https://www.higoapp.com',
         'https://higodriver.com',
         'https://www.higodriver.com',
         'capacitor://localhost',
+        'https://localhost',
         'http://localhost',
         'http://localhost:5173',
         'http://localhost:5174',
