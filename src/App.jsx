@@ -135,7 +135,15 @@ const App = () => {
   useEffect(() => {
     let channel;
 
+    const teardown = () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+        channel = null;
+      }
+    };
+
     const setupSessionWatcher = async () => {
+      teardown();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
@@ -165,8 +173,21 @@ const App = () => {
 
     setupSessionWatcher();
 
+    // Re-setup tras SIGNED_IN — el useEffect inicial corre cuando el user
+    // aun no esta cargado (sesion null en el bootstrap), asi que sin esto
+    // el watcher no se arma despues del login y la segunda sesion no
+    // expulsa a la primera.
+    const { data: authSub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        setupSessionWatcher();
+      } else if (event === 'SIGNED_OUT') {
+        teardown();
+      }
+    });
+
     return () => {
-      if (channel) supabase.removeChannel(channel);
+      authSub?.subscription?.unsubscribe?.();
+      teardown();
     };
   }, []);
 
