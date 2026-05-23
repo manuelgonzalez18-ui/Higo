@@ -1,4 +1,5 @@
 import { supabase } from '../services/supabase';
+import { apiUrl } from './apiUrl';
 
 /**
  * Dispara el envío de correo de notificación al cliente cuando el chofer
@@ -20,7 +21,7 @@ export const triggerPodEmail = async ({ rideId, kind, podPath }) => {
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 5000);
 
-        const res = await fetch('/api/send-delivery-pod-email.php', {
+        const res = await fetch(apiUrl('/api/send-delivery-pod-email.php'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

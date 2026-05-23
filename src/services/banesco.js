@@ -3,6 +3,7 @@
 // privadas; aquí sólo enviamos los datos del pago + el JWT de Supabase.
 
 import { supabase } from './supabase';
+import { apiUrl } from '../utils/apiUrl';
 
 export const VENEZUELAN_BANKS = [
     { code: '0102', name: 'Banco de Venezuela' },
@@ -51,7 +52,7 @@ export async function validateBanescoPayment({ reference, amount, phone, date, b
 
     let resp;
     try {
-        resp = await fetch('/api/banesco-validate.php', {
+        resp = await fetch(apiUrl('/api/banesco-validate.php'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

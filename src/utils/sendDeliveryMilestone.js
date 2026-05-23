@@ -1,4 +1,5 @@
 import { supabase } from '../services/supabase';
+import { apiUrl } from './apiUrl';
 
 // Dispara un push al remitente cuando el chofer cambia el status de un envío.
 // Fire-and-forget desde DriverDashboard: el chofer ya hizo el UPDATE en
@@ -22,7 +23,7 @@ export const sendDeliveryMilestone = async ({ rideId, status }) => {
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 5000);
 
-        const res = await fetch('/api/send-delivery-milestone.php', {
+        const res = await fetch(apiUrl('/api/send-delivery-milestone.php'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

@@ -2,6 +2,8 @@
 // Devuelve la tasa oficial USD→Bs del BCV. La cachea 1 hora server-side
 // y 5 min browser-side, así que llamarla en cada render es barato.
 
+import { apiUrl } from '../utils/apiUrl';
+
 let inflight = null;
 
 /**
@@ -12,7 +14,7 @@ export async function getOfficialBcvRate() {
     if (inflight) return inflight;
     inflight = (async () => {
         try {
-            const r = await fetch('/api/bcv-rate.php', { headers: { Accept: 'application/json' } });
+            const r = await fetch(apiUrl('/api/bcv-rate.php'), { headers: { Accept: 'application/json' } });
             if (!r.ok) return null;
             const body = await r.json();
             if (!body?.ok || !body?.rate) return null;
