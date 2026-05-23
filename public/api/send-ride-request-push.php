@@ -110,11 +110,17 @@ $rideId      = isset($record['id']) ? (string) $record['id'] : '';
 $pickupLat   = isset($record['pickup_lat']) ? (float) $record['pickup_lat'] : null;
 $pickupLng   = isset($record['pickup_lng']) ? (float) $record['pickup_lng'] : null;
 $status      = (string) ($record['status'] ?? '');
-$vehicleType = strtolower((string) ($record['vehicle_type'] ?? 'standard'));
-$serviceType = strtolower((string) ($record['service_type'] ?? 'passenger'));
-$pickupAddr  = (string) ($record['pickup_address'] ?? '');
-$dropoffAddr = (string) ($record['dropoff_address'] ?? '');
-$priceUsd    = $record['price_usd'] ?? $record['fare_usd'] ?? null;
+// Schema real de public.rides (ver ConfirmTripPage.jsx):
+//   ride_type    = vehiculo solicitado (moto/standard/van) — NO vehicle_type
+//   service_type = 'ride' (default) o 'delivery'
+//   pickup       = direccion texto del pickup (NO pickup_address)
+//   dropoff      = direccion texto del dropoff
+//   price        = precio en USD (NO price_usd/fare_usd)
+$vehicleType = strtolower((string) ($record['ride_type'] ?? 'standard'));
+$serviceType = strtolower((string) ($record['service_type'] ?? 'ride'));
+$pickupAddr  = (string) ($record['pickup'] ?? '');
+$dropoffAddr = (string) ($record['dropoff'] ?? '');
+$priceUsd    = $record['price'] ?? null;
 
 if ($rideId === '' || $pickupLat === null || $pickupLng === null) {
     srp_send(400, ['ok' => false, 'error' => 'bad_record', 'detail' => 'missing id/pickup_lat/pickup_lng']);
