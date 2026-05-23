@@ -5,6 +5,7 @@ import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { supabase } from '../services/supabase';
 import { validateBanescoPayment, VENEZUELAN_BANKS } from '../services/banesco';
 import { getOfficialBcvRate } from '../services/bcv';
+import { apiUrl } from '../utils/apiUrl';
 import { useDriverMembership } from '../hooks/useDriverMembership';
 
 const isNative = Capacitor.isNativePlatform();
@@ -177,7 +178,7 @@ const HigoPayPage = () => {
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session?.access_token) return;
-            await fetch('/api/notify-payment.php', {
+            await fetch(apiUrl('/api/notify-payment.php'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

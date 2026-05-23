@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { apiUrl } from '../utils/apiUrl';
 
 // Fire-and-forget al endpoint PHP que despierta al destinatario con FCM.
 // Se llama después de un INSERT exitoso en support_messages. Cualquier
@@ -12,7 +13,7 @@ export async function triggerSupportPush(threadId) {
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
         if (!token) return;
-        await fetch('/api/send-support-push.php', {
+        await fetch(apiUrl('/api/send-support-push.php'), {
             method:  'POST',
             headers: {
                 'Authorization': 'Bearer ' + token,

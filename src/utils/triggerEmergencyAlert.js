@@ -1,5 +1,6 @@
 import { supabase } from '../services/supabase';
 import { logger } from './logger';
+import { apiUrl } from './apiUrl';
 
 // Dispara una alerta SOS al backend send-emergency.php.
 //
@@ -50,7 +51,7 @@ export const triggerEmergencyAlert = async ({ rideId, triggeredBy }) => {
 
     const { lat, lng } = await getLocation();
 
-    const res = await fetch('/api/send-emergency.php', {
+    const res = await fetch(apiUrl('/api/send-emergency.php'), {
         method: 'POST',
         // keepalive: la request sigue viva aunque navegue a tel:911
         keepalive: true,
