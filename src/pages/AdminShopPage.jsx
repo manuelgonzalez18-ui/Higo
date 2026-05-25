@@ -48,6 +48,7 @@ export default function AdminShopPage() {
 
     // Filtros de búsqueda
     const [storeSearch, setStoreSearch] = useState('');
+    const [storeMembershipFilter, setStoreMembershipFilter] = useState('all');
     const [selectedStoreId, setSelectedStoreId] = useState('all');
     const [orderFilterStatus, setOrderFilterStatus] = useState('all');
     const [membershipFilterStatus, setMembershipFilterStatus] = useState('all');
@@ -539,9 +540,14 @@ export default function AdminShopPage() {
     const filteredStores = useMemo(() => {
         return stores.filter(s => {
             const q = storeSearch.toLowerCase();
-            return !q || s.name.toLowerCase().includes(q) || s.phone.includes(q) || s.address.toLowerCase().includes(q);
+            const matchesQuery = !q || s.name.toLowerCase().includes(q) || s.phone.includes(q) || s.address.toLowerCase().includes(q);
+            if (!matchesQuery) return false;
+            
+            if (storeMembershipFilter === 'all') return true;
+            const mem = getStoreMembershipStatus(s.id);
+            return storeMembershipFilter === 'active' ? mem.active : !mem.active;
         });
-    }, [stores, storeSearch]);
+    }, [stores, storeSearch, storeMembershipFilter, getStoreMembershipStatus]);
 
     const filteredProducts = useMemo(() => {
         return products.filter(p => {
@@ -597,6 +603,37 @@ export default function AdminShopPage() {
             leaderSorted
         };
     }, [orders, storeMemberships]);
+
+    const membershipStats = useMemo(() => {
+        const totalCollected = storeMemberships.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+        let activeCount = 0;
+        let expiredCount = 0;
+        const now = new Date();
+        
+        stores.forEach(s => {
+            const storeMems = storeMemberships.filter(m => m.store_id === s.id && m.status === 'active');
+            if (storeMems.length === 0) {
+                expiredCount++;
+                return;
+            }
+            const latest = storeMems[0];
+            const isExpired = new Date(latest.expires_at) < now;
+            if (isExpired) {
+                expiredCount++;
+            } else {
+                activeCount++;
+            }
+        });
+        
+        const projectedMRR = activeCount * 30.00;
+        
+        return {
+            totalCollected,
+            activeCount,
+            expiredCount,
+            projectedMRR
+        };
+    }, [storeMemberships, stores]);
 
 
     if (!authorized) {
@@ -664,15 +701,29 @@ export default function AdminShopPage() {
                     {activeTab === 'stores' && (
                         <div className="space-y-6">
                             <div className="bg-[#1A1F2E] p-5 rounded-[24px] border border-white/5 flex flex-col md:flex-row gap-4 justify-between items-center">
-                                <div className="relative w-full md:w-96">
-                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 material-symbols-outlined">search</span>
-                                    <input
-                                        type="text"
-                                        placeholder="Buscar tienda por nombre, teléfono o dirección..."
-                                        className="w-full pl-12 pr-4 py-3 bg-[#0F1014] border border-white/10 rounded-xl outline-none focus:border-violet-500/50 text-white placeholder:text-gray-600"
-                                        value={storeSearch}
-                                        onChange={(e) => setStoreSearch(e.target.value)}
-                                    />
+                                <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto items-center">
+                                    <div className="relative w-full md:w-96">
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 material-symbols-outlined">search</span>
+                                        <input
+                                            type="text"
+                                            placeholder="Buscar tienda por nombre, teléfono o dirección..."
+                                            className="w-full pl-12 pr-4 py-3 bg-[#0F1014] border border-white/10 rounded-xl outline-none focus:border-violet-500/50 text-white placeholder:text-gray-600"
+                                            value={storeSearch}
+                                            onChange={(e) => setStoreSearch(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+                                        <span className="text-xs font-bold text-gray-400">Suscripción:</span>
+                                        <select
+                                            className="bg-[#0F1014] border border-white/10 text-white rounded-xl px-4 py-2.5 outline-none focus:border-violet-500 text-xs font-bold w-full md:w-auto"
+                                            value={storeMembershipFilter}
+                                            onChange={(e) => setStoreMembershipFilter(e.target.value)}
+                                        >
+                                            <option value="all">Todas las membresías</option>
+                                            <option value="active">Solventes (Activa)</option>
+                                            <option value="expired">Vencidas / Expiradas</option>
+                                        </select>
+                                    </div>
                                 </div>
                                 <button
                                     onClick={openAddStore}
@@ -998,6 +1049,30 @@ export default function AdminShopPage() {
                         ========================================== */}
                     {activeTab === 'memberships' && (
                         <div className="space-y-6">
+                            {/* Membership stats row */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-2">
+                                <div className="bg-[#1A1F2E] p-5 rounded-2xl border border-white/5">
+                                    <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Membresías Activas</p>
+                                    <p className="text-2xl font-black text-emerald-400">{membershipStats.activeCount}</p>
+                                    <p className="text-[9px] text-gray-500 font-semibold mt-0.5">Comercios solventes en Shop</p>
+                                </div>
+                                <div className="bg-[#1A1F2E] p-5 rounded-2xl border border-white/5">
+                                    <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Membresías Vencidas</p>
+                                    <p className="text-2xl font-black text-red-400">{membershipStats.expiredCount}</p>
+                                    <p className="text-[9px] text-gray-500 font-semibold mt-0.5">Comercios inactivos / expirados</p>
+                                </div>
+                                <div className="bg-[#1A1F2E] p-5 rounded-2xl border border-white/5">
+                                    <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Ingreso Recurrente Proyectado</p>
+                                    <p className="text-2xl font-black text-violet-400">${membershipStats.projectedMRR.toFixed(2)}</p>
+                                    <p className="text-[9px] text-gray-500 font-semibold mt-0.5">MRR (Active * $30)</p>
+                                </div>
+                                <div className="bg-[#1A1F2E] p-5 rounded-2xl border border-white/5">
+                                    <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Recaudación Total Suscripciones</p>
+                                    <p className="text-2xl font-black text-sky-400">${membershipStats.totalCollected.toFixed(2)}</p>
+                                    <p className="text-[9px] text-gray-500 font-semibold mt-0.5">Suma cobros históricos</p>
+                                </div>
+                            </div>
+
                             <div className="bg-[#1A1F2E] p-5 rounded-[24px] border border-white/5 flex flex-col md:flex-row gap-4 justify-between items-center">
                                 <div className="flex gap-2 bg-[#0F1014] p-1.5 rounded-xl border border-white/5 w-full md:w-auto">
                                     {[
@@ -1052,8 +1127,28 @@ export default function AdminShopPage() {
                                                     <tr key={m.id} className="hover:bg-white/[0.01] transition-colors">
                                                         <td className="p-4 pl-6 text-white font-bold">{m.stores?.name || 'Comercio Desconocido'}</td>
                                                         <td className="p-4 text-violet-400 font-bold font-mono">${Number(m.amount).toFixed(2)}</td>
-                                                        <td className="p-4 text-gray-300 font-semibold uppercase">{m.payment_method}</td>
-                                                        <td className="p-4 text-gray-400 font-mono">{m.reference || '—'}</td>
+                                                        <td className="p-4 text-gray-300 font-semibold uppercase">
+                                                            <span>{m.payment_method}</span>
+                                                            {m.receipt_url && (
+                                                                <a 
+                                                                    href={m.receipt_url} 
+                                                                    target="_blank" 
+                                                                    rel="noopener noreferrer" 
+                                                                    className="ml-2 inline-flex items-center text-xs text-violet-400 hover:text-white" 
+                                                                    title="Ver comprobante de pago"
+                                                                >
+                                                                    <span className="material-symbols-outlined text-[15px] align-middle">image</span>
+                                                                </a>
+                                                            )}
+                                                        </td>
+                                                        <td className="p-4 text-gray-400 font-mono">
+                                                            <div>{m.reference || '—'}</div>
+                                                            {(m.bank_origin || m.sender_phone) && (
+                                                                <div className="text-[10px] text-gray-500 font-sans mt-0.5">
+                                                                    {m.bank_origin ? `Banco: ${m.bank_origin}` : ''} {m.sender_phone ? `· Tel: ${m.sender_phone}` : ''}
+                                                                </div>
+                                                            )}
+                                                        </td>
                                                         <td className="p-4 text-gray-400">{new Date(m.paid_at).toLocaleDateString()}</td>
                                                         <td className="p-4 text-gray-400 font-bold">{new Date(m.expires_at).toLocaleDateString()}</td>
                                                         <td className="p-4 pr-6">
