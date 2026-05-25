@@ -21,6 +21,114 @@
         --accent-blue: #2563EB;
         --accent-green: #10B981;
         --accent-alert: #EC4899;
+
+        /* --- Higo Shop Design System Tokens --- */
+        --higo-blue: #3B82F6;           /* Brand Primary Electric Blue */
+        --higo-blue-light: #60A5FA;     /* Brand Sky Blue Highlight */
+        --higo-blue-dark: #2563EB;      /* Royal Blue */
+        --higo-blue-darker: #1D4ED8;    /* Dark Blue */
+        --higo-blue-50: #F0F7FF;        /* Light blue background offset */
+        --higo-blue-100: #E0EFFF;
+        --higo-blue-200: #C2E0FF;
+
+        /* Neutrals — Premium Light Theme (Uber Eats inspired) */
+        --higo-gray-900: #000000;       /* Deep primary black for headers */
+        --higo-gray-800: #1A1A1A;       /* Secondary black */
+        --higo-gray-700: #545454;       /* Slate gray for standard text */
+        --higo-gray-600: #767676;       /* Slate gray muted for subtitles/metadata */
+        --higo-gray-500: #9E9E9E;       /* Mid gray */
+        --higo-gray-400: #C2C2C2;       /* Placeholders */
+        --higo-gray-300: #E2E2E2;       /* Borders light */
+        --higo-gray-200: #EEEEEE;       /* Subtle separator lines */
+        --higo-gray-100: #F6F6F6;       /* Offset light background */
+        --higo-gray-50: #FAFAFA;        /* Page background */
+        --higo-white: #FFFFFF;          /* Pure white card surface background */
+
+        /* Semantic Colors */
+        --higo-success: #05A357;        /* Clean active green */
+        --higo-success-light: #E6F6ED;
+        --higo-success-dark: #048245;
+        --higo-warning: #F59E0B;
+        --higo-warning-light: #FEF3C7;
+        --higo-warning-dark: #D97706;
+        --higo-error: #D9383A;          /* Destructive/alert red */
+        --higo-error-light: #FCE8E8;
+        --higo-error-dark: #B92628;
+        --higo-info: #06B6D4;
+        --higo-info-light: #CFFAFE;
+
+        /* Shadows — Adjusted for Light Mode */
+        --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.03);
+        --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+        --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.06);
+        --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.05);
+        --shadow-blue: 0 4px 14px rgba(59, 130, 246, 0.15);
+        --shadow-blue-lg: 0 8px 24px rgba(59, 130, 246, 0.2);
+
+        /* Border Radius */
+        --radius-xs: 6px;
+        --radius-sm: 8px;
+        --radius-md: 12px;
+        --radius-lg: 16px;
+        --radius-xl: 20px;
+        --radius-2xl: 24px;
+        --radius-full: 9999px;
+
+        /* Typography */
+        --font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        --font-xs: 0.75rem;
+        --font-sm: 0.875rem;
+        --font-base: 1rem;
+        --font-lg: 1.125rem;
+        --font-xl: 1.25rem;
+        --font-2xl: 1.5rem;
+        --font-3xl: 1.875rem;
+        --font-4xl: 2.25rem;
+
+        --weight-regular: 400;
+        --weight-medium: 500;
+        --weight-semibold: 600;
+        --weight-bold: 700;
+        --weight-extrabold: 800;
+
+        --leading-tight: 1.2;
+        --leading-snug: 1.35;
+        --leading-normal: 1.5;
+        --leading-relaxed: 1.65;
+
+        /* Spacing */
+        --space-1: 0.25rem;
+        --space-2: 0.5rem;
+        --space-3: 0.75rem;
+        --space-4: 1rem;
+        --space-5: 1.25rem;
+        --space-6: 1.5rem;
+        --space-8: 2rem;
+        --space-10: 2.5rem;
+        --space-12: 3rem;
+        --space-16: 4rem;
+
+        /* Transitions */
+        --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+        --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+        --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+        --transition-spring: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+        /* Z-index scale */
+        --z-base: 0;
+        --z-dropdown: 100;
+        --z-sticky: 200;
+        --z-overlay: 300;
+        --z-modal: 400;
+        --z-toast: 500;
+
+        /* Layout */
+        --app-max-width: 480px;
+        --header-height: 56px;
+        --bottom-nav-height: 64px;
+        --safe-area-bottom: env(safe-area-inset-bottom, 0px);
     }
 }
 
@@ -56,4 +164,114 @@
     word-wrap: normal;
     white-space: nowrap;
     direction: ltr;
+}
+
+/* --- Scrollbar Styling --- */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--higo-gray-300);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--higo-gray-400);
+}
+
+/* --- Animations --- */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes bounceIn {
+  0% { transform: scale(0.3); opacity: 0; }
+  50% { transform: scale(1.05); }
+  70% { transform: scale(0.95); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.animate-fade-in {
+  animation: fadeIn var(--transition-base) ease-out;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp var(--transition-slow) ease-out;
+}
+
+.animate-slide-up {
+  animation: slideUp var(--transition-slow) cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* --- Skeleton Loading --- */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--higo-gray-200) 25%,
+    var(--higo-gray-100) 50%,
+    var(--higo-gray-200) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* --- Glass Effect --- */
+.glass {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.06);
 }
