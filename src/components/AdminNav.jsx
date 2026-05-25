@@ -11,6 +11,7 @@ const TABS = [
     { to: '/admin/promos',    label: 'Promos',      icon: 'local_offer',    shortcut: 'g r' },
     { to: '/admin/disputes',  label: 'Disputas',    icon: 'report',         shortcut: 'g t' },
     { to: '/admin/deliveries',label: 'Envíos',      icon: 'inventory_2',    shortcut: 'g e' },
+    { to: '/admin/shop',      label: 'Higo Shop',   icon: 'shopping_bag',   shortcut: 'g h' },
     { to: '/admin/support',   label: 'Soporte',     icon: 'support_agent',  shortcut: 'g s', badge: 'support' },
     { to: '/admin/fraud',     label: 'Fraud',       icon: 'crisis_alert',   shortcut: 'g f' },
     { to: '/admin/analytics', label: 'Analytics',   icon: 'bar_chart',      shortcut: 'g a' },

@@ -35,6 +35,7 @@ const AdminDeliveriesPage     = lazy(() => import('./pages/AdminDeliveriesPage')
 const DeliveryReceiptPage     = lazy(() => import('./pages/DeliveryReceiptPage'));
 const AdminSupportPage        = lazy(() => import('./pages/AdminSupportPage'));
 const AdminSupportStatsPage   = lazy(() => import('./pages/AdminSupportStatsPage'));
+const AdminShopPage           = lazy(() => import('./pages/AdminShopPage'));
 const DriverLandingPage       = lazy(() => import('./pages/DriverLandingPage'));
 const HigoPayPage             = lazy(() => import('./pages/HigoPayPage'));
 const RideHistoryPage         = lazy(() => import('./pages/RideHistoryPage'));
@@ -414,6 +415,7 @@ const App = () => {
         <Route path="/admin/zones" element={<AdminGuard><AdminZonesPage /></AdminGuard>} />
         <Route path="/admin/fraud" element={<AdminFraudPage />} />
         <Route path="/admin/deliveries" element={<AdminGuard><AdminDeliveriesPage /></AdminGuard>} />
+        <Route path="/admin/shop" element={<AdminGuard><AdminShopPage /></AdminGuard>} />
         <Route path="/admin/support" element={<AdminGuard><AdminSupportPage /></AdminGuard>} />
         <Route path="/admin/support/stats" element={<AdminGuard><AdminSupportStatsPage /></AdminGuard>} />
         <Route path="/join" element={<DriverLandingPage />} />

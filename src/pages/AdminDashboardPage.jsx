@@ -59,14 +59,16 @@ const AdminDashboardContent = () => {
         driversOnline: 0,
         ridesToday: 0,
         revenueToday: 0,
-        openDisputes: 0
+        openDisputes: 0,
+        shopStores: 0,
+        shopRevenueToday: 0
     });
 
     const loadKpis = async () => {
         const since = new Date(Date.now() - DRIVER_ONLINE_STALE_MS).toISOString();
         const today = startOfToday();
 
-        const [drivers, rides, revenue, disputes] = await Promise.all([
+        const [drivers, rides, revenue, disputes, stores, shopOrders] = await Promise.all([
             supabase
                 .from('profiles')
                 .select('id', { count: 'exact', head: true })
@@ -82,13 +84,19 @@ const AdminDashboardContent = () => {
                 .select('price')
                 .gte('created_at', today)
                 .not('payment_confirmed_at', 'is', null),
-            // Disputas pendientes: mismo criterio que AdminDisputesPage
-            // (pago marcado por una parte pero no cerrado bilateralmente).
             supabase
                 .from('rides')
                 .select('id', { count: 'exact', head: true })
                 .is('payment_confirmed_at', null)
-                .or('payment_reference.not.is.null,payment_confirmed_by_user.eq.true,payment_confirmed_by_driver.eq.true')
+                .or('payment_reference.not.is.null,payment_confirmed_by_user.eq.true,payment_confirmed_by_driver.eq.true'),
+            supabase
+                .from('stores')
+                .select('id', { count: 'exact', head: true }),
+            supabase
+                .from('orders')
+                .select('total')
+                .gte('created_at', today)
+                .eq('status', 'DELIVERED')
         ]);
 
         const totalRevenue = (revenue.data || []).reduce(
@@ -96,11 +104,18 @@ const AdminDashboardContent = () => {
             0
         );
 
+        const totalShopRevenue = (shopOrders.data || []).reduce(
+            (sum, o) => sum + (Number(o.total) || 0),
+            0
+        );
+
         setKpis({
             driversOnline: drivers.count || 0,
             ridesToday: rides.count || 0,
             revenueToday: totalRevenue,
-            openDisputes: disputes.count || 0
+            openDisputes: disputes.count || 0,
+            shopStores: stores.count || 0,
+            shopRevenueToday: totalShopRevenue
         });
         setLoading(false);
     };
@@ -109,6 +124,7 @@ const AdminDashboardContent = () => {
         loadKpis();
         const ch = supabase.channel('admin-kpi-watch')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'rides' }, loadKpis)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, loadKpis)
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, loadKpis)
             .subscribe();
         return () => supabase.removeChannel(ch);
@@ -139,35 +155,61 @@ const AdminDashboardContent = () => {
 
                 <AdminNav />
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                    <KpiCard
-                        icon="directions_car"
-                        label="Drivers online"
-                        value={kpis.driversOnline}
-                        accent="bg-green-600"
-                        loading={loading}
-                    />
-                    <KpiCard
-                        icon="receipt_long"
-                        label="Viajes hoy"
-                        value={kpis.ridesToday}
-                        accent="bg-blue-600"
-                        loading={loading}
-                    />
-                    <KpiCard
-                        icon="attach_money"
-                        label="Ingresos hoy"
-                        value={`$${kpis.revenueToday.toFixed(2)}`}
-                        accent="bg-violet-600"
-                        loading={loading}
-                    />
-                    <KpiCard
-                        icon="report"
-                        label="Disputas abiertas"
-                        value={kpis.openDisputes}
-                        accent="bg-red-600"
-                        loading={loading}
-                    />
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+                    <div className="col-span-1">
+                        <KpiCard
+                            icon="directions_car"
+                            label="Drivers online"
+                            value={kpis.driversOnline}
+                            accent="bg-green-600"
+                            loading={loading}
+                        />
+                    </div>
+                    <div className="col-span-1">
+                        <KpiCard
+                            icon="receipt_long"
+                            label="Viajes hoy"
+                            value={kpis.ridesToday}
+                            accent="bg-blue-600"
+                            loading={loading}
+                        />
+                    </div>
+                    <div className="col-span-1">
+                        <KpiCard
+                            icon="attach_money"
+                            label="Ingresos hoy"
+                            value={`$${kpis.revenueToday.toFixed(2)}`}
+                            accent="bg-violet-600"
+                            loading={loading}
+                        />
+                    </div>
+                    <div className="col-span-1">
+                        <KpiCard
+                            icon="report"
+                            label="Disputas"
+                            value={kpis.openDisputes}
+                            accent="bg-red-600"
+                            loading={loading}
+                        />
+                    </div>
+                    <div className="col-span-1">
+                        <KpiCard
+                            icon="storefront"
+                            label="Tiendas Shop"
+                            value={kpis.shopStores}
+                            accent="bg-orange-500"
+                            loading={loading}
+                        />
+                    </div>
+                    <div className="col-span-1">
+                        <KpiCard
+                            icon="shopping_bag"
+                            label="Ventas Shop hoy"
+                            value={`$${kpis.shopRevenueToday.toFixed(2)}`}
+                            accent="bg-pink-500"
+                            loading={loading}
+                        />
+                    </div>
                 </div>
 
                 {/* D.A1: Mapa realtime con drivers online. InteractiveMap
@@ -201,6 +243,7 @@ const AdminDashboardContent = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <NavTile to="/admin/drivers"   icon="directions_car" label="Conductores" description="Ver, activar, suspender y registrar drivers" />
                     <NavTile to="/admin/users"     icon="group"          label="Usuarios"    description="Listado y gestión de pasajeros" />
+                    <NavTile to="/admin/shop"      icon="shopping_bag"   label="Higo Shop"   description="Auditar comercios, menús, productos y pedidos realtime" />
                     <NavTile to="/admin/pricing"   icon="payments"       label="Tarifas"     description="Precios base y por km por tipo de vehículo" />
                     <NavTile to="/admin/promos"    icon="local_offer"    label="Promos"      description="Códigos promocionales y referidos" />
                     <NavTile to="/admin/disputes"  icon="report"         label="Disputas"    description="Conflictos de pago entre driver y pasajero" />

@@ -29,6 +29,8 @@ const ROUTES = {
     a: '/admin/analytics',
     z: '/admin/zones',
     f: '/admin/fraud',
+    e: '/admin/deliveries',
+    h: '/admin/shop',
 };
 
 const isTypingTarget = (el) => {
