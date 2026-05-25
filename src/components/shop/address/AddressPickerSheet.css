@@ -1,0 +1,157 @@
+.address-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  z-index: 1100;
+}
+
+.address-picker-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--higo-white);
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+  padding: var(--space-4);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.45);
+  z-index: 1101;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.address-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.address-picker-header h3 {
+  margin: 0;
+  font-size: var(--font-lg);
+  color: var(--higo-gray-900);
+  font-weight: var(--weight-bold);
+}
+
+.address-picker-close {
+  background: var(--higo-gray-100);
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--higo-gray-700);
+}
+
+.address-picker-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.address-picker-input {
+  width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--higo-gray-300);
+  border-radius: var(--radius-sm);
+  background: var(--higo-gray-100);
+  color: var(--higo-gray-900);
+  font-size: var(--font-sm);
+  font-family: var(--font-family);
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.address-picker-input:focus {
+  border-color: var(--higo-blue);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+}
+
+.address-picker-locate {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--higo-blue);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.address-picker-locate:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.22);
+}
+
+.address-picker-locate:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.address-picker-locate .spinning-icon {
+  animation: higo-spin 0.9s linear infinite;
+}
+
+.address-picker-saved {
+  margin-top: 4px;
+  border-top: 1px solid var(--higo-gray-200);
+  padding-top: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.address-picker-saved__label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  color: var(--higo-gray-500);
+}
+
+.address-picker-saved__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.address-picker-saved__item {
+  display: grid;
+  grid-template-columns: 24px auto 1fr;
+  align-items: center;
+  gap: 8px;
+  background: var(--higo-gray-100);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--higo-gray-700);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.address-picker-saved__item:hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.address-picker-saved__alias {
+  font-weight: 700;
+  color: var(--higo-gray-900);
+  font-size: var(--font-sm);
+}
+
+.address-picker-saved__addr {
+  font-size: var(--font-xs);
+  color: var(--higo-gray-500);
+}

@@ -49,6 +49,29 @@ const PublicTrackingPage      = lazy(() => import('./pages/PublicTrackingPage'))
 // no se carga porque la ruta no se monta (gate import.meta.env.DEV abajo).
 const MapboxSandbox           = lazy(() => import('./components/_dev/MapboxSandbox'));
 
+// ─── Higo Shop: lazy module imports ──────────────────────────────────
+const ShopMarketplaceHome   = lazy(() => import('./features/marketplace/pages/MarketplaceHome.jsx').then((m) => ({ default: m.MarketplaceHome })));
+const ShopSearchMap         = lazy(() => import('./features/marketplace/pages/SearchMap.jsx').then((m) => ({ default: m.SearchMap })));
+const ShopStoreView         = lazy(() => import('./features/marketplace/pages/StoreView.jsx').then((m) => ({ default: m.StoreView })));
+const ShopCartPage          = lazy(() => import('./features/cart/pages/CartPage.jsx').then((m) => ({ default: m.CartPage })));
+const ShopCheckoutPage      = lazy(() => import('./features/checkout/pages/CheckoutPage.jsx').then((m) => ({ default: m.CheckoutPage })));
+const ShopOrdersPage        = lazy(() => import('./features/orders/pages/OrdersPage.jsx').then((m) => ({ default: m.OrdersPage })));
+const ShopOrderDetailPage   = lazy(() => import('./features/orders/pages/OrderDetailPage.jsx').then((m) => ({ default: m.OrderDetailPage })));
+const ShopProfilePage       = lazy(() => import('./features/profile/pages/ProfilePage.jsx').then((m) => ({ default: m.ProfilePage })));
+const ShopMerchantDashboard = lazy(() => import('./features/merchant/pages/MerchantDashboard.jsx').then((m) => ({ default: m.MerchantDashboard })));
+const ShopDriverDashboard   = lazy(() => import('./features/driver/pages/DriverDashboard.jsx').then((m) => ({ default: m.DriverDashboard })));
+const ShopAppShell          = lazy(() => import('./components/shop/layout/AppShell.jsx').then((m) => ({ default: m.AppShell })));
+
+import { useAuthStore } from './stores/shop/useAuthStore.js';
+import { GoogleMapsProvider } from './components/shop/maps/MapView.jsx';
+
+function ShopHomeSelector() {
+  const role = useAuthStore((s) => s.role);
+  if (role === 'merchant') return <ShopMerchantDashboard />;
+  if (role === 'driver') return <ShopDriverDashboard />;
+  return <ShopMarketplaceHome />;
+}
+
 import { useEffect, useState } from 'react';
 import { initGlobalAudio } from './services/notificationService';
 import { ensureFcmRegistration, subscribeForegroundMessages } from './services/pushNotifications';
@@ -394,6 +417,19 @@ const App = () => {
         <Route path="/admin/support" element={<AdminGuard><AdminSupportPage /></AdminGuard>} />
         <Route path="/admin/support/stats" element={<AdminGuard><AdminSupportStatsPage /></AdminGuard>} />
         <Route path="/join" element={<DriverLandingPage />} />
+
+        {/* Módulo Higo Shop */}
+        <Route path="/shop" element={<GoogleMapsProvider><ShopAppShell /></GoogleMapsProvider>}>
+          <Route index element={<ShopHomeSelector />} />
+          <Route path="search" element={<ShopSearchMap />} />
+          <Route path="store/:storeId" element={<ShopStoreView />} />
+          <Route path="cart" element={<ShopCartPage />} />
+          <Route path="checkout/:storeId" element={<ShopCheckoutPage />} />
+          <Route path="orders" element={<ShopOrdersPage />} />
+          <Route path="orders/:orderId" element={<ShopOrderDetailPage />} />
+          <Route path="profile" element={<ShopProfilePage />} />
+        </Route>
+
         <Route path="/terms" element={<TermsOfDeliveryPage />} />
         <Route path="/terms/envios" element={<TermsOfDeliveryPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />

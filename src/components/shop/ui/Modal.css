@@ -1,0 +1,76 @@
+/* ============================================
+   Modal Component Styles
+   ============================================ */
+
+.higo-modal__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.higo-modal__content {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--higo-white);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+}
+
+/* ---- Header ---- */
+.higo-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--higo-gray-100);
+  flex-shrink: 0;
+}
+
+.higo-modal__title {
+  font-size: var(--font-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--higo-gray-900);
+  line-height: var(--leading-tight);
+}
+
+.higo-modal__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  color: var(--higo-gray-400);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.higo-modal__close:hover {
+  background-color: var(--higo-gray-100);
+  color: var(--higo-gray-700);
+}
+
+.higo-modal__close:active {
+  background-color: var(--higo-gray-200);
+}
+
+/* ---- Body ---- */
+.higo-modal__body {
+  padding: var(--space-5);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}

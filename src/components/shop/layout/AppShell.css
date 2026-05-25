@@ -1,0 +1,53 @@
+.higo-app-shell {
+  max-width: var(--app-max-width);
+  margin: 0 auto;
+  min-height: 100dvh;
+  background: var(--higo-white);
+  position: relative;
+  box-shadow: 0 0 60px rgba(0, 0, 0, 0.06);
+}
+
+.higo-app-shell__content {
+  padding-bottom: calc(var(--bottom-nav-height) + var(--safe-area-bottom));
+  min-height: 100dvh;
+}
+
+/* Role Switcher Dev Tool */
+.role-switcher {
+  position: fixed;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: var(--z-toast);
+  display: flex;
+  gap: var(--space-1);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  padding: 3px;
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-md);
+  transition: opacity var(--transition-fast);
+  border: 1px solid var(--higo-gray-200);
+}
+
+.role-switcher button {
+  padding: 4px 8px;
+  border-radius: var(--radius-full);
+  font-size: 0.65rem;
+  font-weight: var(--weight-semibold);
+  color: var(--higo-gray-600);
+  transition: all var(--transition-fast);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.role-switcher button:hover {
+  color: var(--higo-gray-900);
+}
+
+.role-switcher button.active {
+  background: var(--higo-gray-900);
+  color: var(--higo-white);
+}

@@ -621,6 +621,15 @@ const RequestRidePage = () => {
                         <nav className="flex-1 overflow-y-auto py-2">
                             {currentUser && (
                                 <button
+                                    onClick={() => { closeDrawer(); navigate('/shop'); }}
+                                    className="w-full px-5 py-3 flex items-center gap-4 text-left hover:bg-white/5 transition-colors border-b border-white/5 bg-blue-600/10"
+                                >
+                                    <span className="material-symbols-outlined text-blue-400">shopping_bag</span>
+                                    <span className="text-white font-bold">Pedir en Higo Shop 🛍️</span>
+                                </button>
+                            )}
+                            {currentUser && (
+                                <button
                                     onClick={() => { closeDrawer(); navigate('/history'); }}
                                     className="w-full px-5 py-3 flex items-center gap-4 text-left hover:bg-white/5 transition-colors"
                                 >

@@ -1,0 +1,59 @@
+/* ============================================
+   Badge Component Styles
+   ============================================ */
+
+.higo-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-family);
+  font-weight: var(--weight-semibold);
+  line-height: 1;
+  white-space: nowrap;
+  border-radius: var(--radius-full);
+  letter-spacing: 0.01em;
+}
+
+/* ---- Sizes ---- */
+.higo-badge--sm {
+  height: 20px;
+  padding: 0 var(--space-2);
+  font-size: 0.65rem;
+}
+
+.higo-badge--md {
+  height: 26px;
+  padding: 0 var(--space-3);
+  font-size: var(--font-xs);
+}
+
+/* ---- Variants ---- */
+.higo-badge--default {
+  background-color: var(--higo-gray-100);
+  color: var(--higo-gray-700);
+}
+
+.higo-badge--success {
+  background-color: var(--higo-success-light);
+  color: var(--higo-success-dark);
+}
+
+.higo-badge--warning {
+  background-color: var(--higo-warning-light);
+  color: var(--higo-warning-dark);
+}
+
+.higo-badge--error {
+  background-color: var(--higo-error-light);
+  color: var(--higo-error-dark);
+}
+
+.higo-badge--info {
+  background-color: var(--higo-info-light);
+  color: #0e7490;
+}
+
+.higo-badge--blue {
+  background-color: var(--higo-blue-50);
+  color: var(--higo-blue-dark);
+}

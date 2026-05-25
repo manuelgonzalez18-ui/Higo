@@ -1,0 +1,161 @@
+.notifications-backdrop {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  z-index: 999;
+}
+
+.notifications-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(360px, calc(100vw - 32px));
+  max-height: 70vh;
+  background: var(--higo-white);
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  z-index: 1000;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.notifications-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--higo-gray-200);
+}
+
+.notifications-header h3 {
+  margin: 0;
+  font-size: var(--font-base);
+  font-weight: 700;
+  color: var(--higo-gray-900);
+  flex: 1;
+}
+
+.notifications-count {
+  background: var(--higo-blue);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.notifications-empty {
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+}
+
+.notifications-empty p {
+  margin: 0;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--higo-gray-700);
+}
+
+.notifications-empty__hint {
+  font-size: var(--font-xs) !important;
+  font-weight: 400 !important;
+  color: var(--higo-gray-500) !important;
+}
+
+.notifications-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+}
+
+.notifications-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.notifications-item:hover {
+  background: var(--higo-gray-100);
+}
+
+.notifications-item__icon {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+
+.notifications-item__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.notifications-item__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--font-sm);
+  font-weight: 700;
+  color: var(--higo-gray-900);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notifications-item__total {
+  color: var(--higo-blue);
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.notifications-item__status {
+  font-size: var(--font-xs);
+  color: var(--higo-gray-500);
+}
+
+.notifications-item__chevron {
+  color: var(--higo-gray-400);
+  flex-shrink: 0;
+}
+
+/* Notification badge on the bell */
+.hero-notification-btn {
+  position: relative;
+}
+
+.hero-notification-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--higo-error);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--higo-white);
+}
+
+/* Anchor the popover relative to the hero-actions container */
+.hero-actions {
+  position: relative;
+}

@@ -1,0 +1,46 @@
+/* ============================================
+   Card Component Styles
+   ============================================ */
+
+.higo-card {
+  background: var(--higo-white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition:
+    box-shadow var(--transition-base),
+    transform var(--transition-base);
+  overflow: hidden;
+}
+
+/* ---- Padding variants ---- */
+.higo-card--pad-sm {
+  padding: var(--space-3);
+}
+
+.higo-card--pad-md {
+  padding: var(--space-4);
+}
+
+.higo-card--pad-lg {
+  padding: var(--space-6);
+}
+
+/* ---- Hoverable ---- */
+.higo-card--hoverable {
+  cursor: pointer;
+}
+
+.higo-card--hoverable:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.higo-card--hoverable:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-md);
+}
+
+/* ---- Clickable (onClick present) ---- */
+.higo-card--clickable {
+  cursor: pointer;
+}
