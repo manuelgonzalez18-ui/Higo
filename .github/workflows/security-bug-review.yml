@@ -68,15 +68,22 @@ jobs:
             echo
           } > "$report"
 
+          # probe <nombre> <url> <ok_regex> <metodo> [header...]
+          # metodo: GET (default) o POST. Los headers extra son opcionales y
+          # se pasan tal cual a curl con -H (uno por argumento).
           probe() {
-            local name="$1" url="$2" ok_regex="$3"
-            local extra_header="$4"
-            local code
-            if [ -n "$extra_header" ]; then
-              code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -H "$extra_header" "$url")
-            else
-              code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$url")
+            local name="$1" url="$2" ok_regex="$3" method="${4:-GET}"
+            shift 4 2>/dev/null || shift $#
+            local curl_args=(-s -o /dev/null -w '%{http_code}' --max-time 15)
+            if [ "$method" = "POST" ]; then
+              curl_args+=(-X POST -d '{}')
             fi
+            local h
+            for h in "$@"; do
+              curl_args+=(-H "$h")
+            done
+            local code
+            code=$(curl "${curl_args[@]}" "$url")
             [ -z "$code" ] && code="000"
             if [[ "$code" =~ $ok_regex ]]; then
               echo "- ✅ **$name** → HTTP $code" >> "$report"
@@ -87,36 +94,48 @@ jobs:
           }
 
           if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
-            probe "Supabase REST" "$SUPABASE_URL/rest/v1/" "^(200|404)$" "apikey: $SUPABASE_ANON_KEY"
-            probe "Supabase Auth" "$SUPABASE_URL/auth/v1/health" "^200$" "apikey: $SUPABASE_ANON_KEY"
+            # PostgREST root: necesita apikey + Authorization Bearer (con la
+            # anon key ambos coinciden). Sin el Bearer devuelve 401 — falsa
+            # alarma que el audit detectó en la corrida anterior.
+            probe "Supabase REST" "$SUPABASE_URL/rest/v1/" "^(200|404)$" GET \
+              "apikey: $SUPABASE_ANON_KEY" "Authorization: Bearer $SUPABASE_ANON_KEY"
+            probe "Supabase Auth" "$SUPABASE_URL/auth/v1/health" "^200$" GET \
+              "apikey: $SUPABASE_ANON_KEY"
           else
             echo "- ⚠️ Supabase: secrets no configurados, skip" >> "$report"
           fi
 
           if [ -n "$GOOGLE_MAPS_API_KEY" ]; then
-            probe "Google Maps Static" \
+            # 403 es ESPERADO: la key web está restringida por referrer/bundle,
+            # y un curl desde el runner no manda el referrer correcto. 403 =
+            # "key viva pero restringida" (estado seguro). 000/5xx = falla real.
+            # No distingue 403-restringida de 403-key-inválida vía HTTP code,
+            # limitación conocida al probar keys restringidas server-side.
+            probe "Google Maps Static (restringida)" \
               "https://maps.googleapis.com/maps/api/staticmap?center=0,0&zoom=1&size=64x64&key=$GOOGLE_MAPS_API_KEY" \
-              "^200$" ""
+              "^(200|403)$" GET
           fi
 
           if [ -n "$MAPBOX_TOKEN" ]; then
             probe "Mapbox tiles" \
               "https://api.mapbox.com/v4/mapbox.mapbox-streets-v11.json?access_token=$MAPBOX_TOKEN" \
-              "^200$" ""
+              "^200$" GET
           fi
 
           if [ -n "$GEMINI_API_KEY" ]; then
             probe "Gemini API" \
               "https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY" \
-              "^200$" ""
+              "^200$" GET
           fi
 
-          # FCM v1: sin OAuth devuelve 401, lo cual confirma que el endpoint
-          # del proyecto está vivo. Cualquier 5xx o 000 (DNS/timeout) es falla.
+          # FCM v1: el endpoint messages:send SOLO acepta POST. Un GET cae en
+          # 404 (método no mapeado) — falsa alarma que el audit reportó como
+          # "push roto". Con POST sin OAuth devuelve 401 UNAUTHENTICATED, que
+          # confirma que el proyecto existe y FCM v1 está vivo. 5xx/000 = falla.
           if [ -n "$FIREBASE_PROJECT_ID" ]; then
             probe "FCM v1 (proyecto $FIREBASE_PROJECT_ID)" \
               "https://fcm.googleapis.com/v1/projects/$FIREBASE_PROJECT_ID/messages:send" \
-              "^(401|403|400)$" ""
+              "^(401|403)$" POST
           fi
 
           echo >> "$report"
