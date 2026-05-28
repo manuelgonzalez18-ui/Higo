@@ -1,5 +1,5 @@
 -- ============================================================
--- 73 · Fix policy UPDATE de `rides` sin restricción de fila
+-- 73 · Fix policy UPDATE de `rides` sin restricción de fila (v2)
 -- ============================================================
 --
 -- Problema (auditoría automática #4, issue #44):
@@ -13,25 +13,26 @@
 --   - Marcar como completados/cancelados rides ajenos.
 --   - Cambiar pickup/dropoff post-aceptación.
 --
--- Fix:
--- Una policy granular por transición legítima del estado del ride.
--- Cada transición tiene su propio USING (qué fila puede modificar) y su
--- WITH CHECK (qué valores puede dejar). Lo no cubierto queda bloqueado.
+-- ── Por qué v2 ─────────────────────────────────────────────────────────
+-- La v1 (4 policies por transición de estado con WITH CHECK estricto)
+-- rompía dos updates legítimos del driver:
+--   - useDriverActiveTrip.js L276: escribe wait_seconds/wait_fee/price
+--     sin cambiar status (espera en pickup). status sigue 'accepted'.
+--   - useDriverActiveTrip.js L359 (confirmDriverPayment): escribe
+--     payment_confirmed_by_driver y payment_confirmed_at sin tocar status.
+-- Ambos fallaban con la v1 porque cada policy exigía un status target
+-- específico en WITH CHECK.
 --
--- Transiciones permitidas a un driver:
---   1) requested → accepted   (driver acepta — se asigna a sí mismo)
---   2) accepted  → in_progress (driver inicia el viaje)
---   3) in_progress → completed (driver completa el viaje)
---   4) accepted/in_progress → cancelled (driver cancela por motivos válidos)
+-- v2 usa una policy unificada permisiva pero con WITH CHECK que blinda
+-- los puntos clave (driver_id propio, status fuera de 'requested').
+-- Trade-off: el driver puede escribir cualquier columna de SU ride
+-- (price, pickup, etc.), pero no puede tocar rides ajenos ni reciclarlos.
+-- Endurecer eso requeriría policies a nivel columna o lógica server-side.
 --
 -- Pasajero: tiene su propia policy aparte (no se toca aquí; ver mig 64).
--- Admin: tiene policy admin separada vía is_admin().
+-- Admin: cubierto por rides_admin_update (panel disputas, deliveries).
 --
--- IMPORTANTE: si el código del cliente hace updates fuera de estas
--- transiciones (ej. update parcial de algún campo) van a ser rechazados.
--- Revisar src/features/driver/ y src/stores/rideStore.js antes de aplicar.
---
--- Rollback: restaurar la policy original con solo USING (mig 65).
+-- Rollback: ver bloque al final del archivo.
 
 BEGIN;
 
@@ -41,61 +42,35 @@ DROP POLICY IF EXISTS "rides_driver_accept" ON public.rides;
 DROP POLICY IF EXISTS "rides_driver_start" ON public.rides;
 DROP POLICY IF EXISTS "rides_driver_complete" ON public.rides;
 DROP POLICY IF EXISTS "rides_driver_cancel" ON public.rides;
+DROP POLICY IF EXISTS "rides_driver_update" ON public.rides;
 DROP POLICY IF EXISTS "rides_admin_update" ON public.rides;
 
--- 1) Aceptar: requested + driver_id NULL → accepted + driver_id = me
-CREATE POLICY "rides_driver_accept"
+-- Policy unificada del driver: cubre aceptar + todas las actualizaciones
+-- sobre rides ya asignados a él (transiciones de estado, wait_fee, price,
+-- payment_confirmed_by_driver, etc.). Bloquea:
+--   - robar rides de otro driver (USING exige driver_id=me o ride libre)
+--   - cambiar driver_id a otro user (WITH CHECK exige driver_id=me final)
+--   - volver el ride a 'requested' para que lo agarre otro driver
+--     (WITH CHECK excluye 'requested')
+CREATE POLICY "rides_driver_update"
 ON public.rides FOR UPDATE TO authenticated
 USING (
     public.is_driver(auth.uid())
-    AND status = 'requested'
-    AND driver_id IS NULL
+    AND (
+        -- Caso 1: aceptar un ride sin driver asignado
+        (status = 'requested' AND driver_id IS NULL)
+        OR
+        -- Caso 2: tocar un ride que ya es mío
+        driver_id = auth.uid()
+    )
 )
 WITH CHECK (
     driver_id = auth.uid()
-    AND status = 'accepted'
+    AND status IN ('accepted', 'in_progress', 'completed', 'cancelled')
 );
 
--- 2) Iniciar: accepted + driver_id = me → in_progress (mismo driver)
-CREATE POLICY "rides_driver_start"
-ON public.rides FOR UPDATE TO authenticated
-USING (
-    public.is_driver(auth.uid())
-    AND driver_id = auth.uid()
-    AND status = 'accepted'
-)
-WITH CHECK (
-    driver_id = auth.uid()
-    AND status = 'in_progress'
-);
-
--- 3) Completar: in_progress + driver_id = me → completed (mismo driver)
-CREATE POLICY "rides_driver_complete"
-ON public.rides FOR UPDATE TO authenticated
-USING (
-    public.is_driver(auth.uid())
-    AND driver_id = auth.uid()
-    AND status = 'in_progress'
-)
-WITH CHECK (
-    driver_id = auth.uid()
-    AND status = 'completed'
-);
-
--- 4) Cancelar: accepted o in_progress + driver_id = me → cancelled
-CREATE POLICY "rides_driver_cancel"
-ON public.rides FOR UPDATE TO authenticated
-USING (
-    public.is_driver(auth.uid())
-    AND driver_id = auth.uid()
-    AND status IN ('accepted', 'in_progress')
-)
-WITH CHECK (
-    driver_id = auth.uid()
-    AND status = 'cancelled'
-);
-
--- 5) Admin override: pueden tocar lo que sea (panel de soporte/fraude).
+-- Admin override: panel de soporte/fraude/disputas (AdminDeliveriesPage,
+-- AdminDisputesPage hacen updates a price/payment_confirmed_*/status).
 CREATE POLICY "rides_admin_update"
 ON public.rides FOR UPDATE TO authenticated
 USING (public.is_admin(auth.uid()))
@@ -104,13 +79,28 @@ WITH CHECK (public.is_admin(auth.uid()));
 COMMIT;
 
 -- ── Verificación manual sugerida tras aplicar ────────────────────────
--- Como driver A:
---   1) Crear ride como pasajero (otra sesión).
---   2) Aceptar (debe funcionar): status='requested' → 'accepted', driver_id=A.
---   3) Intentar robarlo con driver B autenticado:
---        UPDATE rides SET driver_id=B WHERE id=<ride_id>;
---      → debe devolver 0 filas afectadas (WITH CHECK rechaza).
---   4) Intentar cambiar price desde driver A:
---        UPDATE rides SET price=0 WHERE id=<ride_id>;
---      → WITH CHECK exige status='accepted' (sin cambiar más), price tampoco
---        está permitido cambiar por driver — actualización completa rechazada.
+-- Flujo passenger + driver end-to-end:
+--   1) Passenger crea ride desde la web (status='requested').
+--   2) Driver A acepta desde el APK (status='accepted', driver_id=A).
+--   3) Driver A inicia pickup, esperar (toca wait_fee/price sin cambiar
+--      status) → debe funcionar.
+--   4) Driver A inicia viaje (status='in_progress') → debe funcionar.
+--   5) Driver A completa (status='completed') → debe funcionar.
+--   6) Driver A confirma pago (payment_confirmed_by_driver=true sin tocar
+--      status) → debe funcionar.
+--   7) Como driver B en otra sesión, intentar:
+--        UPDATE rides SET driver_id = B WHERE id = <ride_id>;
+--      → 0 filas afectadas (WITH CHECK bloquea).
+--   8) Como driver A, intentar volver el ride a 'requested':
+--        UPDATE rides SET status = 'requested' WHERE id = <ride_id>;
+--      → 0 filas afectadas (WITH CHECK excluye 'requested').
+--
+-- ── Rollback ─────────────────────────────────────────────────────────
+-- Si la v2 rompe algún flujo del driver no contemplado:
+--   BEGIN;
+--   DROP POLICY IF EXISTS "rides_driver_update" ON public.rides;
+--   DROP POLICY IF EXISTS "rides_admin_update" ON public.rides;
+--   CREATE POLICY "Drivers can update rides to accept"
+--   ON public.rides FOR UPDATE TO authenticated
+--   USING ( public.is_driver(auth.uid()) );
+--   COMMIT;
