@@ -44,6 +44,87 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Health-check determinístico de los backends que consume el APK.
+      # La app vive en Play Store y depende de Supabase, Google Maps, Mapbox,
+      # Gemini y FCM: si cualquiera deja de responder, los usuarios ven la
+      # app rota. Este step NO falla el job (continue-on-error) — escribe el
+      # resultado a /tmp/backend-health.md para que el agente lo incluya en
+      # el issue de auditoría.
+      - name: Health-check de backends del APK
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+        run: |
+          set +e
+          report=/tmp/backend-health.md
+          fail=0
+          {
+            echo "## Health-check de backends ($(date -u +'%Y-%m-%d %H:%M UTC'))"
+            echo
+          } > "$report"
+
+          probe() {
+            local name="$1" url="$2" ok_regex="$3"
+            local extra_header="$4"
+            local code
+            if [ -n "$extra_header" ]; then
+              code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -H "$extra_header" "$url")
+            else
+              code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$url")
+            fi
+            [ -z "$code" ] && code="000"
+            if [[ "$code" =~ $ok_regex ]]; then
+              echo "- ✅ **$name** → HTTP $code" >> "$report"
+            else
+              echo "- ❌ **$name** → HTTP $code" >> "$report"
+              fail=$((fail+1))
+            fi
+          }
+
+          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
+            probe "Supabase REST" "$SUPABASE_URL/rest/v1/" "^(200|404)$" "apikey: $SUPABASE_ANON_KEY"
+            probe "Supabase Auth" "$SUPABASE_URL/auth/v1/health" "^200$" "apikey: $SUPABASE_ANON_KEY"
+          else
+            echo "- ⚠️ Supabase: secrets no configurados, skip" >> "$report"
+          fi
+
+          if [ -n "$GOOGLE_MAPS_API_KEY" ]; then
+            probe "Google Maps Static" \
+              "https://maps.googleapis.com/maps/api/staticmap?center=0,0&zoom=1&size=64x64&key=$GOOGLE_MAPS_API_KEY" \
+              "^200$" ""
+          fi
+
+          if [ -n "$MAPBOX_TOKEN" ]; then
+            probe "Mapbox tiles" \
+              "https://api.mapbox.com/v4/mapbox.mapbox-streets-v11.json?access_token=$MAPBOX_TOKEN" \
+              "^200$" ""
+          fi
+
+          if [ -n "$GEMINI_API_KEY" ]; then
+            probe "Gemini API" \
+              "https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY" \
+              "^200$" ""
+          fi
+
+          # FCM v1: sin OAuth devuelve 401, lo cual confirma que el endpoint
+          # del proyecto está vivo. Cualquier 5xx o 000 (DNS/timeout) es falla.
+          if [ -n "$FIREBASE_PROJECT_ID" ]; then
+            probe "FCM v1 (proyecto $FIREBASE_PROJECT_ID)" \
+              "https://fcm.googleapis.com/v1/projects/$FIREBASE_PROJECT_ID/messages:send" \
+              "^(401|403|400)$" ""
+          fi
+
+          echo >> "$report"
+          echo "**Total fallos:** $fail" >> "$report"
+          echo "---" >> "$report"
+          echo
+          cat "$report"
+
       - name: Auditoría con Claude Code
         uses: anthropics/claude-code-action@v1
         env:
@@ -57,9 +138,11 @@ jobs:
             --allowedTools "Read,Grep,Glob,Bash(gh issue list:*),Bash(gh issue create:*),Bash(gh issue comment:*),Bash(gh label create:*),Bash(gh label list:*)"
           prompt: |
             Sos un agente de auditoría de seguridad y calidad de código para
-            el proyecto "Higo" (app React + Vite + Capacitor que usa Supabase,
-            Firebase, Google Maps / Mapbox y Gemini). Tu trabajo es revisar
-            TODO el código del repositorio en busca de BUGS y PROBLEMAS DE
+            el proyecto "Higo". IMPORTANTE: la app se distribuye y consume
+            principalmente como **APK en Google Play Store** (Capacitor +
+            Android), no como web. Priorizá los hallazgos que afecten al
+            APK y al backend que el APK consume. Tu trabajo es revisar TODO
+            el código del repositorio en busca de BUGS y PROBLEMAS DE
             SEGURIDAD, y reportarlos en un GitHub Issue.
 
             ## Qué revisar (prioridad)
@@ -82,6 +165,35 @@ jobs:
               de credenciales, validación de input, verificación de firmas.
             - Manejo inseguro de tokens en localStorage / logs que filtren PII.
 
+            Android / Play Store (CRÍTICO porque la app vive en Play):
+            - `android/app/src/main/AndroidManifest.xml`: permisos peligrosos
+              sin justificación (background location, SYSTEM_ALERT_WINDOW,
+              QUERY_ALL_PACKAGES, READ/WRITE_EXTERNAL_STORAGE en API ≥30,
+              etc.) que pueden causar rechazo o suspensión en Play Console.
+              También: `exported=true` en components sin protección,
+              `usesCleartextTraffic`, `allowBackup` peligroso, deep links
+              sin verificación.
+            - `android/app/build.gradle` y `android/variables.gradle`:
+              `targetSdkVersion` desactualizado (Google obliga a target del
+              año actual o el anterior; quedar abajo bloquea updates en Play),
+              `minSdkVersion` razonable, `compileSdkVersion` consistente,
+              `versionCode` / `versionName` coherentes.
+            - `android/app/build.gradle`: configuración de signing
+              (`signingConfigs`), uso de ProGuard/R8 (`minifyEnabled`,
+              `shrinkResources`) en release — sin minify, el APK filtra
+              nombres de clases y queda más pesado.
+            - `android/app/proguard-rules.pro`: reglas que pudieran filtrar
+              clases sensibles o dejar `-keep` demasiado amplios.
+            - `android/app/google-services.json` y cualquier `.jks`/`keystore`
+              committeado: NUNCA deben estar en el repo si son de release.
+              Si están, marcalo como CRÍTICO.
+            - `capacitor.config.json`: `server.url` apuntando a hosts
+              externos en producción, `androidScheme` http en vez de https,
+              `cleartext: true`, plugins con configuración insegura.
+            - Plugins de Capacitor instalados en `package.json`: verificar
+              que las versiones de `@capacitor/*` estén alineadas (mismatch
+              entre core/android/cli rompe el build silenciosamente).
+
             Bugs:
             - Errores de lógica, condiciones de carrera, manejo de errores
               ausente, promesas sin await, null/undefined no chequeados,
@@ -94,18 +206,26 @@ jobs:
                `gh label list` y, si falta, `gh label create auditoria-automatica --color D93F0B --description "Hallazgos del agente de auditoría programada"`.
             2. Buscá si ya hay un issue abierto de auditoría:
                `gh issue list --label auditoria-automatica --state open`.
-            3. Construí un reporte en español con los hallazgos clasificados por
+            3. Leé el archivo `/tmp/backend-health.md` (si existe) — contiene
+               el resultado del health-check de los backends que consume el
+               APK (Supabase, Google Maps, Mapbox, Gemini, FCM). Incluí ese
+               bloque AL INICIO del reporte tal cual está, ANTES de los
+               hallazgos de código. Si hay backends caídos, marcalos como
+               🔴 Crítico al tope.
+            4. Construí un reporte en español con los hallazgos clasificados por
                severidad (🔴 Crítico / 🟠 Alto / 🟡 Medio / 🔵 Bajo). Para cada
                hallazgo incluí: archivo y línea (`ruta:línea`), descripción del
                problema, impacto, y recomendación concreta de arreglo. Si NO
                encontrás nada relevante, decilo explícitamente.
-            4. Escribí el reporte a un archivo temporal (ej. /tmp/reporte.md) y:
+            5. Escribí el reporte a un archivo temporal (ej. /tmp/reporte.md) y:
                - Si NO hay issue de auditoría abierto: creá uno con
                  `gh issue create --title "[Auditoría automática] Bugs y seguridad — <fecha YYYY-MM-DD>" --label auditoria-automatica --body-file /tmp/reporte.md`.
                - Si YA hay uno abierto: agregá el reporte como comentario con
                  `gh issue comment <número> --body-file /tmp/reporte.md`,
                  encabezado con la fecha y hora de esta corrida.
-            5. No abras issues duplicados. No toques otros issues ni el código.
+            6. No abras issues duplicados. No toques otros issues ni el código.
 
-            Empezá explorando la estructura del repo y luego profundizá en
-            src/, migrations/, los .sql, higodriver/ y la config de build.
+            Empezá leyendo `/tmp/backend-health.md`, luego explorá la
+            estructura del repo y profundizá en android/ (manifest, gradle,
+            proguard, capacitor.config.json), src/, migrations/, los .sql
+            y higodriver/.
