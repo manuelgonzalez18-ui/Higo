@@ -20,10 +20,13 @@ on:
     - cron: '0 0,12 * * *'
   workflow_dispatch:
 
-# Solo necesitamos leer el código y poder crear/comentar issues.
+# Leer el código + crear/comentar issues. `id-token: write` lo exige
+# claude-code-action@v1 para obtener su OIDC token (sin esto el step falla
+# con "Could not fetch an OIDC token").
 permissions:
   contents: read
   issues: write
+  id-token: write
 
 # Si ya hay una auditoría corriendo, cancelamos la vieja: no tiene sentido
 # acumular dos análisis del mismo árbol de código.
