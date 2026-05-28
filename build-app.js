@@ -68,9 +68,11 @@ async function start() {
             console.log("\n📲 Paso 2/3: Sincronizando assets nativos con Capacitor...");
             await runCommand('npx', ['cap', 'sync', 'android'], '.');
             
+            const gradlew = process.platform === 'win32' ? '.\\gradlew' : './gradlew';
+
             if (choice === '1') {
                 console.log("\n🔨 Paso 3/3: Compilando APK de pruebas...");
-                await runCommand('.\\gradlew', ['assembleDebug'], 'android');
+                await runCommand(gradlew, ['assembleDebug'], 'android');
                 console.log("\n==================================================");
                 console.log("🎉 ¡APK COMPILADA CON ÉXITO!");
                 console.log("Ruta del archivo:");
@@ -78,7 +80,7 @@ async function start() {
                 console.log("==================================================");
             } else {
                 console.log("\n🔨 Paso 3/3: Compilando AAB de lanzamiento (Release)...");
-                await runCommand('.\\gradlew', ['bundleRelease'], 'android');
+                await runCommand(gradlew, ['bundleRelease'], 'android');
                 console.log("\n==================================================");
                 console.log("🎉 ¡AAB COMPILADO CON ÉXITO!");
                 console.log("Ruta del archivo:");

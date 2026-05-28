@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Reglas de extracción de datos para Android 12+ (API 31+).
+  Bloqueamos backups automáticos y transferencia device-to-device de TODO el
+  almacenamiento privado de la app — el WebView guarda en localStorage tokens
+  de Supabase (`session_id`), datos de membresía Higo Shop y referrals, que no
+  deben terminar en backups de Google o copias hacia un device nuevo sin que
+  el usuario haga login otra vez.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

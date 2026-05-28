@@ -255,8 +255,13 @@ foreach ($attachments as $att) {
 }
 $body .= "--{$mixedBoundary}--\r\n";
 
+// Defensa en profundidad contra email header injection: aunque filter_var
+// validó el formato, algunos MTAs aceptan secuencias \r/\n codificadas y
+// permiten inyectar headers extra (Bcc:, To:, Subject:) si el atacante
+// hace bypass del validador. Strip explicito antes de interpolar.
+$replyTo = str_replace(["\r", "\n", "\0"], '', $email);
 $headers  = "From: " . ($smtpCfg['from_name'] ?? 'Higo Driver') . " <{$smtpCfg['from_email']}>\r\n";
-$headers .= "Reply-To: {$email}\r\n";
+$headers .= "Reply-To: {$replyTo}\r\n";
 $headers .= "MIME-Version: 1.0\r\n";
 $headers .= "Content-Type: multipart/mixed; boundary=\"{$mixedBoundary}\"\r\n";
 

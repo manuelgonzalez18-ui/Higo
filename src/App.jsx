@@ -405,7 +405,7 @@ const App = () => {
         <Route path="/onboarding" element={<OnboardingPage />} />
         <Route path="/ride/:id" element={<RideStatusPage />} />
         <Route path="/admin" element={<AdminLoginPage />} />
-        <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+        <Route path="/admin/dashboard" element={<AdminGuard><AdminDashboardPage /></AdminGuard>} />
         <Route path="/admin/drivers" element={<AdminGuard><AdminDriversPage /></AdminGuard>} />
         <Route path="/admin/users" element={<AdminGuard><AdminUsersPage /></AdminGuard>} />
         <Route path="/admin/pricing" element={<AdminGuard><AdminPricingPage /></AdminGuard>} />
@@ -413,7 +413,7 @@ const App = () => {
         <Route path="/admin/disputes" element={<AdminGuard><AdminDisputesPage /></AdminGuard>} />
         <Route path="/admin/analytics" element={<AdminGuard><AdminAnalyticsPage /></AdminGuard>} />
         <Route path="/admin/zones" element={<AdminGuard><AdminZonesPage /></AdminGuard>} />
-        <Route path="/admin/fraud" element={<AdminFraudPage />} />
+        <Route path="/admin/fraud" element={<AdminGuard><AdminFraudPage /></AdminGuard>} />
         <Route path="/admin/deliveries" element={<AdminGuard><AdminDeliveriesPage /></AdminGuard>} />
         <Route path="/admin/shop" element={<AdminGuard><AdminShopPage /></AdminGuard>} />
         <Route path="/admin/support" element={<AdminGuard><AdminSupportPage /></AdminGuard>} />
