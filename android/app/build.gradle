@@ -16,12 +16,21 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Credenciales del keystore release: leen ANDROID_KEYSTORE_PASSWORD /
+    // ANDROID_KEY_PASSWORD / ANDROID_KEY_ALIAS desde env vars (CI) o
+    // gradle.properties (dev local, NUNCA commitear). Sin estos valores los
+    // builds debug siguen funcionando; solo bundleRelease/assembleRelease
+    // fallan al firmar — comportamiento esperado.
+    def envOrProp = { String name, String defaultValue = '' ->
+        return System.getenv(name) ?: project.findProperty(name) ?: defaultValue
+    }
+
     signingConfigs {
         release {
             storeFile file('release-key.jks')
-            storePassword 'higoapp2026'
-            keyAlias 'higo-key'
-            keyPassword 'higoapp2026'
+            storePassword envOrProp('ANDROID_KEYSTORE_PASSWORD')
+            keyAlias envOrProp('ANDROID_KEY_ALIAS', 'higo-key')
+            keyPassword envOrProp('ANDROID_KEY_PASSWORD')
         }
     }
     buildTypes {

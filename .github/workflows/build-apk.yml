@@ -73,6 +73,16 @@ jobs:
       # invocacion de gradle para reusar el daemon y la cache.
       - name: Build Release AAB + APK
         working-directory: android
+        # Las credenciales del keystore release ya no viven en build.gradle.
+        # Hay que cargar estos secrets en Settings > Secrets and variables >
+        # Actions para que la firma funcione:
+        #   - ANDROID_KEYSTORE_PASSWORD: password del .jks
+        #   - ANDROID_KEY_PASSWORD:      password de la key dentro del .jks
+        #   - ANDROID_KEY_ALIAS:         opcional, default 'higo-key'
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: ./gradlew bundleRelease assembleRelease --no-daemon
 
       - name: Rename artifacts with commit SHA
