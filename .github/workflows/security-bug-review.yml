@@ -1,0 +1,108 @@
+name: Auditoría automática (bugs y seguridad)
+
+# Agente programado que revisa TODO el proyecto cada 12 horas en busca de
+# bugs y problemas de seguridad, y abre/actualiza un GitHub Issue con los
+# hallazgos clasificados por severidad.
+#
+# Disparadores:
+#   - schedule (cron): 00:00 y 12:00 UTC todos los días => cada 12 horas.
+#   - workflow_dispatch: para correrlo a mano desde Actions cuando quieras.
+#
+# IMPORTANTE — requisitos para que funcione:
+#   1) El secret ANTHROPIC_API_KEY debe estar cargado en el repo:
+#      Settings > Secrets and variables > Actions > New repository secret.
+#   2) Los workflows con `schedule` SOLO se ejecutan desde la rama por
+#      defecto del repo (main). Mientras este archivo viva en una rama de
+#      feature, el cron NO dispara; usá "Run workflow" (workflow_dispatch)
+#      para probarlo. Una vez mergeado a main, el cron de 12h queda activo.
+on:
+  schedule:
+    - cron: '0 0,12 * * *'
+  workflow_dispatch:
+
+# Solo necesitamos leer el código y poder crear/comentar issues.
+permissions:
+  contents: read
+  issues: write
+
+# Si ya hay una auditoría corriendo, cancelamos la vieja: no tiene sentido
+# acumular dos análisis del mismo árbol de código.
+concurrency:
+  group: security-bug-review
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Revisión de bugs y seguridad
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Auditoría con Claude Code
+        uses: anthropics/claude-code-action@v1
+        env:
+          # gh CLI usa GH_TOKEN para autenticarse contra la API del repo.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Le damos lectura del código + gh para gestionar el issue.
+          claude_args: |
+            --max-turns 50
+            --allowedTools "Read,Grep,Glob,Bash(gh issue list:*),Bash(gh issue create:*),Bash(gh issue comment:*),Bash(gh label create:*),Bash(gh label list:*)"
+          prompt: |
+            Sos un agente de auditoría de seguridad y calidad de código para
+            el proyecto "Higo" (app React + Vite + Capacitor que usa Supabase,
+            Firebase, Google Maps / Mapbox y Gemini). Tu trabajo es revisar
+            TODO el código del repositorio en busca de BUGS y PROBLEMAS DE
+            SEGURIDAD, y reportarlos en un GitHub Issue.
+
+            ## Qué revisar (prioridad)
+
+            Seguridad:
+            - Secrets o claves hardcodeadas en el código (Supabase service_role,
+              API keys, tokens, credenciales). Distinguí claves PÚBLICAS
+              esperadas (anon key de Supabase, Firebase web config, claves
+              `pk.*` de Mapbox) de las que NUNCA deben ir al cliente
+              (service_role keys, claves privadas, firebase-admin en el bundle
+              del navegador).
+            - Uso de firebase-admin o lógica privilegiada que pudiera terminar
+              en el bundle del frontend.
+            - Inyección SQL en los archivos .sql / migrations y en queries.
+            - XSS: usos de dangerouslySetInnerHTML, innerHTML, eval, etc.
+            - Fallas de autenticación/autorización y suposiciones de confianza
+              en el cliente (datos sensibles validados solo en el front).
+            - Validación de RLS de Supabase asumida pero no garantizada.
+            - El archivo de integración de pagos (higodriver / banesco): manejo
+              de credenciales, validación de input, verificación de firmas.
+            - Manejo inseguro de tokens en localStorage / logs que filtren PII.
+
+            Bugs:
+            - Errores de lógica, condiciones de carrera, manejo de errores
+              ausente, promesas sin await, null/undefined no chequeados,
+              fugas de memoria en hooks/efectos de React, dependencias mal
+              declaradas en useEffect.
+
+            ## Cómo reportar
+
+            1. Asegurate de que exista la etiqueta `auditoria-automatica`:
+               `gh label list` y, si falta, `gh label create auditoria-automatica --color D93F0B --description "Hallazgos del agente de auditoría programada"`.
+            2. Buscá si ya hay un issue abierto de auditoría:
+               `gh issue list --label auditoria-automatica --state open`.
+            3. Construí un reporte en español con los hallazgos clasificados por
+               severidad (🔴 Crítico / 🟠 Alto / 🟡 Medio / 🔵 Bajo). Para cada
+               hallazgo incluí: archivo y línea (`ruta:línea`), descripción del
+               problema, impacto, y recomendación concreta de arreglo. Si NO
+               encontrás nada relevante, decilo explícitamente.
+            4. Escribí el reporte a un archivo temporal (ej. /tmp/reporte.md) y:
+               - Si NO hay issue de auditoría abierto: creá uno con
+                 `gh issue create --title "[Auditoría automática] Bugs y seguridad — <fecha YYYY-MM-DD>" --label auditoria-automatica --body-file /tmp/reporte.md`.
+               - Si YA hay uno abierto: agregá el reporte como comentario con
+                 `gh issue comment <número> --body-file /tmp/reporte.md`,
+                 encabezado con la fecha y hora de esta corrida.
+            5. No abras issues duplicados. No toques otros issues ni el código.
+
+            Empezá explorando la estructura del repo y luego profundizá en
+            src/, migrations/, los .sql, higodriver/ y la config de build.
