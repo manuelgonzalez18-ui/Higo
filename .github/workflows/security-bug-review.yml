@@ -135,7 +135,7 @@ jobs:
           # Le damos lectura del código + gh para gestionar el issue.
           claude_args: |
             --max-turns 50
-            --allowedTools "Read,Grep,Glob,Bash(gh issue list:*),Bash(gh issue create:*),Bash(gh issue comment:*),Bash(gh label create:*),Bash(gh label list:*)"
+            --allowedTools "Read,Write,Grep,Glob,Bash(mkdir:*),Bash(gh issue list:*),Bash(gh issue create:*),Bash(gh issue comment:*),Bash(gh label create:*),Bash(gh label list:*)"
           prompt: |
             Sos un agente de auditoría de seguridad y calidad de código para
             el proyecto "Higo". IMPORTANTE: la app se distribuye y consume
