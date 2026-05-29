@@ -79,11 +79,21 @@ jobs:
             echo "::error::ANDROID_KEYSTORE_BASE64 no está configurado. Cargalo en Settings > Secrets and variables > Actions."
             exit 1
           fi
-          # Strip de TODO whitespace (espacios, \n, \r, tabs) antes de
-          # decodificar. El secret suele venir contaminado con saltos de
-          # línea o CR del copy-paste (PowerShell/Windows), y base64 -d
-          # produce basura silenciosamente con esos chars. tr lo limpia.
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > android/app/release-key.jks
+          # Diagnóstico (NO revela el secret, solo longitudes y conteo de
+          # chars fuera del alfabeto base64). Esperado: raw≈3664, clean=3664,
+          # non_b64=0. Si raw difiere mucho de 3664 → secret truncado o con
+          # BOM/UTF-16. Si non_b64>0 → caracteres inválidos (encoding raro).
+          raw_len=$(printf '%s' "$ANDROID_KEYSTORE_BASE64" | wc -c)
+          cleaned=$(printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]')
+          clean_len=$(printf '%s' "$cleaned" | wc -c)
+          non_b64=$(printf '%s' "$cleaned" | tr -d 'A-Za-z0-9+/=' | wc -c)
+          echo "Diagnóstico secret → raw_len=$raw_len clean_len=$clean_len non_b64_chars=$non_b64 (esperado: ~3664 / 3664 / 0)"
+
+          # Strip de TODO whitespace + caracteres fuera del alfabeto base64
+          # estándar. Cubre saltos de línea, CR, BOM y basura de encoding del
+          # copy-paste (PowerShell/Windows). base64 -d produce basura
+          # silenciosamente con cualquiera de esos chars.
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -cd 'A-Za-z0-9+/=' | base64 -d > android/app/release-key.jks
           # Sanity check: si el secret quedó mal codificado, keytool fallaría
           # con mensajes crípticos. Validar el magic byte JKS (0xFEEDFEED).
           if ! head -c 4 android/app/release-key.jks | xxd -p | grep -qi '^feedfeed'; then
