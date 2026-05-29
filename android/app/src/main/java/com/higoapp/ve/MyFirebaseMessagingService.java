@@ -88,7 +88,15 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
 
         Intent acceptIntent = new Intent(Intent.ACTION_VIEW);
         // Deep link format: higo://accept?rideId=123
+        // Fix #13: setPackage() vuelve el Intent EXPLÍCITO a esta app, así
+        // ninguna otra app puede registrar el scheme higo:// y secuestrar
+        // el botón "Aceptar" de la notificación (antes lo veía como intent
+        // implícito y podía declararse handler). El deep link es 100%
+        // intra-app (lo emite este service, lo consume DriverDashboard
+        // vía Capacitor App.addListener), así que no necesitamos App
+        // Links / assetlinks.json — basta con restringir el target.
         acceptIntent.setData(Uri.parse("higo://accept?rideId=" + (rideId != null ? rideId : "")));
+        acceptIntent.setPackage(getPackageName());
         acceptIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
         PendingIntent acceptPendingIntent = PendingIntent.getActivity(this, 1,
