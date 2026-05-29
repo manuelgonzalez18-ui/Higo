@@ -375,20 +375,6 @@
 
             <div class="row">
                 <div class="field">
-                    <label for="password">Clave de acceso</label>
-                    <input id="password" name="password" type="password" required minlength="8" autocomplete="new-password" placeholder="Mínimo 8 caracteres">
-                    <small style="display:block;margin-top:6px;font-size:11px;color:#94a3b8;line-height:1.4;">
-                        Usá esta clave para iniciar sesión en la app Higo desde tu teléfono.
-                    </small>
-                </div>
-                <div class="field">
-                    <label for="password_confirm">Confirmar clave</label>
-                    <input id="password_confirm" name="password_confirm" type="password" required minlength="8" autocomplete="new-password" placeholder="Repetí tu clave">
-                </div>
-            </div>
-
-            <div class="row">
-                <div class="field">
                     <label for="city">Ciudad / zona</label>
                     <input id="city" name="city" type="text" required placeholder="Higuerote">
                 </div>
@@ -524,21 +510,10 @@
         status.className = 'status';
         status.textContent = '';
 
-        // Validación de clave: mínimo 8 caracteres + match con confirmación.
-        // Hacemos el check ANTES del file size loop para que el error salga
-        // arriba del form (que es donde está el campo).
-        var pwd  = form.querySelector('input[name="password"]').value || '';
-        var pwd2 = form.querySelector('input[name="password_confirm"]').value || '';
-        if (pwd.length < 8) {
-            setStatus('err', 'La clave debe tener al menos 8 caracteres.');
-            form.querySelector('input[name="password"]').focus();
-            return;
-        }
-        if (pwd !== pwd2) {
-            setStatus('err', 'Las claves no coinciden. Verificalas y volvé a intentar.');
-            form.querySelector('input[name="password_confirm"]').focus();
-            return;
-        }
+        // El aspirante ya NO elige clave acá: la genera el admin al aprobar
+        // y se la enviamos por correo (ver mensaje "te enviamos tu usuario y
+        // contraseña"). Esto evita que una clave viaje en texto plano por
+        // email al admin (hallazgo de seguridad #9).
 
         var files = ['photo_driver', 'photo_cedula', 'photo_licencia', 'photo_rcv', 'photo_circulation', 'photo_health', 'photo_vehicle'];
         for (var i = 0; i < files.length; i++) {
@@ -548,19 +523,11 @@
             if (f.size > MAX_BYTES) { setStatus('err', 'El archivo "' + f.name + '" supera 8 MB.'); return; }
         }
 
-        // No mandamos password_confirm al servidor — innecesario, solo
-        // sirvió para validación client-side. Lo removemos del FormData
-        // más abajo, después de construirlo.
-
         btn.disabled = true;
         var originalLabel = btn.textContent;
         btn.textContent = 'Enviando…';
 
         var fd = new FormData(form);
-        // password_confirm fue solo para validación client-side; lo
-        // sacamos del payload para no engordar el log del server con
-        // datos sensibles duplicados.
-        fd.delete('password_confirm');
 
         var fieldLabels = {
             full_name: 'Nombre y apellido',
