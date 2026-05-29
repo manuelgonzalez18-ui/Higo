@@ -61,7 +61,6 @@ $fullName     = trim((string) ($_POST['full_name']     ?? ''));
 $cedula       = trim((string) ($_POST['cedula']        ?? ''));
 $phone        = trim((string) ($_POST['phone']         ?? ''));
 $email        = strtolower(trim((string) ($_POST['email'] ?? '')));
-$password     = (string) ($_POST['password']           ?? '');
 $city         = trim((string) ($_POST['city']          ?? ''));
 $plan         = trim((string) ($_POST['plan']          ?? ''));
 $vehicleBrand = trim((string) ($_POST['vehicle_brand'] ?? ''));
@@ -82,16 +81,11 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
 if (!in_array($plan, ['moto', 'carro', 'camioneta'], true)) {
     rd_send(400, ['ok' => false, 'error' => 'invalid_plan']);
 }
-// La clave la elige el chofer en el form (campo password) y la usa para
-// loguearse en la app desde el teléfono. Validamos largo mínimo del
-// lado del server además del client-side. El admin la copia desde el
-// correo al crear el user en Supabase admin.
-if (strlen($password) < 8) {
-    rd_send(400, ['ok' => false, 'error' => 'password_too_short', 'detail' => 'min 8 chars']);
-}
-if (strlen($password) > 128) {
-    rd_send(400, ['ok' => false, 'error' => 'password_too_long', 'detail' => 'max 128 chars']);
-}
+// NOTA seguridad (#9): el aspirante ya NO elige clave acá. Antes el campo
+// `password` viajaba a admin@higodriver.com en texto plano y quedaba en el
+// inbox indefinidamente. Ahora la clave la genera el admin al aprobar
+// (welcome-driver.php, que la crea server-side y se la envía al conductor
+// por su propio correo). Este endpoint solo transporta la solicitud + docs.
 
 // ═══ Validación de archivos ═══════════════════════════════════════════
 
@@ -180,19 +174,15 @@ foreach ($rows as $k => $v) {
         . '</tr>';
 }
 
-// Bloque destacado con las credenciales que el admin tiene que cargar
-// en Supabase al aprobar al chofer. La clave la eligió el propio
-// chofer en el form (no la inventa el admin) → si en el futuro
-// automatizamos el alta en Supabase desde este endpoint, el chofer
-// puede loguear inmediato sin esperar handoff de credenciales.
+// Recordatorio del próximo paso para el admin. Ya NO incluye contraseña
+// (ver #9): al aprobar, el admin crea el user desde el panel y el sistema
+// genera la clave y se la envía al conductor por correo.
 $credsHtml = '<div style="margin:20px 0 0;padding:16px;background:#eff6ff;border:2px solid #3B82F6;border-radius:10px;">'
-    . '<p style="margin:0 0 10px;font-size:11px;color:#1d4ed8;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Datos de acceso para crear el usuario en Supabase</p>'
-    . '<table cellpadding="4" cellspacing="0" style="font-size:13px;color:#111827;border-collapse:collapse;">'
-    . '<tr><td style="color:#6b7280;padding-right:12px;">Email:</td><td><strong style="font-family:monospace;">' . $safe($email) . '</strong></td></tr>'
-    . '<tr><td style="color:#6b7280;padding-right:12px;">Clave:</td><td><strong style="font-family:monospace;background:#fff;padding:2px 8px;border-radius:4px;border:1px solid #cbd5e1;">' . $safe($password) . '</strong></td></tr>'
-    . '</table>'
-    . '<p style="margin:10px 0 0;font-size:11px;color:#7f1d1d;line-height:1.5;">'
-    . '<strong>Aviso:</strong> el chofer eligió esta clave él mismo. Cargala tal cual en Supabase para que pueda iniciar sesión en la app. Borrá este correo después de cargarla.'
+    . '<p style="margin:0 0 10px;font-size:11px;color:#1d4ed8;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Próximo paso</p>'
+    . '<p style="margin:0;font-size:13px;color:#111827;line-height:1.5;">'
+    . 'Revisá los documentos adjuntos y, si todo está en orden, creá el conductor desde el panel admin con el correo '
+    . '<strong style="font-family:monospace;">' . $safe($email) . '</strong>. '
+    . 'El sistema genera la contraseña y se la envía al conductor a su correo automáticamente.'
     . '</p>'
     . '</div>';
 
@@ -221,10 +211,10 @@ $plain = "Nueva solicitud de conductor recibida en higodriver.com\n"
 foreach ($rows as $k => $v) {
     $plain .= str_pad($k . ':', 22) . $v . "\n";
 }
-$plain .= "\nDATOS DE ACCESO (cargar en Supabase):\n"
-    . str_pad('Email:',  22) . $email . "\n"
-    . str_pad('Clave:',  22) . $password . "\n"
-    . "AVISO: la clave la eligió el chofer. Cargala tal cual y borrá este correo después.\n";
+$plain .= "\nPROXIMO PASO:\n"
+    . "Revisa los documentos adjuntos y, si todo esta en orden, crea el\n"
+    . "conductor desde el panel admin con el correo: {$email}\n"
+    . "El sistema genera la contrasena y se la envia al conductor por correo.\n";
 $plain .= "\nLas 7 fotos están adjuntas en este correo.\n";
 
 // ═══ Armado MIME (multipart/mixed con alternative anidado) ═════════════

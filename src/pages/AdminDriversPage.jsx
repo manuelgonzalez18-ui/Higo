@@ -368,10 +368,12 @@ const AdminDriversPage = () => {
     // Se usa multipart/form-data (no JSON con base64) para que el WAF de
     // Hostinger no bloquee el request con 403 por payloads grandes.
     const handleRegister = async () => {
-        if (!newDriver.full_name || !newDriver.email || !newDriver.password) {
-            setMessage({ type: 'error', text: 'Nombre, correo y contraseña son obligatorios.' });
+        if (!newDriver.full_name || !newDriver.email) {
+            setMessage({ type: 'error', text: 'Nombre y correo son obligatorios.' });
             return;
         }
+        // La contraseña es opcional: si se deja vacía, welcome-driver.php
+        // genera una fuerte server-side y se la envía al conductor por correo.
         setLoading(true);
         try {
             const { data: sessionData } = await supabase.auth.getSession();
@@ -956,17 +958,20 @@ const AdminDriversPage = () => {
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Contraseña</label>
+                                <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Contraseña <span className="text-gray-500 normal-case font-normal">(opcional)</span></label>
                                 <div className="relative">
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-500">key</span>
                                     <input
                                         type="password"
                                         className="w-full pl-10 pr-3 py-3 bg-[#0F1014] border border-white/10 rounded-xl text-white outline-none focus:border-violet-500 transition-colors"
-                                        placeholder="******"
+                                        placeholder="Dejar vacío para generar automática"
                                         value={newDriver.password}
                                         onChange={(e) => setNewDriver({ ...newDriver, password: e.target.value })}
                                     />
                                 </div>
+                                <small className="block mt-1.5 text-[11px] text-gray-500 leading-tight">
+                                    Si la dejás vacía, el sistema genera una contraseña segura y se la envía al conductor por correo.
+                                </small>
                             </div>
 
                         </div>

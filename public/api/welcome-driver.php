@@ -90,13 +90,21 @@ $email    = strtolower(trim((string) ($data['email'] ?? '')));
 $password = (string) ($data['password'] ?? '');
 $phone    = trim((string) ($data['phone'] ?? ''));
 
-if ($fullName === '' || $email === '' || $password === '') {
+if ($fullName === '' || $email === '') {
     wd_send(400, ['ok' => false, 'error' => 'missing_fields']);
 }
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     wd_send(400, ['ok' => false, 'error' => 'invalid_email']);
 }
-if (strlen($password) < 6) {
+
+// Password: si el admin no la provee (flujo nuevo, recomendado tras #9),
+// la generamos server-side fuerte. El conductor la recibe en el email de
+// bienvenida (canal legítimo, a su propio correo) y la puede cambiar luego.
+// Si el admin sí la manda (compat hacia atrás), exigimos largo mínimo.
+if ($password === '') {
+    // 16 chars del alfabeto base64url — ~96 bits de entropía.
+    $password = substr(rtrim(strtr(base64_encode(random_bytes(18)), '+/', '-_'), '='), 0, 16);
+} elseif (strlen($password) < 6) {
     wd_send(400, ['ok' => false, 'error' => 'weak_password']);
 }
 
