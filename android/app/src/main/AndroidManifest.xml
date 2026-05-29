@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <application
         android:allowBackup="false"
@@ -60,7 +61,14 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
+    <!-- AD_ID removido (auditoría #7): Higo no muestra anuncios ni hace
+         tracking publicitario. tools:node="remove" garantiza que si alguna
+         dependencia transitiva (Google Play Services / Firebase) intenta
+         re-agregarlo vía manifest merging, igual queda fuera. Sin AD_ID,
+         Play Console deja de exigir la declaración "Advertising ID" en
+         App Content. -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID"
+        tools:node="remove" />
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
