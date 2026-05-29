@@ -33,3 +33,11 @@ dist-ssr
 *.sw?
 
 service-account.json
+
+# Android keystores — NUNCA commitear. La upload key vive como GitHub Secret
+# (ANDROID_KEYSTORE_BASE64) y CI la decodifica antes del gradle build. Para
+# dev local, guardá el .jks en android/app/ — está ignorado pero presente.
+*.jks
+*.keystore
+*.p12
+*.pfx
