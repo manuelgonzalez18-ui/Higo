@@ -79,11 +79,15 @@ jobs:
             echo "::error::ANDROID_KEYSTORE_BASE64 no está configurado. Cargalo en Settings > Secrets and variables > Actions."
             exit 1
           fi
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/release-key.jks
+          # Strip de TODO whitespace (espacios, \n, \r, tabs) antes de
+          # decodificar. El secret suele venir contaminado con saltos de
+          # línea o CR del copy-paste (PowerShell/Windows), y base64 -d
+          # produce basura silenciosamente con esos chars. tr lo limpia.
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > android/app/release-key.jks
           # Sanity check: si el secret quedó mal codificado, keytool fallaría
           # con mensajes crípticos. Validar el magic byte JKS (0xFEEDFEED).
           if ! head -c 4 android/app/release-key.jks | xxd -p | grep -qi '^feedfeed'; then
-            echo "::error::release-key.jks decodificado NO tiene magic JKS. Revisar que ANDROID_KEYSTORE_BASE64 sea el output de 'base64 -w0' sin saltos de línea ni espacios."
+            echo "::error::release-key.jks decodificado NO tiene magic JKS. Revisar que ANDROID_KEYSTORE_BASE64 sea base64 puro del .jks (sin comillas ni texto extra). Largo esperado del secret: 3664 chars."
             exit 1
           fi
           echo "✓ Keystore decodificado ($(stat -c%s android/app/release-key.jks) bytes)"
