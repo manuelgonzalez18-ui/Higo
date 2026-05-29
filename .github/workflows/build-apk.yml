@@ -95,12 +95,17 @@ jobs:
           # silenciosamente con cualquiera de esos chars.
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -cd 'A-Za-z0-9+/=' | base64 -d > android/app/release-key.jks
           # Sanity check: si el secret quedó mal codificado, keytool fallaría
-          # con mensajes crípticos. Validar el magic byte JKS (0xFEEDFEED).
-          if ! head -c 4 android/app/release-key.jks | xxd -p | grep -qi '^feedfeed'; then
-            echo "::error::release-key.jks decodificado NO tiene magic JKS. Revisar que ANDROID_KEYSTORE_BASE64 sea base64 puro del .jks (sin comillas ni texto extra). Largo esperado del secret: 3664 chars."
+          # con mensajes crípticos. Aceptamos los dos formatos de keystore:
+          #   - JKS legacy:  magic 0xFEEDFEED
+          #   - PKCS12:      SEQUENCE ASN.1 DER, empieza con 0x3082 (el default
+          #                  de keytool desde Java 9+, aunque tenga extensión .jks)
+          magic=$(head -c 2 android/app/release-key.jks | xxd -p)
+          if [ "$magic" != "feed" ] && [ "$magic" != "3082" ]; then
+            echo "::error::release-key.jks decodificado no parece un keystore válido (magic=0x$magic, esperado feedfeed/JKS o 3082/PKCS12). Revisar ANDROID_KEYSTORE_BASE64."
             exit 1
           fi
-          echo "✓ Keystore decodificado ($(stat -c%s android/app/release-key.jks) bytes)"
+          fmt=$([ "$magic" = "feed" ] && echo JKS || echo PKCS12)
+          echo "✓ Keystore decodificado ($(stat -c%s android/app/release-key.jks) bytes, formato $fmt)"
 
       # Genera el AAB (Android App Bundle) firmado para Play Store y el
       # APK release firmado para testear en dispositivo real. Ambos usan
