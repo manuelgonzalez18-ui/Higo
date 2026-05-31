@@ -1,11 +1,11 @@
 name: Auditoría automática (bugs y seguridad)
 
-# Agente programado que revisa TODO el proyecto cada 12 horas en busca de
+# Agente programado que revisa TODO el proyecto una vez por día en busca de
 # bugs y problemas de seguridad, y abre/actualiza un GitHub Issue con los
 # hallazgos clasificados por severidad.
 #
 # Disparadores:
-#   - schedule (cron): 00:00 y 12:00 UTC todos los días => cada 12 horas.
+#   - schedule (cron): 00:00 UTC todos los días => 1 vez al día.
 #   - workflow_dispatch: para correrlo a mano desde Actions cuando quieras.
 #
 # IMPORTANTE — requisitos para que funcione:
@@ -14,10 +14,10 @@ name: Auditoría automática (bugs y seguridad)
 #   2) Los workflows con `schedule` SOLO se ejecutan desde la rama por
 #      defecto del repo (main). Mientras este archivo viva en una rama de
 #      feature, el cron NO dispara; usá "Run workflow" (workflow_dispatch)
-#      para probarlo. Una vez mergeado a main, el cron de 12h queda activo.
+#      para probarlo. Una vez mergeado a main, el cron diario queda activo.
 on:
   schedule:
-    - cron: '0 0,12 * * *'
+    - cron: '0 0 * * *'
   workflow_dispatch:
 
 # Leer el código + crear/comentar issues. `id-token: write` lo exige
