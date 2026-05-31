@@ -5,7 +5,9 @@ name: Auditoría automática (bugs y seguridad)
 # hallazgos clasificados por severidad.
 #
 # Disparadores:
-#   - schedule (cron): 00:00 UTC todos los días => 1 vez al día.
+#   - schedule (cron): 11:45 UTC todos los días = 07:45 AM Venezuela (UTC-4).
+#     Disparado 15 min antes de las 8 AM para que el issue esté listo
+#     cuando se arranque el día.
 #   - workflow_dispatch: para correrlo a mano desde Actions cuando quieras.
 #
 # IMPORTANTE — requisitos para que funcione:
@@ -17,7 +19,7 @@ name: Auditoría automática (bugs y seguridad)
 #      para probarlo. Una vez mergeado a main, el cron diario queda activo.
 on:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '45 11 * * *'
   workflow_dispatch:
 
 # Leer el código + crear/comentar issues. `id-token: write` lo exige
