@@ -1,0 +1,257 @@
+name: Auditoría automática (bugs y seguridad)
+
+# Agente programado que revisa TODO el proyecto una vez por día en busca de
+# bugs y problemas de seguridad, y abre/actualiza un GitHub Issue con los
+# hallazgos clasificados por severidad.
+#
+# Disparadores:
+#   - schedule (cron): 11:45 UTC todos los días = 07:45 AM Venezuela (UTC-4).
+#     Disparado 15 min antes de las 8 AM para que el issue esté listo
+#     cuando se arranque el día.
+#   - workflow_dispatch: para correrlo a mano desde Actions cuando quieras.
+#
+# IMPORTANTE — requisitos para que funcione:
+#   1) El secret ANTHROPIC_API_KEY debe estar cargado en el repo:
+#      Settings > Secrets and variables > Actions > New repository secret.
+#   2) Los workflows con `schedule` SOLO se ejecutan desde la rama por
+#      defecto del repo (main). Mientras este archivo viva en una rama de
+#      feature, el cron NO dispara; usá "Run workflow" (workflow_dispatch)
+#      para probarlo. Una vez mergeado a main, el cron diario queda activo.
+on:
+  schedule:
+    - cron: '45 11 * * *'
+  workflow_dispatch:
+
+# Leer el código + crear/comentar issues. `id-token: write` lo exige
+# claude-code-action@v1 para obtener su OIDC token (sin esto el step falla
+# con "Could not fetch an OIDC token").
+permissions:
+  contents: read
+  issues: write
+  id-token: write
+
+# Si ya hay una auditoría corriendo, cancelamos la vieja: no tiene sentido
+# acumular dos análisis del mismo árbol de código.
+concurrency:
+  group: security-bug-review
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Revisión de bugs y seguridad
+    runs-on: ubuntu-latest
+    # actions/checkout@v4 corre sobre Node 20 (deprecado). Forzamos Node 24
+    # para silenciar el warning de deprecation y adelantarnos al cambio
+    # obligatorio del runner (16 jun 2026).
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Health-check determinístico de los backends que consume el APK.
+      # La app vive en Play Store y depende de Supabase, Google Maps, Mapbox,
+      # Gemini y FCM: si cualquiera deja de responder, los usuarios ven la
+      # app rota. Este step NO falla el job (continue-on-error) — escribe el
+      # resultado a /tmp/backend-health.md para que el agente lo incluya en
+      # el issue de auditoría.
+      - name: Health-check de backends del APK
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+        run: |
+          set +e
+          report=/tmp/backend-health.md
+          fail=0
+          {
+            echo "## Health-check de backends ($(date -u +'%Y-%m-%d %H:%M UTC'))"
+            echo
+          } > "$report"
+
+          # probe <nombre> <url> <ok_regex> <metodo> [header...]
+          # metodo: GET (default) o POST. Los headers extra son opcionales y
+          # se pasan tal cual a curl con -H (uno por argumento).
+          probe() {
+            local name="$1" url="$2" ok_regex="$3" method="${4:-GET}"
+            shift 4 2>/dev/null || shift $#
+            local curl_args=(-s -o /dev/null -w '%{http_code}' --max-time 15)
+            if [ "$method" = "POST" ]; then
+              curl_args+=(-X POST -d '{}')
+            fi
+            local h
+            for h in "$@"; do
+              curl_args+=(-H "$h")
+            done
+            local code
+            code=$(curl "${curl_args[@]}" "$url")
+            [ -z "$code" ] && code="000"
+            if [[ "$code" =~ $ok_regex ]]; then
+              echo "- ✅ **$name** → HTTP $code" >> "$report"
+            else
+              echo "- ❌ **$name** → HTTP $code" >> "$report"
+              fail=$((fail+1))
+            fi
+          }
+
+          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
+            # PostgREST root: necesita apikey + Authorization Bearer (con la
+            # anon key ambos coinciden). Sin el Bearer devuelve 401 — falsa
+            # alarma que el audit detectó en la corrida anterior.
+            probe "Supabase REST" "$SUPABASE_URL/rest/v1/" "^(200|404)$" GET \
+              "apikey: $SUPABASE_ANON_KEY" "Authorization: Bearer $SUPABASE_ANON_KEY"
+            probe "Supabase Auth" "$SUPABASE_URL/auth/v1/health" "^200$" GET \
+              "apikey: $SUPABASE_ANON_KEY"
+          else
+            echo "- ⚠️ Supabase: secrets no configurados, skip" >> "$report"
+          fi
+
+          if [ -n "$GOOGLE_MAPS_API_KEY" ]; then
+            # 403 es ESPERADO: la key web está restringida por referrer/bundle,
+            # y un curl desde el runner no manda el referrer correcto. 403 =
+            # "key viva pero restringida" (estado seguro). 000/5xx = falla real.
+            # No distingue 403-restringida de 403-key-inválida vía HTTP code,
+            # limitación conocida al probar keys restringidas server-side.
+            probe "Google Maps Static (restringida)" \
+              "https://maps.googleapis.com/maps/api/staticmap?center=0,0&zoom=1&size=64x64&key=$GOOGLE_MAPS_API_KEY" \
+              "^(200|403)$" GET
+          fi
+
+          if [ -n "$MAPBOX_TOKEN" ]; then
+            probe "Mapbox tiles" \
+              "https://api.mapbox.com/v4/mapbox.mapbox-streets-v11.json?access_token=$MAPBOX_TOKEN" \
+              "^200$" GET
+          fi
+
+          if [ -n "$GEMINI_API_KEY" ]; then
+            probe "Gemini API" \
+              "https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY" \
+              "^200$" GET
+          fi
+
+          # FCM v1: el endpoint messages:send SOLO acepta POST. Un GET cae en
+          # 404 (método no mapeado) — falsa alarma que el audit reportó como
+          # "push roto". Con POST sin OAuth devuelve 401 UNAUTHENTICATED, que
+          # confirma que el proyecto existe y FCM v1 está vivo. 5xx/000 = falla.
+          if [ -n "$FIREBASE_PROJECT_ID" ]; then
+            probe "FCM v1 (proyecto $FIREBASE_PROJECT_ID)" \
+              "https://fcm.googleapis.com/v1/projects/$FIREBASE_PROJECT_ID/messages:send" \
+              "^(401|403)$" POST
+          fi
+
+          echo >> "$report"
+          echo "**Total fallos:** $fail" >> "$report"
+          echo "---" >> "$report"
+          echo
+          cat "$report"
+
+      - name: Auditoría con Claude Code
+        uses: anthropics/claude-code-action@v1
+        env:
+          # gh CLI usa GH_TOKEN para autenticarse contra la API del repo.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Le damos lectura del código + gh para gestionar el issue.
+          claude_args: |
+            --max-turns 50
+            --allowedTools "Read,Write,Grep,Glob,Bash(mkdir:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue comment:*),Bash(gh issue edit:*),Bash(gh label create:*),Bash(gh label list:*)"
+          prompt: |
+            Sos un agente de auditoría de seguridad y calidad de código para
+            el proyecto "Higo". IMPORTANTE: la app se distribuye y consume
+            principalmente como **APK en Google Play Store** (Capacitor +
+            Android), no como web. Priorizá los hallazgos que afecten al
+            APK y al backend que el APK consume. Tu trabajo es revisar TODO
+            el código del repositorio en busca de BUGS y PROBLEMAS DE
+            SEGURIDAD, y reportarlos en un GitHub Issue.
+
+            ## Qué revisar (prioridad)
+
+            Seguridad:
+            - Secrets o claves hardcodeadas en el código (Supabase service_role,
+              API keys, tokens, credenciales). Distinguí claves PÚBLICAS
+              esperadas (anon key de Supabase, Firebase web config, claves
+              `pk.*` de Mapbox) de las que NUNCA deben ir al cliente
+              (service_role keys, claves privadas, firebase-admin en el bundle
+              del navegador).
+            - Uso de firebase-admin o lógica privilegiada que pudiera terminar
+              en el bundle del frontend.
+            - Inyección SQL en los archivos .sql / migrations y en queries.
+            - XSS: usos de dangerouslySetInnerHTML, innerHTML, eval, etc.
+            - Fallas de autenticación/autorización y suposiciones de confianza
+              en el cliente (datos sensibles validados solo en el front).
+            - Validación de RLS de Supabase asumida pero no garantizada.
+            - El archivo de integración de pagos (higodriver / banesco): manejo
+              de credenciales, validación de input, verificación de firmas.
+            - Manejo inseguro de tokens en localStorage / logs que filtren PII.
+
+            Android / Play Store (CRÍTICO porque la app vive en Play):
+            - `android/app/src/main/AndroidManifest.xml`: permisos peligrosos
+              sin justificación (background location, SYSTEM_ALERT_WINDOW,
+              QUERY_ALL_PACKAGES, READ/WRITE_EXTERNAL_STORAGE en API ≥30,
+              etc.) que pueden causar rechazo o suspensión en Play Console.
+              También: `exported=true` en components sin protección,
+              `usesCleartextTraffic`, `allowBackup` peligroso, deep links
+              sin verificación.
+            - `android/app/build.gradle` y `android/variables.gradle`:
+              `targetSdkVersion` desactualizado (Google obliga a target del
+              año actual o el anterior; quedar abajo bloquea updates en Play),
+              `minSdkVersion` razonable, `compileSdkVersion` consistente,
+              `versionCode` / `versionName` coherentes.
+            - `android/app/build.gradle`: configuración de signing
+              (`signingConfigs`), uso de ProGuard/R8 (`minifyEnabled`,
+              `shrinkResources`) en release — sin minify, el APK filtra
+              nombres de clases y queda más pesado.
+            - `android/app/proguard-rules.pro`: reglas que pudieran filtrar
+              clases sensibles o dejar `-keep` demasiado amplios.
+            - `android/app/google-services.json` y cualquier `.jks`/`keystore`
+              committeado: NUNCA deben estar en el repo si son de release.
+              Si están, marcalo como CRÍTICO.
+            - `capacitor.config.json`: `server.url` apuntando a hosts
+              externos en producción, `androidScheme` http en vez de https,
+              `cleartext: true`, plugins con configuración insegura.
+            - Plugins de Capacitor instalados en `package.json`: verificar
+              que las versiones de `@capacitor/*` estén alineadas (mismatch
+              entre core/android/cli rompe el build silenciosamente).
+
+            Bugs:
+            - Errores de lógica, condiciones de carrera, manejo de errores
+              ausente, promesas sin await, null/undefined no chequeados,
+              fugas de memoria en hooks/efectos de React, dependencias mal
+              declaradas en useEffect.
+
+            ## Cómo reportar
+
+            1. Asegurate de que exista la etiqueta `auditoria-automatica`:
+               `gh label list` y, si falta, `gh label create auditoria-automatica --color D93F0B --description "Hallazgos del agente de auditoría programada"`.
+            2. Buscá si ya hay un issue abierto de auditoría:
+               `gh issue list --label auditoria-automatica --state open`.
+            3. Leé el archivo `/tmp/backend-health.md` (si existe) — contiene
+               el resultado del health-check de los backends que consume el
+               APK (Supabase, Google Maps, Mapbox, Gemini, FCM). Incluí ese
+               bloque AL INICIO del reporte tal cual está, ANTES de los
+               hallazgos de código. Si hay backends caídos, marcalos como
+               🔴 Crítico al tope.
+            4. Construí un reporte en español con los hallazgos clasificados por
+               severidad (🔴 Crítico / 🟠 Alto / 🟡 Medio / 🔵 Bajo). Para cada
+               hallazgo incluí: archivo y línea (`ruta:línea`), descripción del
+               problema, impacto, y recomendación concreta de arreglo. Si NO
+               encontrás nada relevante, decilo explícitamente.
+            5. Escribí el reporte a un archivo temporal (ej. /tmp/reporte.md) y:
+               - Si NO hay issue de auditoría abierto: creá uno con
+                 `gh issue create --title "[Auditoría automática] Bugs y seguridad — <fecha YYYY-MM-DD>" --label auditoria-automatica --body-file /tmp/reporte.md`.
+               - Si YA hay uno abierto: agregá el reporte como comentario con
+                 `gh issue comment <número> --body-file /tmp/reporte.md`,
+                 encabezado con la fecha y hora de esta corrida.
+            6. No abras issues duplicados. No toques otros issues ni el código.
+
+            Empezá leyendo `/tmp/backend-health.md`, luego explorá la
+            estructura del repo y profundizá en android/ (manifest, gradle,
+            proguard, capacitor.config.json), src/, migrations/, los .sql
+            y higodriver/.
