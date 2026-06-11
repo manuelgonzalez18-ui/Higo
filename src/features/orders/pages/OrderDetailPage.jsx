@@ -6,6 +6,7 @@ import {
   Send, ShieldAlert, Image, Check
 } from 'lucide-react';
 import { useOrderStore } from '../../../stores/shop/useOrderStore.js';
+import { useAuthStore } from '../../../stores/shop/useAuthStore.js';
 import { subscribeToOrder, syncOrderStatus } from '../../../services/shopOrderRealtimeService.js';
 import { useChatStore } from '../../../stores/shop/useChatStore.js';
 import { fetchStoreById } from '../../../services/shopStoreService.js';
@@ -131,12 +132,14 @@ export function OrderDetailPage() {
   }, [localOrder, remoteOrder]);
 
   // Geometry derived from order (safe even before order exists — guarded).
-  const storeLatLng = useMemo(() => order ? ({
+  // Remote-only orders (opened from another device) may lack storeLocation,
+  // so every access is optional-chained.
+  const storeLatLng = useMemo(() => order?.storeLocation?.lat != null ? ({
     lat: order.storeLocation.lat, lng: order.storeLocation.lng,
-  }) : null, [order?.storeLocation.lat, order?.storeLocation.lng]);
-  const userLatLng = useMemo(() => order ? ({
+  }) : null, [order?.storeLocation?.lat, order?.storeLocation?.lng]);
+  const userLatLng = useMemo(() => order?.userLocation?.lat != null ? ({
     lat: order.userLocation.lat, lng: order.userLocation.lng,
-  }) : null, [order?.userLocation.lat, order?.userLocation.lng]);
+  }) : null, [order?.userLocation?.lat, order?.userLocation?.lng]);
   const driverStartLatLng = useMemo(() => storeLatLng ? ({
     lat: storeLatLng.lat + 0.006, lng: storeLatLng.lng - 0.008,
   }) : null, [storeLatLng?.lat, storeLatLng?.lng]);
@@ -203,6 +206,8 @@ export function OrderDetailPage() {
     return unsubscribe;
   }, [orderId, updateOrderStatus, upsertRemoteOrder]);
 
+  // Hooks must run on every render: keep this above the early returns below.
+  const orderEvents = useOrderEvents(orderId);
 
   if (isLoadingOrder) {
     return (
@@ -224,7 +229,6 @@ export function OrderDetailPage() {
     );
   }
 
-  const orderEvents = useOrderEvents(orderId);
   const orderChat = chats[orderId] || { storeMessages: [], driverMessages: [] };
   const currentMessages = activeTab === 'store' ? orderChat.storeMessages : orderChat.driverMessages;
 
@@ -292,15 +296,21 @@ export function OrderDetailPage() {
 
         {/* MAP TRACKING VIEW */}
         <div className="tracking-map-container">
-          <TrackingMap
-            storeLatLng={storeLatLng}
-            userLatLng={userLatLng}
-            driverPos={resolvedDriverPos}
-            driverBearing={resolvedDriverBearing}
-            currentLeg={currentLeg}
-            legPath={legPath}
-            fullDeliveryPath={fullDeliveryPath}
-          />
+          {storeLatLng && userLatLng ? (
+            <TrackingMap
+              storeLatLng={storeLatLng}
+              userLatLng={userLatLng}
+              driverPos={resolvedDriverPos}
+              driverBearing={resolvedDriverBearing}
+              currentLeg={currentLeg}
+              legPath={legPath}
+              fullDeliveryPath={fullDeliveryPath}
+            />
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--higo-gray-400)', fontSize: '0.85rem' }}>
+              Mapa no disponible para este pedido
+            </div>
+          )}
 
           {currentLeg !== 'none' && (
             <div className="floating-driver-eta">

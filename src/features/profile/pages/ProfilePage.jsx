@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../../../services/supabase.js';
 import { useAuthStore } from '../../../stores/shop/useAuthStore.js';
 import { useLocationStore } from '../../../stores/shop/useLocationStore.js';
 import {
@@ -20,7 +22,8 @@ function aliasIcon(key) {
 }
 
 export function ProfilePage() {
-  const { role, userName, userPhone, setRole } = useAuthStore();
+  const navigate = useNavigate();
+  const { role, userId, userName, userPhone, setRole, setUserInfo } = useAuthStore();
   const {
     deliveryAddress,
     savedLocations,
@@ -32,6 +35,12 @@ export function ProfilePage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pendingPlace, setPendingPlace] = useState(null);
   const [aliasDraft, setAliasDraft] = useState('home');
+  const [editOpen, setEditOpen] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [phoneDraft, setPhoneDraft] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [editError, setEditError] = useState(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleRoleCycle = () => {
     if (role === 'customer') setRole('merchant');
@@ -39,8 +48,48 @@ export function ProfilePage() {
     else setRole('customer');
   };
 
-  const handleLogout = () => {
-    alert('Sesión cerrada correctamente.');
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.warn('[ShopProfile] signOut failed:', err?.message || err);
+    }
+    navigate('/auth', { replace: true });
+  };
+
+  const openEditAccount = () => {
+    setNameDraft(userName === 'Usuario Higo' || userName === 'Invitado' ? '' : userName);
+    setPhoneDraft(userPhone || '');
+    setEditError(null);
+    setEditOpen(true);
+  };
+
+  const handleSaveAccount = async () => {
+    const name = nameDraft.trim();
+    const phone = phoneDraft.trim();
+    if (!name) {
+      setEditError('El nombre no puede estar vacío.');
+      return;
+    }
+    setIsSavingProfile(true);
+    setEditError(null);
+    try {
+      if (userId) {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ full_name: name, phone: phone || null })
+          .eq('id', userId);
+        if (error) throw error;
+      }
+      setUserInfo({ userId, userName: name, userPhone: phone });
+      setEditOpen(false);
+    } catch (err) {
+      console.warn('[ShopProfile] profile update failed:', err?.message || err);
+      setEditError('No pudimos guardar los cambios. Intenta de nuevo.');
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
   const handlePlacePicked = (place) => {
@@ -71,7 +120,7 @@ export function ProfilePage() {
         </div>
         <div className="profile-info-col">
           <h2>{userName || 'Usuario Higo'}</h2>
-          <span className="profile-edit-link" onClick={() => alert('Edición de cuenta en desarrollo')}>
+          <span className="profile-edit-link" onClick={openEditAccount}>
             EDITA LA CUENTA
           </span>
         </div>
@@ -156,8 +205,8 @@ export function ProfilePage() {
         <button className="btn-profile-switch-account" onClick={handleRoleCycle}>
           Cambiar de cuenta (Simular {role === 'customer' ? 'Comercio' : role === 'merchant' ? 'Repartidor' : 'Cliente'})
         </button>
-        <button className="btn-profile-logout" onClick={handleLogout}>
-          Cerrar sesión
+        <button className="btn-profile-logout" onClick={handleLogout} disabled={isLoggingOut}>
+          {isLoggingOut ? 'Cerrando sesión...' : 'Cerrar sesión'}
         </button>
       </div>
 
@@ -168,6 +217,49 @@ export function ProfilePage() {
         onClose={() => setPickerOpen(false)}
         onSelect={handlePlacePicked}
       />
+
+      {editOpen && (
+        <div className="saved-alias-modal-backdrop" onClick={() => setEditOpen(false)}>
+          <div className="saved-alias-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Editar cuenta</h3>
+            <div className="profile-edit-fields">
+              <label className="profile-edit-field">
+                <span>Nombre</span>
+                <input
+                  type="text"
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  placeholder="Tu nombre"
+                  autoFocus
+                />
+              </label>
+              <label className="profile-edit-field">
+                <span>Teléfono</span>
+                <input
+                  type="tel"
+                  value={phoneDraft}
+                  onChange={(e) => setPhoneDraft(e.target.value)}
+                  placeholder="0412-0000000"
+                />
+              </label>
+              {editError && <p className="profile-edit-error">{editError}</p>}
+            </div>
+            <div className="saved-alias-modal__actions">
+              <button className="saved-alias-cancel" onClick={() => setEditOpen(false)} type="button">
+                Cancelar
+              </button>
+              <button
+                className="saved-alias-save"
+                onClick={handleSaveAccount}
+                disabled={isSavingProfile}
+                type="button"
+              >
+                {isSavingProfile ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {pendingPlace && (
         <div className="saved-alias-modal-backdrop" onClick={() => setPendingPlace(null)}>

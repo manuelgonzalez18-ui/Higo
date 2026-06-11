@@ -81,6 +81,7 @@ export function CheckoutPage() {
   const [paidWithAmount, setPaidWithAmount] = useState('');
   const [copied, setCopied] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
 
   const items = carts[storeId]?.items || [];
   const productTotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -134,6 +135,16 @@ export function CheckoutPage() {
 
   const handleConfirmOrder = async () => {
     if (!store) return;
+    setSubmitError(null);
+
+    if (!userLocation) {
+      setSubmitError('Selecciona tu dirección de entrega antes de confirmar el pedido.');
+      return;
+    }
+    if (deliveryPayMethod === 'cash' && paidWithAmount && parseFloat(paidWithAmount) < fee) {
+      setSubmitError(`El monto en efectivo es menor a la tarifa de envío (${feeText}).`);
+      return;
+    }
     setIsSubmitting(true);
 
     const baseOrderData = {
@@ -154,8 +165,9 @@ export function CheckoutPage() {
       deliveryPaymentStatus: 'DELIVERY_PAYMENT_PENDING',
     };
 
+    let remote = null;
     try {
-      const remote = await createOrderRemote({
+      remote = await createOrderRemote({
         customer_id: customerId,
         store_id: store.id,
         total: grandTotal,
@@ -167,7 +179,11 @@ export function CheckoutPage() {
         delivery_latitude: userLocation.lat,
         delivery_longitude: userLocation.lng,
       });
+    } catch (err) {
+      console.warn('[Checkout] createOrderRemote failed:', err?.message || err);
+    }
 
+    if (remote) {
       createOrder({
         ...baseOrderData,
         id: remote.id,
@@ -176,16 +192,22 @@ export function CheckoutPage() {
         updatedAt: remote.updatedAt,
         driverId: remote.driverId,
       });
-
-      await pushOrderEvent({
+      // Best-effort event: a failure here must not duplicate the order.
+      pushOrderEvent({
         orderId: remote.id,
         eventType: 'ORDER_CREATED',
         actorType: 'customer',
         actorId: customerId,
         payload: { city: 'Higuerote' },
-      });
-    } catch (_err) {
-      // Fallback local for demo/offline flow.
+      }).catch((err) => console.warn('[Checkout] pushOrderEvent failed:', err?.message || err));
+    } else if (customerId) {
+      // Logged-in user: the merchant only sees remote orders, so failing
+      // silently would strand the customer. Let them retry.
+      setIsSubmitting(false);
+      setSubmitError('No pudimos registrar tu pedido. Revisa tu conexión e intenta de nuevo.');
+      return;
+    } else {
+      // Guest/demo flow without backend: keep the local-only order.
       createOrder(baseOrderData);
     }
 
@@ -279,13 +301,15 @@ export function CheckoutPage() {
                 <Edit3 size={14} style={{ marginLeft: 'auto', opacity: 0.6 }} />
               </div>
             )}
-            <div className="checkout-map">
-              <CheckoutMap
-                origin={{ lat: userLocation.lat, lng: userLocation.lng }}
-                destination={{ lat: store.latitude, lng: store.longitude }}
-                path={routePath}
-              />
-            </div>
+            {userLocation && (
+              <div className="checkout-map">
+                <CheckoutMap
+                  origin={{ lat: userLocation.lat, lng: userLocation.lng }}
+                  destination={{ lat: store.latitude, lng: store.longitude }}
+                  path={routePath}
+                />
+              </div>
+            )}
             <div className="distance-info" style={{ marginTop: 'var(--space-2)' }}>
               <Navigation size={15} />
               <span>{distanceText} de distancia</span>
@@ -454,6 +478,11 @@ export function CheckoutPage() {
 
         {/* Confirm Bar */}
         <div className="checkout-confirm-bar">
+          {submitError && (
+            <div className="checkout-submit-error" role="alert">
+              ⚠️ {submitError}
+            </div>
+          )}
           <div className="checkout-confirm-total">
             <span>Total general</span>
             <span>{formatCurrency(grandTotal)}</span>

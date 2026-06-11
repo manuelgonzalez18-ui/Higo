@@ -133,6 +133,48 @@
 }
 
 /* Alias-naming modal shown after picking an address */
+/* Account edit modal fields */
+.profile-edit-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: var(--space-3) 0;
+}
+
+.profile-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.profile-edit-field span {
+  font-size: var(--font-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--higo-gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.profile-edit-field input {
+  padding: var(--space-3);
+  border: 1px solid var(--higo-gray-200);
+  border-radius: var(--radius-md);
+  font-size: var(--font-sm);
+  color: var(--higo-gray-900);
+  background: var(--higo-white);
+}
+
+.profile-edit-field input:focus {
+  outline: none;
+  border-color: var(--higo-blue);
+}
+
+.profile-edit-error {
+  font-size: var(--font-xs);
+  color: var(--higo-error, #DC2626);
+  font-weight: var(--weight-medium);
+}
+
 .saved-alias-modal-backdrop {
   position: fixed;
   inset: 0;

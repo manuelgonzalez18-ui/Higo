@@ -406,6 +406,17 @@
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06);
 }
 
+.checkout-submit-error {
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: var(--radius-md);
+  color: var(--higo-error, #DC2626);
+  font-size: var(--font-sm);
+  font-weight: var(--weight-medium);
+}
+
 .checkout-confirm-total {
   display: flex;
   justify-content: space-between;

@@ -42,10 +42,10 @@ export function SearchMap() {
   const trackingStoreLatLng = activeOrder?.storeLocation || null;
   const trackingUserLatLng = activeOrder?.userLocation || userLocation || null;
   const currentLeg = activeOrder?.status === 'DRIVER_ASSIGNED' ? 'to_store' : activeOrder?.status === 'PICKED_UP' ? 'to_client' : 'none';
+  const { driverPos, driverBearing, signalAgeSec } = useLiveDriverTracking(activeOrder?.id, trackingStoreLatLng);
   const legOrigin = driverPos || trackingStoreLatLng;
   const legDest = currentLeg === 'to_store' ? trackingStoreLatLng : trackingUserLatLng;
   const { path: trackingPath, duration: trackingDurationSec } = useDirections(legOrigin, legDest);
-  const { driverPos, driverBearing, signalAgeSec } = useLiveDriverTracking(activeOrder?.id, trackingStoreLatLng);
 
   useEffect(() => {
     fetchStores().then((data) => {
