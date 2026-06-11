@@ -12,6 +12,7 @@ import { fetchDispatchableOrdersRemote } from '../../../services/shopOrderServic
 import { useRealtimeOrders } from '../../../hooks/shop/useRealtimeOrders.js';
 import { syncOrderStatus } from '../../../services/shopOrderRealtimeService.js';
 import { useChatStore } from '../../../stores/shop/useChatStore.js';
+import { useChatSync } from '../../../hooks/shop/useChatSync.js';
 import { formatCurrency } from '../../../services/shopDeliveryPricing.js';
 import { MapView, AutoFitBounds } from '../../../components/shop/maps/MapView.jsx';
 import { EmojiMarker } from '../../../components/shop/maps/EmojiMarker.jsx';
@@ -59,8 +60,8 @@ function DriverDeliveryMap({ storeLatLng, userLatLng, status }) {
 export function DriverDashboard() {
   const { orders, updateOrderStatus, assignDriver, upsertRemoteOrder } = useOrderStore();
   const driverId = useAuthStore((s) => s.userId);
-  const { chats, addMessage, initializeChat } = useChatStore();
-  
+  const { chats, sendMessage, initializeChat } = useChatStore();
+
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [chatInputText, setChatInputText] = useState('');
 
@@ -123,6 +124,8 @@ export function DriverDashboard() {
     }
   }, [selectedOrder]);
 
+  useChatSync(selectedOrder?.id);
+
   const orderChat = useMemo(() => {
     if (!selectedOrder) return { driverMessages: [] };
     initializeChat(selectedOrder.id);
@@ -134,8 +137,9 @@ export function DriverDashboard() {
     e.preventDefault();
     if (!chatInputText.trim() || !selectedOrder) return;
 
-    addMessage(selectedOrder.id, 'driverMessages', {
+    sendMessage(selectedOrder.id, 'driverMessages', {
       sender: 'driver',
+      senderId: driverId,
       text: chatInputText
     });
     setChatInputText('');
@@ -147,20 +151,23 @@ export function DriverDashboard() {
     pushOrderEvent({ orderId, eventType: 'DRIVER_EN_ROUTE_TO_STORE', actorType: 'driver', actorId: driverId, payload: { city: 'Higuerote' } }).catch((error) => reportRealtimeError("realtime action failed", error));
     
     // Add greeting message
-    addMessage(orderId, 'driverMessages', {
+    sendMessage(orderId, 'driverMessages', {
       sender: 'driver',
-      text: '🛵 Higo Driver "Carlos Mendoza" ha aceptado tu entrega y va en camino al local.',
+      senderId: driverId,
+      text: '🛵 Tu Higo Driver ha aceptado la entrega y va en camino al local.',
       system: true
     });
 
-    addMessage(orderId, 'driverMessages', {
+    sendMessage(orderId, 'driverMessages', {
       sender: 'driver',
-      text: '¡Hola! Buenas noches, soy tu Higo Driver. Ya voy en camino a retirar tu pedido en el comercio. ⚡'
+      senderId: driverId,
+      text: '¡Hola! Soy tu Higo Driver. Ya voy en camino a retirar tu pedido en el comercio. ⚡'
     });
 
-    addMessage(orderId, 'storeMessages', {
-      sender: 'store',
-      text: '🛵 El repartidor Carlos Mendoza ha aceptado el despacho y va en camino al local.'
+    sendMessage(orderId, 'storeMessages', {
+      sender: 'driver',
+      senderId: driverId,
+      text: '🛵 El repartidor ha aceptado el despacho y va en camino al local.'
     });
   };
 
@@ -170,8 +177,9 @@ export function DriverDashboard() {
     syncOrderStatus(orderId, 'DRIVER_EN_ROUTE_TO_CUSTOMER').catch((error) => reportRealtimeError("realtime action failed", error));
     pushOrderEvent({ orderId, eventType: 'DRIVER_EN_ROUTE_TO_CUSTOMER', actorType: 'driver', actorId: driverId, payload: { city: 'Higuerote' } }).catch((error) => reportRealtimeError("realtime action failed", error));
     
-    addMessage(orderId, 'driverMessages', {
+    sendMessage(orderId, 'driverMessages', {
       sender: 'driver',
+      senderId: driverId,
       text: '🚀 ¡Pedido retirado con éxito! Voy en camino a tu ubicación. Ya puedes rastrearme en el mapa.'
     });
   };
@@ -183,8 +191,9 @@ export function DriverDashboard() {
     updateOrderStatus(orderId, 'DELIVERY_PAYMENT_CONFIRMED');
     syncOrderStatus(orderId, 'DELIVERY_PAYMENT_CONFIRMED').catch((error) => reportRealtimeError("realtime action failed", error));
 
-    addMessage(orderId, 'driverMessages', {
+    sendMessage(orderId, 'driverMessages', {
       sender: 'driver',
+      senderId: driverId,
       text: '💵 Pago de envío confirmado. Procedo a cerrar la entrega. ¡Gracias!'
     });
   };
@@ -194,8 +203,9 @@ export function DriverDashboard() {
     updateOrderStatus(orderId, 'DELIVERED');
     syncOrderStatus(orderId, 'DELIVERED').catch((error) => reportRealtimeError("realtime action failed", error));
     
-    addMessage(orderId, 'driverMessages', {
+    sendMessage(orderId, 'driverMessages', {
       sender: 'driver',
+      senderId: driverId,
       text: '👋 ¡He llegado a tu ubicación! Estoy afuera para entregarte el pedido. ¡Muchas gracias!'
     });
   };

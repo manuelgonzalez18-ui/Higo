@@ -17,6 +17,7 @@ import { useDirections } from '../../../hooks/shop/useDirections.js';
 import { Spinner } from '../../../components/shop/ui/Spinner.jsx';
 import { useLiveDriverTracking } from '../../../hooks/shop/useLiveDriverTracking.js';
 import { useOrderEvents } from '../../../hooks/shop/useOrderEvents.js';
+import { useChatSync } from '../../../hooks/shop/useChatSync.js';
 import { pushOrderEvent } from '../../../services/shopTrackingService.js';
 import { MapView, AutoFitBounds } from '../../../components/shop/maps/MapView.jsx';
 import { EmojiMarker } from '../../../components/shop/maps/EmojiMarker.jsx';
@@ -92,7 +93,8 @@ export function OrderDetailPage() {
 
   const { getOrderById, updateOrderStatus, upsertRemoteOrder } = useOrderStore();
   const customerId = useAuthStore((s) => s.userId);
-  const { chats, initializeChat, addMessage } = useChatStore();
+  const { chats, initializeChat, sendMessage } = useChatStore();
+  useChatSync(orderId);
 
   const localOrder = getOrderById(orderId);
   const [remoteOrder, setRemoteOrder] = useState(null);
@@ -238,7 +240,7 @@ export function OrderDetailPage() {
     const text = inputText;
     setInputText('');
     const targetTab = activeTab === 'store' ? 'storeMessages' : 'driverMessages';
-    addMessage(orderId, targetTab, { sender: 'customer', text });
+    sendMessage(orderId, targetTab, { sender: 'customer', senderId: customerId, text });
   };
 
   const normalizeStatusForSteps = (status) => ({
@@ -263,6 +265,26 @@ export function OrderDetailPage() {
     pushOrderEvent({
       orderId,
       eventType: 'PRODUCT_PAYMENT_REPORTED',
+      actorType: 'customer',
+      actorId: customerId || 'customer-demo',
+      payload: { source: 'order_detail' },
+    }).catch((error) => reportRealtimeError('remote action failed', error));
+  };
+
+  // Solo se permite auto-cancelar antes de que el comercio valide el pago
+  // (después hay dinero movido y la cancelación requiere al comercio).
+  const CANCELLABLE_STATUSES = ['PENDING_PRODUCT_PAYMENT', 'PENDING_PAYMENT', 'PRODUCT_PAYMENT_REPORTED'];
+  const canCancel = CANCELLABLE_STATUSES.includes(order.status);
+
+  const cancelOrder = () => {
+    if (!orderId || !canCancel) return;
+    const confirmed = window.confirm('¿Seguro que quieres cancelar este pedido?');
+    if (!confirmed) return;
+    updateOrderStatus(orderId, 'CANCELLED');
+    syncOrderStatus(orderId, 'CANCELLED').catch((error) => reportRealtimeError('remote action failed', error));
+    pushOrderEvent({
+      orderId,
+      eventType: 'ORDER_CANCELLED',
       actorType: 'customer',
       actorId: customerId || 'customer-demo',
       payload: { source: 'order_detail' },
@@ -379,6 +401,15 @@ export function OrderDetailPage() {
             {(order.status === 'PICKED_UP' || order.status === 'DRIVER_EN_ROUTE_TO_CUSTOMER' || order.status === 'DELIVERY_PAYMENT_PENDING') && (
               <button className="higo-btn higo-btn-outline" onClick={reportDeliveryPayment}>
                 Ya pagué el envío al driver
+              </button>
+            )}
+            {canCancel && (
+              <button
+                className="higo-btn higo-btn-outline"
+                style={{ color: 'var(--higo-error)', borderColor: 'var(--higo-error)' }}
+                onClick={cancelOrder}
+              >
+                Cancelar pedido
               </button>
             )}
           </div>
