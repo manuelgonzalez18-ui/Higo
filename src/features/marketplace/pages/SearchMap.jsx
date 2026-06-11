@@ -21,8 +21,15 @@ const HIGUEROTE_CENTER = { lat: 10.4817, lng: -66.0997 };
 
 const ORDER_STATUS_COPY = {
   DRIVER_ASSIGNED: { label: 'El driver va a la tienda', tone: 'pickup' },
+  DRIVER_EN_ROUTE_TO_STORE: { label: 'El driver va a la tienda', tone: 'pickup' },
   PICKED_UP: { label: 'Tu pedido va en camino', tone: 'delivery' },
+  DRIVER_EN_ROUTE_TO_CUSTOMER: { label: 'Tu pedido va en camino', tone: 'delivery' },
+  DELIVERY_PAYMENT_PENDING: { label: 'Tu pedido va en camino', tone: 'delivery' },
+  DELIVERY_PAYMENT_REPORTED: { label: 'Tu pedido va en camino', tone: 'delivery' },
 };
+
+const TRACKABLE_STATUSES = Object.keys(ORDER_STATUS_COPY);
+const TO_STORE_STATUSES = ['DRIVER_ASSIGNED', 'DRIVER_EN_ROUTE_TO_STORE'];
 
 export function SearchMap() {
   const navigate = useNavigate();
@@ -35,17 +42,17 @@ export function SearchMap() {
 
   const orders = useOrderStore((s) => s.orders);
   const activeOrder = useMemo(
-    () => orders.find((o) => ['DRIVER_ASSIGNED', 'PICKED_UP'].includes(o.status)),
+    () => orders.find((o) => TRACKABLE_STATUSES.includes(o.status)),
     [orders],
   );
 
   const trackingStoreLatLng = activeOrder?.storeLocation || null;
   const trackingUserLatLng = activeOrder?.userLocation || userLocation || null;
-  const currentLeg = activeOrder?.status === 'DRIVER_ASSIGNED' ? 'to_store' : activeOrder?.status === 'PICKED_UP' ? 'to_client' : 'none';
+  const currentLeg = !activeOrder ? 'none' : TO_STORE_STATUSES.includes(activeOrder.status) ? 'to_store' : 'to_client';
+  const { driverPos, driverBearing, signalAgeSec } = useLiveDriverTracking(activeOrder?.id, trackingStoreLatLng);
   const legOrigin = driverPos || trackingStoreLatLng;
   const legDest = currentLeg === 'to_store' ? trackingStoreLatLng : trackingUserLatLng;
   const { path: trackingPath, duration: trackingDurationSec } = useDirections(legOrigin, legDest);
-  const { driverPos, driverBearing, signalAgeSec } = useLiveDriverTracking(activeOrder?.id, trackingStoreLatLng);
 
   useEffect(() => {
     fetchStores().then((data) => {

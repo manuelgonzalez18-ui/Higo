@@ -3,9 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Store, Truck, Navigation, Clock,
-  Send, ShieldAlert, Image, Check
+  Send, ShieldAlert, Image, Check, Star
 } from 'lucide-react';
 import { useOrderStore } from '../../../stores/shop/useOrderStore.js';
+import { useAuthStore } from '../../../stores/shop/useAuthStore.js';
 import { subscribeToOrder, syncOrderStatus } from '../../../services/shopOrderRealtimeService.js';
 import { useChatStore } from '../../../stores/shop/useChatStore.js';
 import { fetchStoreById } from '../../../services/shopStoreService.js';
@@ -16,6 +17,8 @@ import { useDirections } from '../../../hooks/shop/useDirections.js';
 import { Spinner } from '../../../components/shop/ui/Spinner.jsx';
 import { useLiveDriverTracking } from '../../../hooks/shop/useLiveDriverTracking.js';
 import { useOrderEvents } from '../../../hooks/shop/useOrderEvents.js';
+import { useChatSync } from '../../../hooks/shop/useChatSync.js';
+import { fetchReviewForOrder, submitStoreReview } from '../../../services/shopReviewService.js';
 import { pushOrderEvent } from '../../../services/shopTrackingService.js';
 import { MapView, AutoFitBounds } from '../../../components/shop/maps/MapView.jsx';
 import { EmojiMarker } from '../../../components/shop/maps/EmojiMarker.jsx';
@@ -85,13 +88,111 @@ function TrackingMap({
   );
 }
 
+function StoreRatingBlock({ orderId, storeName }) {
+  const [existingReview, setExistingReview] = useState(null);
+  const [isLoadingReview, setIsLoadingReview] = useState(true);
+  const [draftRating, setDraftRating] = useState(0);
+  const [draftComment, setDraftComment] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchReviewForOrder(orderId)
+      .then((review) => { if (mounted) setExistingReview(review); })
+      .catch((err) => console.warn('[StoreRatingBlock] fetch failed:', err?.message || err))
+      .finally(() => { if (mounted) setIsLoadingReview(false); });
+    return () => { mounted = false; };
+  }, [orderId]);
+
+  const handleSubmit = async () => {
+    if (!draftRating || isSubmitting) return;
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      const review = await submitStoreReview({ orderId, rating: draftRating, comment: draftComment });
+      setExistingReview(review || { rating: draftRating, comment: draftComment });
+    } catch (err) {
+      console.warn('[StoreRatingBlock] submit failed:', err?.message || err);
+      setSubmitError('No pudimos guardar tu calificación. Intenta de nuevo.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (isLoadingReview) return null;
+
+  if (existingReview) {
+    return (
+      <div className="store-rating-block" role="status">
+        <div className="store-rating-block__title">¡Gracias por calificar!</div>
+        <div className="store-rating-block__stars">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <Star
+              key={n}
+              size={22}
+              fill={n <= existingReview.rating ? 'var(--higo-warning, #F59E0B)' : 'none'}
+              color={n <= existingReview.rating ? 'var(--higo-warning, #F59E0B)' : 'var(--higo-gray-300)'}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="store-rating-block">
+      <div className="store-rating-block__title">¿Cómo estuvo tu pedido en {storeName || 'el comercio'}?</div>
+      <div className="store-rating-block__stars">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            type="button"
+            className="store-rating-block__star-btn"
+            onClick={() => setDraftRating(n)}
+            aria-label={`${n} estrellas`}
+          >
+            <Star
+              size={26}
+              fill={n <= draftRating ? 'var(--higo-warning, #F59E0B)' : 'none'}
+              color={n <= draftRating ? 'var(--higo-warning, #F59E0B)' : 'var(--higo-gray-300)'}
+            />
+          </button>
+        ))}
+      </div>
+      {draftRating > 0 && (
+        <>
+          <textarea
+            className="store-rating-block__comment"
+            rows={2}
+            maxLength={300}
+            placeholder="Cuéntanos más (opcional)..."
+            value={draftComment}
+            onChange={(e) => setDraftComment(e.target.value)}
+          />
+          {submitError && <p className="store-rating-block__error">{submitError}</p>}
+          <button
+            type="button"
+            className="higo-btn"
+            onClick={handleSubmit}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Enviando...' : 'Enviar calificación'}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function OrderDetailPage() {
   const { orderId } = useParams();
   const navigate = useNavigate();
 
   const { getOrderById, updateOrderStatus, upsertRemoteOrder } = useOrderStore();
   const customerId = useAuthStore((s) => s.userId);
-  const { chats, initializeChat, addMessage } = useChatStore();
+  const { chats, initializeChat, sendMessage } = useChatStore();
+  useChatSync(orderId);
 
   const localOrder = getOrderById(orderId);
   const [remoteOrder, setRemoteOrder] = useState(null);
@@ -131,12 +232,14 @@ export function OrderDetailPage() {
   }, [localOrder, remoteOrder]);
 
   // Geometry derived from order (safe even before order exists — guarded).
-  const storeLatLng = useMemo(() => order ? ({
+  // Remote-only orders (opened from another device) may lack storeLocation,
+  // so every access is optional-chained.
+  const storeLatLng = useMemo(() => order?.storeLocation?.lat != null ? ({
     lat: order.storeLocation.lat, lng: order.storeLocation.lng,
-  }) : null, [order?.storeLocation.lat, order?.storeLocation.lng]);
-  const userLatLng = useMemo(() => order ? ({
+  }) : null, [order?.storeLocation?.lat, order?.storeLocation?.lng]);
+  const userLatLng = useMemo(() => order?.userLocation?.lat != null ? ({
     lat: order.userLocation.lat, lng: order.userLocation.lng,
-  }) : null, [order?.userLocation.lat, order?.userLocation.lng]);
+  }) : null, [order?.userLocation?.lat, order?.userLocation?.lng]);
   const driverStartLatLng = useMemo(() => storeLatLng ? ({
     lat: storeLatLng.lat + 0.006, lng: storeLatLng.lng - 0.008,
   }) : null, [storeLatLng?.lat, storeLatLng?.lng]);
@@ -203,6 +306,8 @@ export function OrderDetailPage() {
     return unsubscribe;
   }, [orderId, updateOrderStatus, upsertRemoteOrder]);
 
+  // Hooks must run on every render: keep this above the early returns below.
+  const orderEvents = useOrderEvents(orderId);
 
   if (isLoadingOrder) {
     return (
@@ -224,7 +329,6 @@ export function OrderDetailPage() {
     );
   }
 
-  const orderEvents = useOrderEvents(orderId);
   const orderChat = chats[orderId] || { storeMessages: [], driverMessages: [] };
   const currentMessages = activeTab === 'store' ? orderChat.storeMessages : orderChat.driverMessages;
 
@@ -234,7 +338,7 @@ export function OrderDetailPage() {
     const text = inputText;
     setInputText('');
     const targetTab = activeTab === 'store' ? 'storeMessages' : 'driverMessages';
-    addMessage(orderId, targetTab, { sender: 'customer', text });
+    sendMessage(orderId, targetTab, { sender: 'customer', senderId: customerId, text });
   };
 
   const normalizeStatusForSteps = (status) => ({
@@ -259,6 +363,26 @@ export function OrderDetailPage() {
     pushOrderEvent({
       orderId,
       eventType: 'PRODUCT_PAYMENT_REPORTED',
+      actorType: 'customer',
+      actorId: customerId || 'customer-demo',
+      payload: { source: 'order_detail' },
+    }).catch((error) => reportRealtimeError('remote action failed', error));
+  };
+
+  // Solo se permite auto-cancelar antes de que el comercio valide el pago
+  // (después hay dinero movido y la cancelación requiere al comercio).
+  const CANCELLABLE_STATUSES = ['PENDING_PRODUCT_PAYMENT', 'PENDING_PAYMENT', 'PRODUCT_PAYMENT_REPORTED'];
+  const canCancel = CANCELLABLE_STATUSES.includes(order.status);
+
+  const cancelOrder = () => {
+    if (!orderId || !canCancel) return;
+    const confirmed = window.confirm('¿Seguro que quieres cancelar este pedido?');
+    if (!confirmed) return;
+    updateOrderStatus(orderId, 'CANCELLED');
+    syncOrderStatus(orderId, 'CANCELLED').catch((error) => reportRealtimeError('remote action failed', error));
+    pushOrderEvent({
+      orderId,
+      eventType: 'ORDER_CANCELLED',
       actorType: 'customer',
       actorId: customerId || 'customer-demo',
       payload: { source: 'order_detail' },
@@ -292,15 +416,21 @@ export function OrderDetailPage() {
 
         {/* MAP TRACKING VIEW */}
         <div className="tracking-map-container">
-          <TrackingMap
-            storeLatLng={storeLatLng}
-            userLatLng={userLatLng}
-            driverPos={resolvedDriverPos}
-            driverBearing={resolvedDriverBearing}
-            currentLeg={currentLeg}
-            legPath={legPath}
-            fullDeliveryPath={fullDeliveryPath}
-          />
+          {storeLatLng && userLatLng ? (
+            <TrackingMap
+              storeLatLng={storeLatLng}
+              userLatLng={userLatLng}
+              driverPos={resolvedDriverPos}
+              driverBearing={resolvedDriverBearing}
+              currentLeg={currentLeg}
+              legPath={legPath}
+              fullDeliveryPath={fullDeliveryPath}
+            />
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--higo-gray-400)', fontSize: '0.85rem' }}>
+              Mapa no disponible para este pedido
+            </div>
+          )}
 
           {currentLeg !== 'none' && (
             <div className="floating-driver-eta">
@@ -371,7 +501,20 @@ export function OrderDetailPage() {
                 Ya pagué el envío al driver
               </button>
             )}
+            {canCancel && (
+              <button
+                className="higo-btn higo-btn-outline"
+                style={{ color: 'var(--higo-error)', borderColor: 'var(--higo-error)' }}
+                onClick={cancelOrder}
+              >
+                Cancelar pedido
+              </button>
+            )}
           </div>
+
+          {order.status === 'DELIVERED' && (
+            <StoreRatingBlock orderId={orderId} storeName={order.storeName} />
+          )}
 
           <div className="order-summary-header">
             <Store size={16} />

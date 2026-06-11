@@ -246,6 +246,58 @@
   background: var(--higo-success);
 }
 
+/* Post-delivery store rating */
+.store-rating-block {
+  margin-bottom: 0.85rem;
+  padding: 0.85rem;
+  background: var(--higo-gray-50);
+  border: 1px solid var(--higo-gray-200);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.store-rating-block__title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--higo-gray-900);
+}
+
+.store-rating-block__stars {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.store-rating-block__star-btn {
+  background: none;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.store-rating-block__comment {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1.5px solid var(--higo-gray-200);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  resize: none;
+}
+
+.store-rating-block__comment:focus {
+  outline: none;
+  border-color: var(--higo-blue);
+}
+
+.store-rating-block__error {
+  font-size: 0.8rem;
+  color: var(--higo-error, #DC2626);
+  font-weight: 500;
+}
+
 /* Store Summary Block inside Panel */
 .order-summary-header {
   background: var(--higo-gray-50);

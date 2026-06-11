@@ -14,6 +14,7 @@ import { fetchStoreOrdersRemote } from '../../../services/shopOrderService.js';
 import { pushOrderEvent } from '../../../services/shopTrackingService.js';
 import { formatOrderStatus } from '../../../services/shopOrderStatus.js';
 import { useChatStore } from '../../../stores/shop/useChatStore.js';
+import { useChatSync } from '../../../hooks/shop/useChatSync.js';
 import { formatCurrency } from '../../../services/shopDeliveryPricing.js';
 import { Spinner } from '../../../components/shop/ui/Spinner.jsx';
 import { mockStores } from '../../../data/stores.js';
@@ -35,9 +36,9 @@ const STATUS_SECTIONS = [
 ];
 
 export function MerchantDashboard() {
-  const { orders, updateOrderStatus, assignDriver, upsertRemoteOrder } = useOrderStore();
+  const { orders, updateOrderStatus, upsertRemoteOrder } = useOrderStore();
   const merchantId = useAuthStore((s) => s.userId);
-  const { chats, addMessage, initializeChat } = useChatStore();
+  const { chats, sendMessage, initializeChat } = useChatStore();
   
   // Tabs: orders | products | store | income
   const [activeDashboardTab, setActiveDashboardTab] = useState('orders');
@@ -375,6 +376,8 @@ export function MerchantDashboard() {
     }
   }, [activeTab]);
 
+  useChatSync(selectedOrder?.id);
+
   const orderChat = useMemo(() => {
     if (!selectedOrder) return { storeMessages: [] };
     initializeChat(selectedOrder.id);
@@ -386,18 +389,19 @@ export function MerchantDashboard() {
     e.preventDefault();
     if (!chatInputText.trim() || !selectedOrder) return;
 
-    addMessage(selectedOrder.id, 'storeMessages', {
+    sendMessage(selectedOrder.id, 'storeMessages', {
       sender: 'store',
+      senderId: merchantId,
       text: chatInputText
     });
     setChatInputText('');
   };
 
-  // Simulates Driver assignment upon dispatch (Sprint 4 Audit Trail logging included)
+  // Publica el pedido para que los drivers reales lo acepten desde su tablero
   const handleDispatchOrder = (orderId) => {
     updateOrderStatus(orderId, 'READY_FOR_DRIVER_MATCH');
     syncOrderStatus(orderId, 'READY_FOR_DRIVER_MATCH').catch((error) => reportRealtimeError("realtime action failed", error));
-    
+
     // Log audit trail event in database
     pushOrderEvent({
       orderId,
@@ -406,52 +410,23 @@ export function MerchantDashboard() {
       actorId: merchantId || 'merchant-demo',
       payload: { note: 'El comercio ha empacado el pedido y busca driver.', source: 'merchant_dashboard' }
     }).catch((error) => reportRealtimeError("logging event failed", error));
-    
-    addMessage(orderId, 'storeMessages', {
+
+    sendMessage(orderId, 'storeMessages', {
       sender: 'store',
+      senderId: merchantId,
       text: '📦 Pedido empacado y listo. Buscando motorizado en la zona...'
     });
 
-    // Simulate driver matching in 4 seconds
-    setTimeout(() => {
-      updateOrderStatus(orderId, 'DRIVER_CANDIDATE_BROADCASTED');
-      syncOrderStatus(orderId, 'DRIVER_CANDIDATE_BROADCASTED').catch((error) => reportRealtimeError("realtime action failed", error));
-      
-      pushOrderEvent({
-        orderId,
-        eventType: 'DRIVER_CANDIDATE_BROADCASTED',
-        actorType: 'system',
-        actorId: 'system',
-        payload: { broadcastRange: '5km' }
-      }).catch((error) => reportRealtimeError("logging event failed", error));
+    updateOrderStatus(orderId, 'DRIVER_CANDIDATE_BROADCASTED');
+    syncOrderStatus(orderId, 'DRIVER_CANDIDATE_BROADCASTED').catch((error) => reportRealtimeError("realtime action failed", error));
 
-      assignDriver(orderId, merchantId || 'driver-demo');
-      syncOrderStatus(orderId, 'DRIVER_ASSIGNED', merchantId || 'driver-demo').catch((error) => reportRealtimeError("realtime action failed", error));
-      
-      pushOrderEvent({
-        orderId,
-        eventType: 'DRIVER_ASSIGNED',
-        actorType: 'system',
-        actorId: merchantId || 'system-assigner',
-        payload: { driverName: 'Carlos Mendoza', vehicle: 'Moto' }
-      }).catch((error) => reportRealtimeError("logging event failed", error));
-      
-      addMessage(orderId, 'driverMessages', {
-        sender: 'driver',
-        text: '🛵 Higo Driver asignado al despacho.',
-        system: true
-      });
-
-      addMessage(orderId, 'driverMessages', {
-        sender: 'driver',
-        text: '¡Buenas noches! Soy tu Higo Driver. Ya voy saliendo a retirar el pedido.'
-      });
-
-      addMessage(orderId, 'storeMessages', {
-        sender: 'store',
-        text: '🛵 Un Higo Driver ha sido asignado y va en camino a retirar.'
-      });
-    }, 4000);
+    pushOrderEvent({
+      orderId,
+      eventType: 'DRIVER_CANDIDATE_BROADCASTED',
+      actorType: 'system',
+      actorId: 'system',
+      payload: { broadcastRange: '5km' }
+    }).catch((error) => reportRealtimeError("logging event failed", error));
   };
 
   // ==========================================
@@ -516,15 +491,17 @@ export function MerchantDashboard() {
       console.error("Error writing product data to Supabase:", err.message);
       // Fallback local mock simulation
       const mockId = editingProduct?.id || `product-mock-${Date.now()}`;
+      // Misma forma snake_case que devuelve Supabase para que la lista y la
+      // edición posterior lean los mismos campos.
       const mappedMock = {
         id: mockId,
-        storeId: store.id,
+        store_id: store.id,
         name: newProductForm.name,
         description: newProductForm.description,
         price: parseFloat(newProductForm.price),
         category: newProductForm.category,
         available: newProductForm.available,
-        imageUrl: newProductForm.image_url || null
+        image_url: newProductForm.image_url || null
       };
 
       if (editingProduct) {

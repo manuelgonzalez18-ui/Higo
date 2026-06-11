@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useMapsLibrary } from '@vis.gl/react-google-maps';
 import { getCurrentPosition } from '../../../services/shopGeolocation.js';
-import { fetchStoreById } from '../../../services/shopStoreService.js';
+import { fetchStoreById, fetchProductsByStoreId } from '../../../services/shopStoreService.js';
 import { useCartStore } from '../../../stores/shop/useCartStore.js';
 import { useLocationStore } from '../../../stores/shop/useLocationStore.js';
 import { useOrderStore } from '../../../stores/shop/useOrderStore.js';
@@ -48,7 +48,7 @@ export function CheckoutPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isEditingAddress, setIsEditingAddress] = useState(false);
 
-  const { carts, clearCart } = useCartStore();
+  const { carts, clearCart, reconcileCart } = useCartStore();
   const { userLocation, deliveryAddress, setUserLocation, setDeliveryAddress } = useLocationStore();
   const { createOrder } = useOrderStore();
   const customerId = useAuthStore((s) => s.userId);
@@ -81,6 +81,7 @@ export function CheckoutPage() {
   const [paidWithAmount, setPaidWithAmount] = useState('');
   const [copied, setCopied] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
 
   const items = carts[storeId]?.items || [];
   const productTotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -134,7 +135,38 @@ export function CheckoutPage() {
 
   const handleConfirmOrder = async () => {
     if (!store) return;
+    setSubmitError(null);
+
+    if (store.isOpen === false) {
+      setSubmitError('La tienda está cerrada en este momento. Intenta cuando vuelva a abrir.');
+      return;
+    }
+    if (!userLocation) {
+      setSubmitError('Selecciona tu dirección de entrega antes de confirmar el pedido.');
+      return;
+    }
+    if (deliveryPayMethod === 'cash' && paidWithAmount && parseFloat(paidWithAmount) < fee) {
+      setSubmitError(`El monto en efectivo es menor a la tarifa de envío (${feeText}).`);
+      return;
+    }
     setIsSubmitting(true);
+
+    // Revalidar disponibilidad y precios contra el catálogo vigente antes
+    // de cobrar: si algo cambió, se ajusta el carrito y el usuario revisa.
+    try {
+      const liveProducts = await fetchProductsByStoreId(storeId);
+      const { removed, repriced } = reconcileCart(storeId, liveProducts);
+      if (removed.length || repriced.length) {
+        setIsSubmitting(false);
+        const parts = [];
+        if (removed.length) parts.push(`ya no disponibles: ${removed.join(', ')}`);
+        if (repriced.length) parts.push(`cambiaron de precio: ${repriced.join(', ')}`);
+        setSubmitError(`Tu carrito fue actualizado (${parts.join(' · ')}). Revisa el total y confirma de nuevo.`);
+        return;
+      }
+    } catch (err) {
+      console.warn('[Checkout] revalidación de productos falló:', err?.message || err);
+    }
 
     const baseOrderData = {
       storeId: store.id,
@@ -154,8 +186,9 @@ export function CheckoutPage() {
       deliveryPaymentStatus: 'DELIVERY_PAYMENT_PENDING',
     };
 
+    let remote = null;
     try {
-      const remote = await createOrderRemote({
+      remote = await createOrderRemote({
         customer_id: customerId,
         store_id: store.id,
         total: grandTotal,
@@ -167,7 +200,11 @@ export function CheckoutPage() {
         delivery_latitude: userLocation.lat,
         delivery_longitude: userLocation.lng,
       });
+    } catch (err) {
+      console.warn('[Checkout] createOrderRemote failed:', err?.message || err);
+    }
 
+    if (remote) {
       createOrder({
         ...baseOrderData,
         id: remote.id,
@@ -176,16 +213,22 @@ export function CheckoutPage() {
         updatedAt: remote.updatedAt,
         driverId: remote.driverId,
       });
-
-      await pushOrderEvent({
+      // Best-effort event: a failure here must not duplicate the order.
+      pushOrderEvent({
         orderId: remote.id,
         eventType: 'ORDER_CREATED',
         actorType: 'customer',
         actorId: customerId,
         payload: { city: 'Higuerote' },
-      });
-    } catch (_err) {
-      // Fallback local for demo/offline flow.
+      }).catch((err) => console.warn('[Checkout] pushOrderEvent failed:', err?.message || err));
+    } else if (customerId) {
+      // Logged-in user: the merchant only sees remote orders, so failing
+      // silently would strand the customer. Let them retry.
+      setIsSubmitting(false);
+      setSubmitError('No pudimos registrar tu pedido. Revisa tu conexión e intenta de nuevo.');
+      return;
+    } else {
+      // Guest/demo flow without backend: keep the local-only order.
       createOrder(baseOrderData);
     }
 
@@ -279,13 +322,15 @@ export function CheckoutPage() {
                 <Edit3 size={14} style={{ marginLeft: 'auto', opacity: 0.6 }} />
               </div>
             )}
-            <div className="checkout-map">
-              <CheckoutMap
-                origin={{ lat: userLocation.lat, lng: userLocation.lng }}
-                destination={{ lat: store.latitude, lng: store.longitude }}
-                path={routePath}
-              />
-            </div>
+            {userLocation && (
+              <div className="checkout-map">
+                <CheckoutMap
+                  origin={{ lat: userLocation.lat, lng: userLocation.lng }}
+                  destination={{ lat: store.latitude, lng: store.longitude }}
+                  path={routePath}
+                />
+              </div>
+            )}
             <div className="distance-info" style={{ marginTop: 'var(--space-2)' }}>
               <Navigation size={15} />
               <span>{distanceText} de distancia</span>
@@ -454,6 +499,11 @@ export function CheckoutPage() {
 
         {/* Confirm Bar */}
         <div className="checkout-confirm-bar">
+          {submitError && (
+            <div className="checkout-submit-error" role="alert">
+              ⚠️ {submitError}
+            </div>
+          )}
           <div className="checkout-confirm-total">
             <span>Total general</span>
             <span>{formatCurrency(grandTotal)}</span>

@@ -116,6 +116,16 @@
   font-weight: var(--weight-medium);
 }
 
+.store-closed-banner {
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--higo-gray-50, #F9FAFB);
+  border: 1px solid var(--higo-gray-200);
+  border-radius: var(--radius-md);
+  color: var(--higo-gray-600);
+  font-size: var(--font-sm);
+}
+
 /* Category Tabs */
 .store-categories {
   position: sticky;

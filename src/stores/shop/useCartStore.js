@@ -74,6 +74,48 @@ export const useCartStore = create(
         });
       },
 
+      // Reconcilia el carrito contra el catálogo vigente: elimina productos
+      // que ya no existen o están agotados y actualiza precios cambiados.
+      // Devuelve { removed: [names], repriced: [names] } para informar al user.
+      reconcileCart: (storeId, products) => {
+        const result = { removed: [], repriced: [] };
+        const cart = get().carts[storeId];
+        if (!cart || !Array.isArray(products) || products.length === 0) return result;
+
+        const byId = new Map(products.map((p) => [p.id, p]));
+        const newItems = [];
+        cart.items.forEach((item) => {
+          const live = byId.get(item.id);
+          if (!live || live.available === false) {
+            result.removed.push(item.name);
+            return;
+          }
+          const livePrice = Number(live.price);
+          if (Number.isFinite(livePrice) && livePrice !== Number(item.price)) {
+            result.repriced.push(item.name);
+            newItems.push({ ...item, price: livePrice });
+          } else {
+            newItems.push(item);
+          }
+        });
+
+        if (result.removed.length || result.repriced.length) {
+          set((state) => {
+            if (newItems.length === 0) {
+              const { [storeId]: _, ...rest } = state.carts;
+              return { carts: rest };
+            }
+            return {
+              carts: {
+                ...state.carts,
+                [storeId]: { items: newItems },
+              },
+            };
+          });
+        }
+        return result;
+      },
+
       clearCart: (storeId) => {
         set((state) => {
           const { [storeId]: _, ...rest } = state.carts;
