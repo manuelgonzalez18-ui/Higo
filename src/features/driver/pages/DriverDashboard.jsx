@@ -83,10 +83,10 @@ export function DriverDashboard() {
   useRealtimeAllOrders(handleRealtimeOrder);
 
   useEffect(() => {
-    fetchDispatchableOrdersRemote()
+    fetchDispatchableOrdersRemote({ driverId: driverId || null })
       .then((rows) => rows.forEach((o) => upsertRemoteOrder(o)))
       .catch((error) => reportRealtimeError("realtime action failed", error));
-  }, [upsertRemoteOrder]);
+  }, [upsertRemoteOrder, driverId]);
 
   // 1. Filter available dispatchable orders in the zone (READY_TO_DISPATCH)
   const dispatchableOrders = useMemo(() => {

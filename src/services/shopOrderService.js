@@ -75,11 +75,20 @@ export async function fetchOrderByIdRemote(orderId) {
 }
 
 
-export async function fetchDispatchableOrdersRemote({ limit = 50 } = {}) {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('*')
-    .in('status', ['READY_TO_DISPATCH', 'DRIVER_ASSIGNED', 'PICKED_UP'])
+// Órdenes en difusión (sin driver) y, si se pasa driverId, también las
+// asignadas a ese driver — un solo fetch para hidratar el tablero.
+export async function fetchDispatchableOrdersRemote({ driverId = null, limit = 50 } = {}) {
+  const broadcastFilter = 'and(driver_id.is.null,status.in.(READY_TO_DISPATCH,READY_FOR_DRIVER_MATCH,DRIVER_CANDIDATE_BROADCASTED))';
+
+  let query = supabase.from('orders').select('*');
+  if (driverId) {
+    query = query.or(`${broadcastFilter},driver_id.eq.${driverId}`);
+  } else {
+    query = query.is('driver_id', null)
+      .in('status', ['READY_TO_DISPATCH', 'READY_FOR_DRIVER_MATCH', 'DRIVER_CANDIDATE_BROADCASTED']);
+  }
+
+  const { data, error } = await query
     .order('created_at', { ascending: false })
     .limit(limit);
 

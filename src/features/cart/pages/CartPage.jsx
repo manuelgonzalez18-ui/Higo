@@ -96,6 +96,14 @@ export function CartPage() {
                 </div>
               </div>
 
+              {/* Closed store warning banner */}
+              {store && store.isOpen === false && (
+                <div className="cart-distance-warning">
+                  <AlertTriangle size={15} />
+                  <span>🌙 Esta tienda está cerrada ahora; podrás pagar cuando vuelva a abrir</span>
+                </div>
+              )}
+
               {/* Distance Warning banner */}
               {isFar && (
                 <div className="cart-distance-warning">
@@ -172,7 +180,7 @@ export function CartPage() {
                   className="btn-merchant-checkout"
                   id={`checkout-store-${storeId}`}
                 >
-                  Ve al carrito ({formatCurrency(cartTotal)})
+                  Ir a pagar ({formatCurrency(cartTotal)})
                 </Link>
                 <Link
                   to={`/shop/store/${storeId}`}
