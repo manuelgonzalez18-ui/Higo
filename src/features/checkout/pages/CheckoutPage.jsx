@@ -137,6 +137,10 @@ export function CheckoutPage() {
     if (!store) return;
     setSubmitError(null);
 
+    if (store.isOpen === false) {
+      setSubmitError('La tienda está cerrada en este momento. Intenta cuando vuelva a abrir.');
+      return;
+    }
     if (!userLocation) {
       setSubmitError('Selecciona tu dirección de entrega antes de confirmar el pedido.');
       return;

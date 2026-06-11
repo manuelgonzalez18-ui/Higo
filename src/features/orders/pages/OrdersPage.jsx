@@ -66,7 +66,9 @@ export function OrdersPage() {
       return localMatch ? { ...localMatch, status: o.status, updatedAt: o.updatedAt } : o;
     });
     const localOnly = orders.filter((o) => !remoteIds.has(o.id));
-    return [...enrichedRemote, ...localOnly];
+    return [...enrichedRemote, ...localOnly].sort(
+      (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
+    );
   }, [orders, remoteOrders]);
 
   return (

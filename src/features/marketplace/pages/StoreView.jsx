@@ -84,7 +84,10 @@ export function StoreView() {
     return item ? item.quantity : 0;
   };
 
+  const isStoreOpen = store?.isOpen !== false;
+
   const handleAddToCart = (product) => {
+    if (!isStoreOpen) return;
     addItem(storeId, product, 1);
     setAddedProductId(product.id);
     setTimeout(() => setAddedProductId(null), 600);
@@ -147,6 +150,11 @@ export function StoreView() {
             {store.isOpen ? '● Abierto' : '● Cerrado'}
           </span>
         </div>
+        {!isStoreOpen && (
+          <div className="store-closed-banner" role="status">
+            🌙 Esta tienda está cerrada en este momento. Puedes ver el menú, pero no hacer pedidos hasta que abra.
+          </div>
+        )}
       </motion.div>
 
       {/* Category Tabs */}
@@ -187,8 +195,8 @@ export function StoreView() {
                   >
                     <div
                       className="product-item__image"
-                      onClick={() => product.available && setSelectedProduct(product)}
-                      style={{ cursor: product.available ? 'pointer' : 'default' }}
+                      onClick={() => product.available && isStoreOpen && setSelectedProduct(product)}
+                      style={{ cursor: product.available && isStoreOpen ? 'pointer' : 'default' }}
                     >
                       <div className="product-item__image-placeholder">
                         {productEmojis[category] || '📦'}
@@ -203,6 +211,8 @@ export function StoreView() {
                         <span className="product-item__price">{formatCurrency(product.price)}</span>
                         {!product.available ? (
                           <span className="product-item__unavailable-tag">Agotado</span>
+                        ) : !isStoreOpen ? (
+                          <span className="product-item__unavailable-tag">Cerrado</span>
                         ) : qtyInCart > 0 ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <button
