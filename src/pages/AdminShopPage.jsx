@@ -139,11 +139,13 @@ export default function AdminShopPage() {
                 .order('created_at', { ascending: false });
             setProducts(productsData || []);
 
-            // 4. Cargar Órdenes
+            // 4. Cargar Órdenes (las 300 más recientes para no cargar la
+            // tabla completa en memoria a medida que crece el histórico)
             const { data: ordersData } = await supabase
                 .from('orders')
                 .select('*, stores(name), profiles:customer_id(full_name, phone)')
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false })
+                .limit(300);
             setOrders(ordersData || []);
 
             // 5. Cargar Drivers

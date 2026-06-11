@@ -9,7 +9,7 @@ import { useAuthStore } from '../../../stores/shop/useAuthStore.js';
 import { pushDriverLocation, pushOrderEvent } from '../../../services/shopTrackingService.js';
 import { formatOrderStatus } from '../../../services/shopOrderStatus.js';
 import { fetchDispatchableOrdersRemote } from '../../../services/shopOrderService.js';
-import { useRealtimeOrders } from '../../../hooks/shop/useRealtimeOrders.js';
+import { useRealtimeAllOrders } from '../../../hooks/shop/useRealtimeOrders.js';
 import { syncOrderStatus } from '../../../services/shopOrderRealtimeService.js';
 import { useChatStore } from '../../../stores/shop/useChatStore.js';
 import { useChatSync } from '../../../hooks/shop/useChatSync.js';
@@ -67,7 +67,7 @@ export function DriverDashboard() {
 
   const handleRealtimeOrder = useCallback((row) => {
     if (!row) return;
-    if (!['READY_TO_DISPATCH', 'READY_FOR_DRIVER_MATCH', 'DRIVER_CANDIDATE_BROADCASTED', 'DRIVER_ASSIGNED', 'DRIVER_EN_ROUTE_TO_STORE', 'PICKED_UP', 'DRIVER_EN_ROUTE_TO_CUSTOMER', 'DELIVERY_PAYMENT_PENDING', 'DELIVERY_PAYMENT_REPORTED', 'DELIVERY_PAYMENT_CONFIRMED', 'DELIVERED'].includes(row.status)) return;
+    if (!['READY_TO_DISPATCH', 'READY_FOR_DRIVER_MATCH', 'DRIVER_CANDIDATE_BROADCASTED', 'DRIVER_ASSIGNED', 'DRIVER_EN_ROUTE_TO_STORE', 'PICKED_UP', 'DRIVER_EN_ROUTE_TO_CUSTOMER', 'DELIVERY_PAYMENT_PENDING', 'DELIVERY_PAYMENT_REPORTED', 'DELIVERY_PAYMENT_CONFIRMED', 'DELIVERED', 'CANCELLED'].includes(row.status)) return;
     upsertRemoteOrder({
       id: row.id,
       status: row.status,
@@ -80,7 +80,7 @@ export function DriverDashboard() {
     });
   }, [upsertRemoteOrder]);
 
-  useRealtimeOrders({ customerId: null, onOrderUpsert: null });
+  useRealtimeAllOrders(handleRealtimeOrder);
 
   useEffect(() => {
     fetchDispatchableOrdersRemote()

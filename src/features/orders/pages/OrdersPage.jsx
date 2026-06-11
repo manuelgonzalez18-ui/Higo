@@ -37,7 +37,11 @@ export function OrdersPage() {
   const { orders, upsertRemoteOrder } = useOrderStore();
   const customerId = useAuthStore((s) => s.userId);
   const [remoteOrders, setRemoteOrders] = useState([]);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
+  const PAGE_SIZE = 20;
 
   const handleRealtimeOrder = useCallback((row) => {
     upsertRemoteOrder(mapOrderRow(row));
@@ -48,16 +52,22 @@ export function OrdersPage() {
   useEffect(() => {
     let mounted = true;
     if (!customerId) return;
-    fetchOrdersByCustomerRemote(customerId)
+    setIsLoadingMore(true);
+    fetchOrdersByCustomerRemote(customerId, { limit: PAGE_SIZE, offset: page * PAGE_SIZE })
       .then((rows) => {
         if (mounted) {
-          setRemoteOrders(rows);
+          setRemoteOrders((prev) => {
+            const seen = new Set(prev.map((o) => o.id));
+            return [...prev, ...rows.filter((r) => !seen.has(r.id))];
+          });
+          setHasMore(rows.length === PAGE_SIZE);
           rows.forEach((r) => upsertRemoteOrder(r));
         }
       })
-      .catch((error) => { console.warn('[OrdersPage] fetchOrdersByCustomerRemote', error?.message || error); });
+      .catch((error) => { console.warn('[OrdersPage] fetchOrdersByCustomerRemote', error?.message || error); })
+      .finally(() => { if (mounted) setIsLoadingMore(false); });
     return () => { mounted = false; };
-  }, [customerId, upsertRemoteOrder]);
+  }, [customerId, page, upsertRemoteOrder]);
 
   const mergedOrders = useMemo(() => {
     const remoteIds = new Set(remoteOrders.map((o) => o.id));
@@ -148,6 +158,17 @@ export function OrdersPage() {
               </motion.div>
             );
           })}
+
+          {hasMore && (
+            <button
+              className="orders-load-more"
+              onClick={() => setPage((p) => p + 1)}
+              disabled={isLoadingMore}
+              type="button"
+            >
+              {isLoadingMore ? 'Cargando...' : 'Cargar más pedidos'}
+            </button>
+          )}
         </div>
       )}
     </div>
