@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Store, Truck, Navigation, Clock,
-  Send, ShieldAlert, Image, Check
+  Send, ShieldAlert, Image, Check, Star
 } from 'lucide-react';
 import { useOrderStore } from '../../../stores/shop/useOrderStore.js';
 import { useAuthStore } from '../../../stores/shop/useAuthStore.js';
@@ -18,6 +18,7 @@ import { Spinner } from '../../../components/shop/ui/Spinner.jsx';
 import { useLiveDriverTracking } from '../../../hooks/shop/useLiveDriverTracking.js';
 import { useOrderEvents } from '../../../hooks/shop/useOrderEvents.js';
 import { useChatSync } from '../../../hooks/shop/useChatSync.js';
+import { fetchReviewForOrder, submitStoreReview } from '../../../services/shopReviewService.js';
 import { pushOrderEvent } from '../../../services/shopTrackingService.js';
 import { MapView, AutoFitBounds } from '../../../components/shop/maps/MapView.jsx';
 import { EmojiMarker } from '../../../components/shop/maps/EmojiMarker.jsx';
@@ -84,6 +85,103 @@ function TrackingMap({
         />
       )}
     </MapView>
+  );
+}
+
+function StoreRatingBlock({ orderId, storeName }) {
+  const [existingReview, setExistingReview] = useState(null);
+  const [isLoadingReview, setIsLoadingReview] = useState(true);
+  const [draftRating, setDraftRating] = useState(0);
+  const [draftComment, setDraftComment] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchReviewForOrder(orderId)
+      .then((review) => { if (mounted) setExistingReview(review); })
+      .catch((err) => console.warn('[StoreRatingBlock] fetch failed:', err?.message || err))
+      .finally(() => { if (mounted) setIsLoadingReview(false); });
+    return () => { mounted = false; };
+  }, [orderId]);
+
+  const handleSubmit = async () => {
+    if (!draftRating || isSubmitting) return;
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      const review = await submitStoreReview({ orderId, rating: draftRating, comment: draftComment });
+      setExistingReview(review || { rating: draftRating, comment: draftComment });
+    } catch (err) {
+      console.warn('[StoreRatingBlock] submit failed:', err?.message || err);
+      setSubmitError('No pudimos guardar tu calificación. Intenta de nuevo.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (isLoadingReview) return null;
+
+  if (existingReview) {
+    return (
+      <div className="store-rating-block" role="status">
+        <div className="store-rating-block__title">¡Gracias por calificar!</div>
+        <div className="store-rating-block__stars">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <Star
+              key={n}
+              size={22}
+              fill={n <= existingReview.rating ? 'var(--higo-warning, #F59E0B)' : 'none'}
+              color={n <= existingReview.rating ? 'var(--higo-warning, #F59E0B)' : 'var(--higo-gray-300)'}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="store-rating-block">
+      <div className="store-rating-block__title">¿Cómo estuvo tu pedido en {storeName || 'el comercio'}?</div>
+      <div className="store-rating-block__stars">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            type="button"
+            className="store-rating-block__star-btn"
+            onClick={() => setDraftRating(n)}
+            aria-label={`${n} estrellas`}
+          >
+            <Star
+              size={26}
+              fill={n <= draftRating ? 'var(--higo-warning, #F59E0B)' : 'none'}
+              color={n <= draftRating ? 'var(--higo-warning, #F59E0B)' : 'var(--higo-gray-300)'}
+            />
+          </button>
+        ))}
+      </div>
+      {draftRating > 0 && (
+        <>
+          <textarea
+            className="store-rating-block__comment"
+            rows={2}
+            maxLength={300}
+            placeholder="Cuéntanos más (opcional)..."
+            value={draftComment}
+            onChange={(e) => setDraftComment(e.target.value)}
+          />
+          {submitError && <p className="store-rating-block__error">{submitError}</p>}
+          <button
+            type="button"
+            className="higo-btn"
+            onClick={handleSubmit}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Enviando...' : 'Enviar calificación'}
+          </button>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -413,6 +511,10 @@ export function OrderDetailPage() {
               </button>
             )}
           </div>
+
+          {order.status === 'DELIVERED' && (
+            <StoreRatingBlock orderId={orderId} storeName={order.storeName} />
+          )}
 
           <div className="order-summary-header">
             <Store size={16} />

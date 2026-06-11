@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useMapsLibrary } from '@vis.gl/react-google-maps';
 import { getCurrentPosition } from '../../../services/shopGeolocation.js';
-import { fetchStoreById } from '../../../services/shopStoreService.js';
+import { fetchStoreById, fetchProductsByStoreId } from '../../../services/shopStoreService.js';
 import { useCartStore } from '../../../stores/shop/useCartStore.js';
 import { useLocationStore } from '../../../stores/shop/useLocationStore.js';
 import { useOrderStore } from '../../../stores/shop/useOrderStore.js';
@@ -48,7 +48,7 @@ export function CheckoutPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isEditingAddress, setIsEditingAddress] = useState(false);
 
-  const { carts, clearCart } = useCartStore();
+  const { carts, clearCart, reconcileCart } = useCartStore();
   const { userLocation, deliveryAddress, setUserLocation, setDeliveryAddress } = useLocationStore();
   const { createOrder } = useOrderStore();
   const customerId = useAuthStore((s) => s.userId);
@@ -150,6 +150,23 @@ export function CheckoutPage() {
       return;
     }
     setIsSubmitting(true);
+
+    // Revalidar disponibilidad y precios contra el catálogo vigente antes
+    // de cobrar: si algo cambió, se ajusta el carrito y el usuario revisa.
+    try {
+      const liveProducts = await fetchProductsByStoreId(storeId);
+      const { removed, repriced } = reconcileCart(storeId, liveProducts);
+      if (removed.length || repriced.length) {
+        setIsSubmitting(false);
+        const parts = [];
+        if (removed.length) parts.push(`ya no disponibles: ${removed.join(', ')}`);
+        if (repriced.length) parts.push(`cambiaron de precio: ${repriced.join(', ')}`);
+        setSubmitError(`Tu carrito fue actualizado (${parts.join(' · ')}). Revisa el total y confirma de nuevo.`);
+        return;
+      }
+    } catch (err) {
+      console.warn('[Checkout] revalidación de productos falló:', err?.message || err);
+    }
 
     const baseOrderData = {
       storeId: store.id,
