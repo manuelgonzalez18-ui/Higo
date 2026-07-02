@@ -322,8 +322,18 @@ try {
             // (tiene mensaje SOS + el trigger DB ya actualizó preview).
             $supportThreadId = $threadId;
 
-            // 5. Disparar notificaciones push locales a todos los admins
-            $localPushUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER['HTTP_HOST'] . "/api/send-support-push.php";
+            // 5. Disparar notificaciones push locales a todos los admins.
+            // El host se toma de SERVER_NAME (config del vhost) y se valida
+            // contra una whitelist de dominios propios. Antes se usaba
+            // HTTP_HOST (controlado por el cliente): un `Host:` malicioso
+            // redirigía este POST —con el JWT del usuario— a un servidor del
+            // atacante (auditoría 2026-07-02, M5 SSRF/leak de JWT).
+            $selfHost = (string) ($_SERVER['SERVER_NAME'] ?? '');
+            if (!preg_match('/(^|\.)(higoapp\.com|higodriver\.com)$/', $selfHost)) {
+                $selfHost = 'higoapp.com';
+            }
+            $selfScheme = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
+            $localPushUrl = $selfScheme . '://' . $selfHost . '/api/send-support-push.php';
             @bl_http_post(
                 $localPushUrl,
                 (string) json_encode(['thread_id' => $threadId]),

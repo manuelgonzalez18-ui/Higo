@@ -93,8 +93,9 @@ export function CheckoutPage() {
   }, [fee, paidWithAmount]);
 
   const handleCopyPagoMovil = () => {
-    if (!store) return;
-    const text = `Pago Móvil\nTeléfono: ${store.pagoMovil.phone}\nBanco: ${store.pagoMovil.bank}\nCédula: ${store.pagoMovil.cedula}\nTitular: ${store.pagoMovil.holder}\nMonto: ${formatCurrency(productTotal)}`;
+    if (!store?.pagoMovil?.phone) return;
+    const pm = store.pagoMovil;
+    const text = `Pago Móvil\nTeléfono: ${pm.phone}\nBanco: ${pm.bank}\nCédula: ${pm.cedula}\nTitular: ${pm.holder}\nMonto: ${formatCurrency(productTotal)}`;
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -196,6 +197,9 @@ export function CheckoutPage() {
         items: items.map(i => ({ id: i.id, name: i.name, quantity: i.quantity, price: i.price })),
         payment_method: deliveryPayMethod === 'cash' ? 'cash' : 'pago_movil',
         payment_status: 'PENDING',
+        // Persistir el efectivo declarado para que el driver vea el vuelto.
+        paid_with_amount: deliveryPayMethod === 'cash' ? (parseFloat(paidWithAmount) || 0) : 0,
+        change_amount: deliveryPayMethod === 'cash' ? change : 0,
         delivery_address: deliveryAddress,
         delivery_latitude: userLocation.lat,
         delivery_longitude: userLocation.lng,
@@ -384,38 +388,46 @@ export function CheckoutPage() {
                 {formatCurrency(productTotal)}
               </div>
               <div className="payment-block__divider" />
-              <p style={{ fontSize: 'var(--font-xs)', color: 'var(--higo-gray-500)', marginBottom: 'var(--space-3)' }}>
-                Pagar vía Pago Móvil directamente al comercio:
-              </p>
-              <div className="pago-movil-info">
-                <div className="pago-movil-row">
-                  <Phone size={14} />
-                  <span>Teléfono:</span>
-                  <span style={{ fontWeight: 600 }}>{store.pagoMovil.phone}</span>
-                </div>
-                <div className="pago-movil-row">
-                  <Building2 size={14} />
-                  <span>Banco:</span>
-                  <span style={{ fontWeight: 600 }}>{store.pagoMovil.bank}</span>
-                </div>
-                <div className="pago-movil-row">
-                  <CreditCard size={14} />
-                  <span>Cédula:</span>
-                  <span style={{ fontWeight: 600 }}>{store.pagoMovil.cedula}</span>
-                </div>
-                <div className="pago-movil-row">
-                  <span style={{ width: 14 }}>👤</span>
-                  <span>Titular:</span>
-                  <span style={{ fontWeight: 600 }}>{store.pagoMovil.holder}</span>
-                </div>
-              </div>
-              <button
-                className={`copy-btn ${copied ? 'copy-btn--copied' : ''}`}
-                onClick={handleCopyPagoMovil}
-              >
-                {copied ? <Check size={14} /> : <Copy size={14} />}
-                {copied ? 'Datos copiados' : 'Copiar datos de pago'}
-              </button>
+              {store.pagoMovil?.phone ? (
+                <>
+                  <p style={{ fontSize: 'var(--font-xs)', color: 'var(--higo-gray-500)', marginBottom: 'var(--space-3)' }}>
+                    Pagar vía Pago Móvil directamente al comercio:
+                  </p>
+                  <div className="pago-movil-info">
+                    <div className="pago-movil-row">
+                      <Phone size={14} />
+                      <span>Teléfono:</span>
+                      <span style={{ fontWeight: 600 }}>{store.pagoMovil.phone}</span>
+                    </div>
+                    <div className="pago-movil-row">
+                      <Building2 size={14} />
+                      <span>Banco:</span>
+                      <span style={{ fontWeight: 600 }}>{store.pagoMovil.bank}</span>
+                    </div>
+                    <div className="pago-movil-row">
+                      <CreditCard size={14} />
+                      <span>Cédula:</span>
+                      <span style={{ fontWeight: 600 }}>{store.pagoMovil.cedula}</span>
+                    </div>
+                    <div className="pago-movil-row">
+                      <span style={{ width: 14 }}>👤</span>
+                      <span>Titular:</span>
+                      <span style={{ fontWeight: 600 }}>{store.pagoMovil.holder}</span>
+                    </div>
+                  </div>
+                  <button
+                    className={`copy-btn ${copied ? 'copy-btn--copied' : ''}`}
+                    onClick={handleCopyPagoMovil}
+                  >
+                    {copied ? <Check size={14} /> : <Copy size={14} />}
+                    {copied ? 'Datos copiados' : 'Copiar datos de pago'}
+                  </button>
+                </>
+              ) : (
+                <p style={{ fontSize: 'var(--font-xs)', color: 'var(--higo-gray-500)' }}>
+                  Este comercio no configuró Pago Móvil. Coordiná el pago de los productos directamente con la tienda.
+                </p>
+              )}
             </div>
           </div>
         </motion.div>

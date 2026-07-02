@@ -23,6 +23,13 @@ export function mapOrderRow(row) {
     updatedAt: row.updated_at,
     driverId: row.driver_id,
     storeId: row.store_id,
+    // 'cash' | 'pago_movil' — necesario para que el driver vea si debe
+    // llevar vuelto en efectivo (antes no se mapeaba y quedaba undefined).
+    paymentMethod: row.payment_method || 'pago_movil',
+    // Monto con el que el cliente paga en efectivo y su vuelto, para que el
+    // driver sepa cuánto cambio llevar (antes no se persistían en la BD).
+    paidWithAmount: Number(row.paid_with_amount || 0),
+    changeAmount: Number(row.change_amount || 0),
     items,
     productTotal,
     grandTotal,

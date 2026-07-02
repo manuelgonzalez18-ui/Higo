@@ -23,7 +23,9 @@ function mapStoreRow(row) {
     phone: row.phone,
     isOpen: row.is_open ?? true,
     openHours: row.open_hours || '8:00 AM - 10:00 PM',
-    pagoMovil: row.pago_movil // { phone, bank, cedula, holder }
+    // { phone, bank, cedula, holder } — puede venir null si la tienda no
+    // configuró Pago Móvil; default a objeto vacío para no romper el checkout.
+    pagoMovil: row.pago_movil || {}
   };
 }
 

@@ -10,7 +10,7 @@ import { pushDriverLocation, pushOrderEvent } from '../../../services/shopTracki
 import { formatOrderStatus } from '../../../services/shopOrderStatus.js';
 import { fetchDispatchableOrdersRemote } from '../../../services/shopOrderService.js';
 import { useRealtimeAllOrders } from '../../../hooks/shop/useRealtimeOrders.js';
-import { syncOrderStatus } from '../../../services/shopOrderRealtimeService.js';
+import { syncOrderStatus, claimDeliveryOrder } from '../../../services/shopOrderRealtimeService.js';
 import { useChatStore } from '../../../stores/shop/useChatStore.js';
 import { useChatSync } from '../../../hooks/shop/useChatSync.js';
 import { formatCurrency } from '../../../services/shopDeliveryPricing.js';
@@ -145,11 +145,25 @@ export function DriverDashboard() {
     setChatInputText('');
   };
 
-  const handleAcceptDelivery = (orderId) => {
+  const handleAcceptDelivery = async (orderId) => {
+    // Reclamo atómico: si otro driver ya tomó el pedido, claimDeliveryOrder
+    // devuelve false y abortamos sin mandar mensajes ni eventos (antes dos
+    // drivers podían aceptar el mismo pedido y pisarse — hallazgo 2.2).
+    let claimed;
+    try {
+      claimed = await claimDeliveryOrder(orderId, driverId, 'DRIVER_EN_ROUTE_TO_STORE');
+    } catch (error) {
+      reportRealtimeError("realtime action failed", error);
+      return;
+    }
+    if (!claimed) {
+      window.alert('Este pedido ya fue tomado por otro conductor.');
+      return;
+    }
+
     assignDriver(orderId, driverId);
-    syncOrderStatus(orderId, 'DRIVER_EN_ROUTE_TO_STORE', driverId).catch((error) => reportRealtimeError("realtime action failed", error));
     pushOrderEvent({ orderId, eventType: 'DRIVER_EN_ROUTE_TO_STORE', actorType: 'driver', actorId: driverId, payload: { city: 'Higuerote' } }).catch((error) => reportRealtimeError("realtime action failed", error));
-    
+
     // Add greeting message
     sendMessage(orderId, 'driverMessages', {
       sender: 'driver',
@@ -306,7 +320,7 @@ export function DriverDashboard() {
               <div className="driver-payment-card">
                 <h4>Método de Pago del Envío</h4>
                 <div className="payment-row">
-                  {selectedOrder.payment_method === 'cash' ? (
+                  {selectedOrder.paymentMethod === 'cash' ? (
                     <>
                       <div className="payment-method-badge">
                         <Banknote size={16} />
@@ -328,7 +342,7 @@ export function DriverDashboard() {
                     </>
                   )}
                 </div>
-                {selectedOrder.payment_method === 'cash' && selectedOrder.paidWithAmount > 0 && (
+                {selectedOrder.paymentMethod === 'cash' && selectedOrder.paidWithAmount > 0 && (
                   <div className="payment-change-alert">
                     ⚠️ Cliente paga con <strong>{formatCurrency(selectedOrder.paidWithAmount)}</strong>. Llevar vuelto de: <strong>{formatCurrency(selectedOrder.changeAmount)}</strong>
                   </div>

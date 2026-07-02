@@ -730,7 +730,7 @@ export function MerchantDashboard() {
                         </div>
                         <div className="merchant-order-item__footer">
                           <span className="payment-method">
-                            {o.payment_method === 'cash' ? '💵 Efectivo' : '📱 Pago Móvil'}
+                            {o.paymentMethod === 'cash' ? '💵 Efectivo' : '📱 Pago Móvil'}
                           </span>
                           <span className="order-total">{formatCurrency(o.productTotal)}</span>
                         </div>
