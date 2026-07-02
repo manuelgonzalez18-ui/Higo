@@ -1,0 +1,46 @@
+name: CI
+
+# Corre en cada Pull Request y en pushes a main: instala, buildea y corre
+# los tests. Antes NO existía ningún trigger `pull_request`, así que lint y
+# tests nunca se ejecutaban solos y una regresión podía mergearse a main
+# (evaluación profunda 2026-07-02, hallazgo 3.1).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
+
+      # Lint informativo: el repo arrastra ~116 errores pre-existentes de
+      # reglas estrictas de react-compiler. No bloquea el PR todavía; cuando
+      # se limpie el baseline, quitar `continue-on-error` para volverlo gate.
+      - name: Lint (no bloqueante)
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Tests
+        run: npm run test:run
+
+      # Verifica que el bundle compile. Sin secrets: las env VITE_* faltantes
+      # solo activan fallbacks en runtime, no rompen el build.
+      - name: Build
+        run: npm run build

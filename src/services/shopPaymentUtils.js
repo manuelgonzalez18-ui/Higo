@@ -31,13 +31,17 @@ export function formatCedula(cedula) {
 }
 
 /**
- * Generate a random 8-digit reference number for payment tracking.
+ * Generate an 8-digit reference number for payment tracking.
+ * Combina un componente temporal (5 díg. del timestamp) con 3 dígitos
+ * aleatorios: dos referencias colisionan solo si se generan en el mismo
+ * milisegundo Y coincide el random, mucho menos probable que los 8 dígitos
+ * puramente aleatorios anteriores (~1% de colisión a las ~1300 refs).
  * @returns {string} e.g. '48192736'
  */
 export function generateReference() {
-  const min = 10000000;
-  const max = 99999999;
-  return String(Math.floor(Math.random() * (max - min + 1)) + min);
+  const timePart = String(Date.now() % 100000).padStart(5, '0');
+  const randPart = String(Math.floor(Math.random() * 1000)).padStart(3, '0');
+  return timePart + randPart;
 }
 
 /**

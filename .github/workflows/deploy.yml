@@ -13,6 +13,10 @@ concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: true
 
+# El deploy solo hace checkout + build + FTP; no necesita escribir en el repo.
+permissions:
+  contents: read
+
 jobs:
   web-deploy:
     name: Deploy

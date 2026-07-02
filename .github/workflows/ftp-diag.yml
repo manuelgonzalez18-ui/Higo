@@ -19,6 +19,9 @@ on:
       - '.github/workflows/ftp-diag.yml'
       - '.diag-trigger'
 
+permissions:
+  contents: read
+
 jobs:
   diag:
     name: Diagnóstico
