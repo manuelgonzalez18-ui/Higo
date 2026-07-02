@@ -306,32 +306,18 @@ const HigoPayPage = () => {
             return;
         }
 
-        const { data: rpcData, error: rpcErr } = await supabase.rpc('register_membership_payment', {
-            p_bank_origin:     bankCode,
-            p_reference_last6: reference,
-            p_sender_phone:    phone || null,
-            p_amount_reported: amt,
-            p_amount_real:     r.amountReal,
-            p_trn_date:        r.trnDate || date,
-            p_banesco_status:  r.statusCode,
-            p_raw_response:    r.raw || null,
-        });
-
-        if (rpcErr) {
-            const dup = (rpcErr.message || '').toLowerCase().includes('duplicate');
-            await notifyAdmin({ status: 'rejected', errorMessage: rpcErr.message, receiptUrl });
-            setResult({ kind: 'bad', msg: dup ? 'Esta referencia ya fue registrada como pago válido.' : `Error al registrar: ${rpcErr.message}` });
-            return;
-        }
-
-        // Guardar receipt_url en el report recién creado por el RPC (si lo hay)
-        if (receiptUrl && rpcData?.report_id) {
+        // La activación de la membresía ya ocurrió server-side dentro de
+        // banesco-validate.php (mig 77): la RPC dejó de estar expuesta al
+        // cliente para cerrar el bypass de pago. Acá solo usamos el
+        // resultado (expiresAt/reportId) que devolvió el endpoint.
+        // Guardar receipt_url en el report recién creado por el servidor.
+        if (receiptUrl && r.reportId) {
             await supabase.from('payment_reports')
                 .update({ receipt_url: receiptUrl })
-                .eq('id', rpcData.report_id);
+                .eq('id', r.reportId);
         }
 
-        const expires = rpcData?.expires_at ? new Date(rpcData.expires_at).toLocaleDateString('es-VE') : '—';
+        const expires = r.expiresAt ? new Date(r.expiresAt).toLocaleDateString('es-VE') : '—';
         await notifyAdmin({ status: 'validated', receiptUrl });
         setResult({ kind: 'ok', msg: `✓ Pago validado. Membresía activa hasta ${expires}.` });
         setReference('');

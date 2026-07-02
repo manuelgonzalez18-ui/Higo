@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
   Store, ClipboardList, CheckCircle2, AlertCircle, Clock,
   MessageCircle, Send, Check, Search, Filter, ShieldCheck,
@@ -54,14 +53,12 @@ export function MerchantDashboard() {
   const [isLoadingStoreData, setIsLoadingStoreData] = useState(true);
 
   // Store Membership states
-  const { 
-    membership, 
-    expiresAt, 
-    daysLeft, 
+  const {
+    expiresAt,
+    daysLeft,
     severity, 
-    loading: memLoading, 
+    loading: memLoading,
     refresh: refreshMembership,
-    saveLocalSimulation 
   } = useStoreMembership(store?.id);
 
   const [bcvRate, setBcvRate] = useState(null);
@@ -149,13 +146,19 @@ export function MerchantDashboard() {
         receiptUrl = await uploadStoreReceipt(receiptFile);
       }
 
-      // 2. Query Banesco Validation endpoint (PHP)
+      // 2. Validar contra Banesco Y activar la membresía server-side.
+      // La activación ya no ocurre en el cliente (mig 77 revocó la RPC de
+      // authenticated para cerrar el bypass de pago): banesco-validate.php,
+      // tras confirmar el abono real, activa la membresía de la tienda con
+      // service_role. Le pasamos store_id para que sepa que es un pago de
+      // comercio, no de conductor.
       const r = await validateBanescoPayment({
         reference: paymentForm.reference,
         amount: amt,
         phone: paymentForm.phone,
         date: paymentForm.date,
-        bank: bankCode
+        bank: bankCode,
+        storeId: store.id,
       });
 
       // 3. Handle Banesco validation outcome
@@ -173,30 +176,15 @@ export function MerchantDashboard() {
         return;
       }
 
-      // 4. Save validated payment in Supabase via register_store_membership_payment RPC
-      const { data: rpcData, error: rpcErr } = await supabase.rpc('register_store_membership_payment', {
-        p_store_id:        store.id,
-        p_bank_origin:     bankCode,
-        p_reference_last6: paymentForm.reference,
-        p_sender_phone:    paymentForm.phone,
-        p_amount_reported: amt,
-        p_amount_real:     r.amountReal,
-        p_trn_date:        r.trnDate || paymentForm.date,
-        p_banesco_status:  r.statusCode,
-        p_raw_response:    r.raw || null
-      });
-
-      if (rpcErr) throw rpcErr;
-
-      // 5. Update receipt_url in store_memberships if uploaded
-      if (receiptUrl && rpcData?.membership_id) {
+      // 4. Guardar receipt_url en la membresía recién creada por el servidor.
+      if (receiptUrl && r.membershipId) {
         await supabase
           .from('store_memberships')
           .update({ receipt_url: receiptUrl })
-          .eq('id', rpcData.membership_id);
+          .eq('id', r.membershipId);
       }
 
-      const expires = rpcData?.expires_at ? new Date(rpcData.expires_at).toLocaleDateString('es-VE') : '—';
+      const expires = r.expiresAt ? new Date(r.expiresAt).toLocaleDateString('es-VE') : '—';
       setPaymentResult({
         kind: 'ok',
         msg: `✓ ¡Membresía activada con éxito! Su comercio se encuentra solvente hasta el ${expires}.`
@@ -206,38 +194,19 @@ export function MerchantDashboard() {
       setPaymentForm(prev => ({ ...prev, reference: '' }));
       setReceiptFile(null);
       setReceiptPreview(null);
-      
+
       // Refresh hooks
       refreshMembership();
     } catch (err) {
-      console.warn("Banesco transaction failed in development. Applying resilient local fallback.", err.message);
-      
-      // DB Resilience fallback: Simulates the payment writing locally if Supabase RPC fails or isn't migrated
-      const days = 30;
-      const expDate = new Date(Date.now() + days * 86400000).toISOString();
-      const mockMem = {
-        id: Date.now(),
-        store_id: store.id,
-        amount: 30.00,
-        payment_method: 'pago_movil',
-        reference: paymentForm.reference,
-        status: 'active',
-        paid_at: new Date().toISOString(),
-        expires_at: expDate,
-        notes: 'Pago móvil Banesco (Simulado localmente por resiliencia).',
-        bank_origin: bankCode,
-        sender_phone: paymentForm.phone,
-        receipt_url: receiptPreview
-      };
-      
-      saveLocalSimulation(mockMem);
+      // Un error inesperado (red/servidor) NO debe mostrarse como membresía
+      // activada. Antes había un "fallback de simulación local" que pintaba
+      // éxito ante cualquier excepción y activaba una membresía falsa en el
+      // cliente (auditoría 2026-07-02, hallazgo 2.4) — eliminado.
+      console.warn('Fallo al procesar el pago de membresía de tienda:', err?.message);
       setPaymentResult({
-        kind: 'ok',
-        msg: `✓ ¡Membresía renovada con éxito (Simulación Local)! Activa hasta el ${new Date(expDate).toLocaleDateString('es-VE')}.`
+        kind: 'bad',
+        msg: 'No se pudo procesar el pago en este momento. Verificá tu conexión e intentá de nuevo; si persiste, contactá a soporte con tu número de referencia.'
       });
-      setPaymentForm(prev => ({ ...prev, reference: '' }));
-      setReceiptFile(null);
-      setReceiptPreview(null);
     } finally {
       setPaymentSubmitting(false);
     }
