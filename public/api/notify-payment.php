@@ -3,7 +3,8 @@
  * notify-payment.php
  * Envía un email HTML a admin@higoapp.com cuando un conductor reporta un pago.
  * Llamado desde HigoPayPage.jsx tras cada submit (validado, rechazado o pendiente).
- * Autenticación: Bearer JWT de Supabase (mismo patrón que banesco-validate.php).
+ * Autenticación: Bearer JWT de Supabase verificado contra GET /auth/v1/user
+ * (mismo patrón que banesco-validate.php).
  *
  * El comprobante se incrusta como <img> con la signed URL completa, evitando
  * que se rompa por line-wrap del cliente de correo.
@@ -14,7 +15,7 @@ require_once __DIR__ . '/_ratelimit.php';
 
 $_cfg_cors = function_exists('bl_load_config') ? bl_load_config() : [];
 api_apply_cors($_cfg_cors, 'POST, OPTIONS');
-api_rate_limit('notify-payment', 20, '/tmp/higo_ratelimit.log');
+api_rate_limit('notify-payment', 5, '/tmp/higo_ratelimit.log');
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -24,8 +25,35 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$auth = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-if (!str_starts_with($auth, 'Bearer ') || substr_count($auth, '.') < 2) {
+$auth = $_SERVER['HTTP_AUTHORIZATION'] ?? ($_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
+if (!preg_match('/^Bearer\s+(.+)$/i', $auth, $m)) {
+    http_response_code(401);
+    echo json_encode(['ok' => false, 'error' => 'unauthorized']);
+    exit;
+}
+$token = trim($m[1]);
+
+$supaUrl = rtrim((string) ($_cfg_cors['SUPABASE_PROJECT_URL'] ?? ''), '/');
+$anonKey = (string) ($_cfg_cors['SUPABASE_ANON_KEY'] ?? '');
+if ($supaUrl === '' || $anonKey === '') {
+    http_response_code(503);
+    echo json_encode(['ok' => false, 'error' => 'config']);
+    exit;
+}
+
+try {
+    [$authStatus, $authBody] = bl_http_get($supaUrl . '/auth/v1/user', [
+        'apikey: ' . $anonKey,
+        'Authorization: Bearer ' . $token,
+        'Accept: application/json',
+    ]);
+} catch (Throwable $e) {
+    http_response_code(502);
+    echo json_encode(['ok' => false, 'error' => 'auth_upstream']);
+    exit;
+}
+$authUser = json_decode($authBody, true);
+if ($authStatus !== 200 || !is_array($authUser) || empty($authUser['id'])) {
     http_response_code(401);
     echo json_encode(['ok' => false, 'error' => 'unauthorized']);
     exit;
@@ -39,14 +67,21 @@ if (!$data) {
 }
 
 $driverName  = htmlspecialchars($data['driver_name']  ?? '(desconocido)', ENT_QUOTES);
-$driverEmail = htmlspecialchars($data['driver_email'] ?? '', ENT_QUOTES);
+// El email sale del usuario autenticado, no del body (evita suplantación).
+$driverEmail = htmlspecialchars((string) ($authUser['email'] ?? ''), ENT_QUOTES);
 $paymentType = $data['payment_type'] ?? '';
 $amountBs    = htmlspecialchars($data['amount_bs']    ?? '', ENT_QUOTES);
 $reference   = htmlspecialchars($data['reference']    ?? '', ENT_QUOTES);
 $trnDate     = htmlspecialchars($data['trn_date']     ?? '', ENT_QUOTES);
 $status      = $data['status'] ?? '';
-$receiptUrl  = $data['receipt_url']   ?? '';
+$receiptUrl  = (string) ($data['receipt_url'] ?? '');
 $errorMsg    = $data['error_message'] ?? '';
+
+// Solo incrustar comprobantes alojados en el Storage propio de Supabase;
+// una URL externa en el <img> del correo sería un vector de phishing/tracking.
+if ($receiptUrl !== '' && !str_starts_with($receiptUrl, $supaUrl . '/storage/')) {
+    $receiptUrl = '';
+}
 
 $statusLabel = match($status) {
     'validated' => '✅ APROBADO AUTOMÁTICAMENTE',

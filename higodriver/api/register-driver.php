@@ -280,7 +280,15 @@ function rd_smtp_send(array $cfg, string $to, string $subject, string $body, str
     $from = $cfg['from_email'];
 
     $url = ($port === 465 ? 'ssl://' : '') . $host;
-    $ctx = stream_context_create(['ssl' => ['verify_peer' => false, 'verify_peer_name' => false]]);
+    // Verificación TLS activa: smtp.hostinger.com usa cert público válido.
+    // Sin esto, un MITM puede capturar el AUTH LOGIN (password del mailbox)
+    // y la PII de los aspirantes (auditoría 2026-06-04, hallazgo #2).
+    $ctx = stream_context_create(['ssl' => [
+        'verify_peer'      => true,
+        'verify_peer_name' => true,
+        'SNI_enabled'      => true,
+        'peer_name'        => $host,
+    ]]);
     $fp  = @stream_socket_client("$url:$port", $errno, $errstr, 15, STREAM_CLIENT_CONNECT, $ctx);
     if (!$fp) {
         error_log("rd_smtp_send: connect failed $host:$port — $errno $errstr");
