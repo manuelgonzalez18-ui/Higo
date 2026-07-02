@@ -94,17 +94,22 @@ function bl_normalize_phone(string $raw) {
 }
 
 /**
+ * $verifyTls solo debe ser false para los endpoints de Banesco (cert
+ * interno firmado por CA privada). Todo lo demás (Supabase, FCM,
+ * dolarapi) verifica el cert: estos requests llevan service_role keys y
+ * JWTs que un MITM podría capturar.
+ *
  * @return array{0:int,1:string} [http status, body]
  */
-function bl_http_post(string $url, string $body, array $headers, int $timeout = 30): array {
+function bl_http_post(string $url, string $body, array $headers, int $timeout = 30, bool $verifyTls = true): array {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => $timeout,
         CURLOPT_CONNECTTIMEOUT => 10,
-        CURLOPT_SSL_VERIFYPEER => false, // cert interno Banesco
-        CURLOPT_SSL_VERIFYHOST => 0,
+        CURLOPT_SSL_VERIFYPEER => $verifyTls,
+        CURLOPT_SSL_VERIFYHOST => $verifyTls ? 2 : 0,
         CURLOPT_POSTFIELDS     => $body,
         CURLOPT_HTTPHEADER     => $headers,
     ]);
@@ -121,14 +126,14 @@ function bl_http_post(string $url, string $body, array $headers, int $timeout = 
 /**
  * @return array{0:int,1:string}
  */
-function bl_http_get(string $url, array $headers, int $timeout = 15): array {
+function bl_http_get(string $url, array $headers, int $timeout = 15, bool $verifyTls = true): array {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => $timeout,
         CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => 0,
+        CURLOPT_SSL_VERIFYPEER => $verifyTls,
+        CURLOPT_SSL_VERIFYHOST => $verifyTls ? 2 : 0,
         CURLOPT_HTTPHEADER     => $headers,
     ]);
     $resp   = curl_exec($ch);
@@ -147,15 +152,15 @@ function bl_http_get(string $url, array $headers, int $timeout = 15): array {
  *
  * @return array{0:int,1:string}
  */
-function bl_http_patch(string $url, string $body, array $headers, int $timeout = 30): array {
+function bl_http_patch(string $url, string $body, array $headers, int $timeout = 30, bool $verifyTls = true): array {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_CUSTOMREQUEST  => 'PATCH',
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => $timeout,
         CURLOPT_CONNECTTIMEOUT => 10,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => 0,
+        CURLOPT_SSL_VERIFYPEER => $verifyTls,
+        CURLOPT_SSL_VERIFYHOST => $verifyTls ? 2 : 0,
         CURLOPT_POSTFIELDS     => $body,
         CURLOPT_HTTPHEADER     => $headers,
     ]);
@@ -190,7 +195,9 @@ function bl_banesco_auth(array $cfg): string {
             'Content-Type: application/x-www-form-urlencoded',
             'Accept: application/json',
             'Authorization: ' . $basic,
-        ]
+        ],
+        30,
+        false // cert interno Banesco (CA privada)
     );
     if ($status < 200 || $status >= 300) {
         throw new RuntimeException("SSO HTTP {$status}: " . substr($resp, 0, 300));
@@ -229,7 +236,9 @@ function bl_banesco_query(array $cfg, array $tx, string $token): array {
             'Content-Type: application/json',
             'Accept: application/json',
             'Authorization: Bearer ' . $token,
-        ]
+        ],
+        30,
+        false // cert interno Banesco (CA privada)
     );
     return [$payload, $status, $resp];
 }
