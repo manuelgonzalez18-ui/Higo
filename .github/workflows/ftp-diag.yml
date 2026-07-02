@@ -8,8 +8,16 @@ name: Diagnóstico deploy Hostinger
 # Creado durante el incidente FTP del 2026-07-02 (runs 332-336) para
 # confirmar si el mirror dejó archivos truncados o sin actualizar.
 
+# push con paths: el token del bot no puede hacer workflow_dispatch
+# (403), así que editar este archivo (o tocar .diag-trigger) dispara
+# la corrida.
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ftp-diag.yml'
+      - '.diag-trigger'
 
 jobs:
   diag:
