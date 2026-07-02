@@ -64,31 +64,6 @@ jobs:
       - name: Install lftp
         run: sudo apt-get update && sudo apt-get install -y lftp
 
-      - name: Listado remoto (higoapp.com FTP)
-        env:
-          FTP_SERVER: ${{ secrets.FTP_SERVER }}
-          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
-          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-        run: |
-          lftp -c "
-          set ftp:ssl-allow no;
-          set ssl:verify-certificate no;
-          set net:timeout 30;
-          set net:max-retries 2;
-          open -u '$FTP_USERNAME','$FTP_PASSWORD' '$FTP_SERVER';
-          echo '=== pwd (home del FTP user) ===';
-          pwd;
-          echo '=== raiz ===';
-          cls -la ./ | head -30;
-          echo '=== archivos clave ===';
-          cls -l .htaccess index.html banesco-core.php;
-          echo '=== api/ ===';
-          cls -l api/ | head -40;
-          echo '=== assets (muestra) ===';
-          cls -l assets/index.js;
-          cls -l assets/ | head -25;
-          "
-
       - name: Sondas HTTP (sitio servido)
         run: |
           echo "=== GET / (title + refs de assets) ==="
@@ -111,3 +86,32 @@ jobs:
             --data '{"driver_name":"PROBE-VERIFICACION-DEPLOY (ignorar)","status":"pending","payment_type":"pm_banesco"}')
           echo "HTTP $code"
           cat /tmp/probe.json || true
+
+      # Al final y con if: always() — el canal de DATOS del FTP de
+      # Hostinger está intermitente (control OK, listados cuelgan);
+      # que su fallo no tape las sondas HTTP.
+      - name: Listado remoto (higoapp.com FTP)
+        if: always()
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          lftp -c "
+          set ftp:ssl-allow no;
+          set ssl:verify-certificate no;
+          set net:timeout 15;
+          set net:max-retries 1;
+          open -u '$FTP_USERNAME','$FTP_PASSWORD' '$FTP_SERVER';
+          echo '=== pwd (home del FTP user) ===';
+          pwd;
+          echo '=== raiz ===';
+          cls -la ./ | head -30;
+          echo '=== archivos clave ===';
+          cls -l .htaccess index.html banesco-core.php;
+          echo '=== api/ ===';
+          cls -l api/ | head -40;
+          echo '=== assets (muestra) ===';
+          cls -l assets/index.js;
+          cls -l assets/ | head -25;
+          "
