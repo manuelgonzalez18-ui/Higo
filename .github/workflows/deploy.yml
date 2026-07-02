@@ -200,7 +200,14 @@ jobs:
       #
       # Guard: si el secret HIGODRIVER_FTP_PASSWORD no está configurado,
       # skipeamos sin romper el job — útil mientras se cargan los secrets.
+      #
+      # if: !cancelled() — higodriver.com es un hosting independiente de
+      # higoapp.com; su mirror no debe quedar rehén del smoke test del
+      # paso anterior (incidente 2026-07-02: smoke 403 dejó higodriver
+      # sin deployar aunque su FTP estaba sano). No usamos always() para
+      # respetar cancelaciones del concurrency group.
       - name: Deploy higodriver via lftp
+        if: ${{ !cancelled() }}
         env:
           HIGODRIVER_FTP_SERVER: ${{ secrets.HIGODRIVER_FTP_SERVER }}
           HIGODRIVER_FTP_USERNAME: ${{ secrets.HIGODRIVER_FTP_USERNAME }}
