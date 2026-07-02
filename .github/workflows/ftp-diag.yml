@@ -1,0 +1,105 @@
+name: Diagnóstico deploy Hostinger
+
+# Verificación manual del estado real del deploy en higoapp.com:
+#   1. Lista tamaños/fechas de los archivos clave en el servidor FTP.
+#   2. Los compara contra un build local fresco.
+#   3. Sondea notify-payment.php: 401 con token basura = código nuevo
+#      desplegado; 200 = código viejo (solo chequea formato del JWT).
+# Creado durante el incidente FTP del 2026-07-02 (runs 332-336) para
+# confirmar si el mirror dejó archivos truncados o sin actualizar.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    name: Diagnóstico
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps --no-audit --no-fund
+
+      - name: Build Project
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_MEASUREMENT_ID: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}
+          VITE_FCM_VAPID_KEY: ${{ secrets.VITE_FCM_VAPID_KEY }}
+          VITE_MAP_ENGINE: ${{ secrets.VITE_MAP_ENGINE || 'google' }}
+          VITE_MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
+        run: npm run build
+
+      - name: Tamaños locales (dist)
+        run: |
+          echo "=== dist/ local (lo que DEBERÍA estar en el server) ==="
+          ls -l dist/index.html dist/.htaccess dist/banesco-core.php 2>/dev/null || true
+          ls -l dist/api/notify-payment.php dist/api/banesco-validate.php 2>/dev/null || true
+          ls -l dist/assets/index.js 2>/dev/null || true
+          ls -l dist/assets/ | head -20
+
+      - name: Install lftp
+        run: sudo apt-get update && sudo apt-get install -y lftp
+
+      - name: Listado remoto (higoapp.com FTP)
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          lftp -c "
+          set ftp:ssl-allow no;
+          set ssl:verify-certificate no;
+          set net:timeout 30;
+          set net:max-retries 2;
+          open -u '$FTP_USERNAME','$FTP_PASSWORD' '$FTP_SERVER';
+          echo '=== pwd (home del FTP user) ===';
+          pwd;
+          echo '=== raiz ===';
+          cls -la ./ | head -30;
+          echo '=== archivos clave ===';
+          cls -l .htaccess index.html banesco-core.php;
+          echo '=== api/ ===';
+          cls -l api/ | head -40;
+          echo '=== assets (muestra) ===';
+          cls -l assets/index.js;
+          cls -l assets/ | head -25;
+          "
+
+      - name: Sondas HTTP (sitio servido)
+        run: |
+          echo "=== GET / (title + refs de assets) ==="
+          curl -fsS --max-time 20 "https://higoapp.com/?cb=$(date +%s)" -o /tmp/index.html \
+            && { grep -o '<title>[^<]*</title>' /tmp/index.html; grep -oE '(src|href)="[^"]*assets/[^"]*"' /tmp/index.html | head -10; wc -c /tmp/index.html; } \
+            || echo "GET / falló"
+          echo
+          echo "=== HEAD del entry JS servido ==="
+          curl -fsS --max-time 20 -o /tmp/entry.js "https://higoapp.com/assets/index.js?cb=$(date +%s)" \
+            && wc -c /tmp/entry.js \
+            || echo "GET /assets/index.js falló"
+          echo
+          echo "=== Sonda notify-payment.php (token basura) ==="
+          echo "401 = código NUEVO desplegado (verifica JWT contra Supabase)"
+          echo "200 = código VIEJO (solo chequea formato; el mail saldrá marcado PROBE)"
+          code=$(curl -s -o /tmp/probe.json -w '%{http_code}' --max-time 25 \
+            -X POST "https://higoapp.com/api/notify-payment.php" \
+            -H 'Content-Type: application/json' \
+            -H 'Authorization: Bearer aaa.bbb.ccc' \
+            --data '{"driver_name":"PROBE-VERIFICACION-DEPLOY (ignorar)","status":"pending","payment_type":"pm_banesco"}')
+          echo "HTTP $code"
+          cat /tmp/probe.json || true
