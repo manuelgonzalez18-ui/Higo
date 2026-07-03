@@ -9,6 +9,7 @@ import { useOrderStore } from '../../../stores/shop/useOrderStore.js';
 import { useLiveDriverTracking } from '../../../hooks/shop/useLiveDriverTracking.js';
 import { calculateDistance, formatDistance, estimateDeliveryTime, formatDurationMin } from '../../../services/shopGeolocation.js';
 import { calculateDeliveryFee, formatCurrency } from '../../../services/shopDeliveryPricing.js';
+import { getStoreImage } from '../../../utils/shopImages.js';
 import { Spinner } from '../../../components/shop/ui/Spinner.jsx';
 import { MapView } from '../../../components/shop/maps/MapView.jsx';
 import { EmojiMarker } from '../../../components/shop/maps/EmojiMarker.jsx';
@@ -269,7 +270,16 @@ export function SearchMap() {
                         onClick={() => setSelectedStore(store)}
                       >
                         <div className={`sheet-store-avatar sheet-store-avatar--${store.category}`}>
-                          {store.category === 'restaurant' ? '🍽️' : store.category === 'pharmacy' ? '💊' : store.category === 'bakery' ? '🥐' : store.category === 'grocery' ? '🛒' : '☕'}
+                          <span>{store.category === 'restaurant' ? '🍽️' : store.category === 'pharmacy' ? '💊' : store.category === 'bakery' ? '🥐' : store.category === 'grocery' ? '🛒' : '☕'}</span>
+                          {getStoreImage(store) && (
+                            <img
+                              src={getStoreImage(store)}
+                              alt={store.name}
+                              className="sheet-store-avatar-img"
+                              loading="lazy"
+                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            />
+                          )}
                         </div>
 
                         <div className="sheet-store-details">

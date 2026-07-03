@@ -6,6 +6,7 @@ import { fetchStoreById, fetchProductsByStoreId } from '../../../services/shopSt
 import { useCartStore } from '../../../stores/shop/useCartStore.js';
 import { useDeliveryFee } from '../../../hooks/shop/useDeliveryFee.js';
 import { formatCurrency } from '../../../services/shopDeliveryPricing.js';
+import { getStoreImage, getProductImage } from '../../../utils/shopImages.js';
 import { BottomSheet } from '../../../components/shop/ui/BottomSheet.jsx';
 import { Spinner } from '../../../components/shop/ui/Spinner.jsx';
 import './StoreView.css';
@@ -116,7 +117,15 @@ export function StoreView() {
       {/* Hero */}
       <div className="store-hero">
         <div className={`store-hero__bg store-hero__bg--${store.category}`}>
-          {categoryEmojis[store.category] || '🏪'}
+          <span className="store-hero__emoji">{categoryEmojis[store.category] || '🏪'}</span>
+          {getStoreImage(store) && (
+            <img
+              src={getStoreImage(store)}
+              alt={store.name}
+              className="store-hero__image"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+          )}
         </div>
         <div className="store-hero__overlay" />
         <button className="store-hero__back" onClick={() => navigate(-1)}>
@@ -201,6 +210,15 @@ export function StoreView() {
                       <div className="product-item__image-placeholder">
                         {productEmojis[category] || '📦'}
                       </div>
+                      {getProductImage(product) && (
+                        <img
+                          src={getProductImage(product)}
+                          alt={product.name}
+                          className="product-item__photo"
+                          loading="lazy"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      )}
                     </div>
                     <div className="product-item__content">
                       <div>
@@ -310,8 +328,18 @@ function ProductDetailSheet({ product, storeId, onClose }) {
         alignItems: 'center',
         justifyContent: 'center',
         fontSize: '3rem',
+        position: 'relative',
+        overflow: 'hidden',
       }}>
-        {productEmojis[product.category] || '📦'}
+        <span>{productEmojis[product.category] || '📦'}</span>
+        {getProductImage(product) && (
+          <img
+            src={getProductImage(product)}
+            alt={product.name}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          />
+        )}
       </div>
 
       <p style={{ fontSize: 'var(--font-sm)', color: 'var(--higo-gray-600)', lineHeight: 'var(--leading-relaxed)' }}>
