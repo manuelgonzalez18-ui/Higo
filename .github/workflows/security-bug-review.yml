@@ -153,8 +153,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # --model FIJO: sin esto, claude-code-action elegía por defecto
+          # `claude-opus-4-8[1m]` (variante beta de 1M de contexto), que la
+          # ANTHROPIC_API_KEY del repo NO tiene habilitada → el agente
+          # devolvía is_error a los ~250ms con costo $0 (rechazo en la puerta)
+          # y NO auditaba nada, pero el job salía verde. Fijamos un modelo
+          # estable y disponible. Si en el futuro este también falla con $0,
+          # revisar que ANTHROPIC_API_KEY siga válida (rotarla).
           # Le damos lectura del código + gh para gestionar el issue.
           claude_args: |
+            --model claude-opus-4-8
             --max-turns 50
             --allowedTools "Read,Write,Grep,Glob,Bash(mkdir:*),Bash(gh issue list:*),Bash(gh issue create:*),Bash(gh issue comment:*),Bash(gh label create:*),Bash(gh label list:*)"
           prompt: |
