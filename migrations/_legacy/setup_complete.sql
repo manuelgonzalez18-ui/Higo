@@ -1,4 +1,9 @@
--- GLOBAL SETUP SCRIPT (Run this entire file in Supabase SQL Editor)
+-- ⚠️  NO EJECUTAR — SCAFFOLDING HISTÓRICO (ver migrations/_legacy/README.md)
+-- Este archivo recrea policies laxas (profiles/rides USING(true), sin
+-- WITH CHECK) que REVIERTEN las migraciones 34/72/73 y reabren 3
+-- vulnerabilidades críticas (escalada a admin, robo de rides, PII pública).
+-- La fuente de verdad son las migraciones numeradas en migrations/.
+-- Se conserva solo como referencia del schema inicial.
 
 -- 1. Create PROFILES Table
 create table if not exists public.profiles (

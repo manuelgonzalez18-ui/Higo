@@ -76,7 +76,9 @@ describe('calculateBearing', () => {
 
     it('returns ~90° going east', () => {
         const b = calculateBearing(10.0, -66.0, 10.0, -65.0);
-        expect(b).toBeCloseTo(90, 1);
+        // Tolerancia 0 díg. (±0.5°): a esta latitud la convergencia de
+        // meridianos hace que el rumbo inicial real sea ~89.9°, no 90° exacto.
+        expect(b).toBeCloseTo(90, 0);
     });
 
     it('returns ~180° going south', () => {
@@ -86,7 +88,8 @@ describe('calculateBearing', () => {
 
     it('returns ~270° going west', () => {
         const b = calculateBearing(10.0, -66.0, 10.0, -67.0);
-        expect(b).toBeCloseTo(270, 1);
+        // Tolerancia 0 díg. (±0.5°): idem 'going east', ~270.1° real.
+        expect(b).toBeCloseTo(270, 0);
     });
 
     it('normalizes to 0-360 range', () => {

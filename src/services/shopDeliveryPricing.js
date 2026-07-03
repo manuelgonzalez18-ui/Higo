@@ -8,7 +8,10 @@ import { DELIVERY_CONFIG } from '../utils/shopConstants.js';
  */
 export function calculateDeliveryFee(distanceKm) {
   const { baseFee, perKmRate, minFee, maxFee } = DELIVERY_CONFIG;
-  const rawFee = baseFee + distanceKm * perKmRate;
+  // Guarda: una distancia inválida (NaN/negativa) devolvía NaN y rompía el
+  // total del checkout. Caemos a 0 km (queda el mínimo) en ese caso.
+  const km = Number.isFinite(distanceKm) && distanceKm > 0 ? distanceKm : 0;
+  const rawFee = baseFee + km * perKmRate;
   return Math.min(maxFee, Math.max(minFee, Math.round(rawFee * 100) / 100));
 }
 

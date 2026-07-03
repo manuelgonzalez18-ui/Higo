@@ -46,6 +46,20 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         if (body == null)
             body = "Tienes una nueva solicitud de viaje.";
 
+        // rideId identifica la solicitud. Deriva un id de notificación y
+        // requestCode ESTABLES por viaje: antes se usaba notify(0) y
+        // requestCode 0/1 fijos, así que dos solicitudes casi simultáneas se
+        // pisaban (el driver solo veía/aceptaba la última) — evaluación
+        // profunda 2026-07-02, hallazgo 3.2. Con un id por rideId, cada
+        // solicitud es su propia notificación con sus propios extras.
+        String rideId = remoteMessage.getData().get("rideId");
+        if (rideId == null && remoteMessage.getData().containsKey("id")) {
+            rideId = remoteMessage.getData().get("id"); // Fallback
+        }
+        int notifId = (rideId != null && !rideId.isEmpty())
+                ? rideId.hashCode()
+                : (int) System.currentTimeMillis();
+
         Intent fullScreenIntent = new Intent(this, MainActivity.class);
         fullScreenIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
                 Intent.FLAG_ACTIVITY_CLEAR_TOP |
@@ -56,7 +70,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
             fullScreenIntent.putExtra(key, remoteMessage.getData().get(key));
         }
 
-        PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(this, 0,
+        PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(this, notifId,
                 fullScreenIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
@@ -80,12 +94,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
             notificationManager.createNotificationChannel(channel);
         }
 
-        // Create "Accept" Action Intent
-        String rideId = remoteMessage.getData().get("rideId");
-        if (rideId == null && remoteMessage.getData().containsKey("id")) {
-            rideId = remoteMessage.getData().get("id"); // Fallback
-        }
-
+        // Create "Accept" Action Intent (rideId/notifId ya calculados arriba)
         Intent acceptIntent = new Intent(Intent.ACTION_VIEW);
         // Deep link format: higo://accept?rideId=123
         // Fix #13: setPackage() vuelve el Intent EXPLÍCITO a esta app, así
@@ -99,7 +108,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         acceptIntent.setPackage(getPackageName());
         acceptIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
-        PendingIntent acceptPendingIntent = PendingIntent.getActivity(this, 1,
+        PendingIntent acceptPendingIntent = PendingIntent.getActivity(this, notifId,
                 acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(this, channelId)
@@ -113,6 +122,6 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .addAction(android.R.drawable.ic_menu_add, "Aceptar Viaje", acceptPendingIntent); // Native Action
 
-        notificationManager.notify(0, notificationBuilder.build());
+        notificationManager.notify(notifId, notificationBuilder.build());
     }
 }

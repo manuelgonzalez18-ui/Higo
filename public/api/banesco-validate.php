@@ -192,6 +192,30 @@ function bv_compute_expected(array $cfg, string $token, string $userId): array {
 }
 
 /**
+ * Invoca una RPC de Supabase con el SERVICE_ROLE_KEY (bypassa el grant y la
+ * RLS). Se usa para activar membresías server-side: la activación NO está
+ * expuesta al cliente (mig 77), solo este endpoint —que ya confirmó el abono
+ * real contra Banesco— puede materializarla.
+ *
+ * @return array{0:int,1:mixed} [http_code, decoded_body|null]
+ */
+function bv_rpc_service(array $cfg, string $fn, array $params): array {
+    $url = rtrim((string) ($cfg['SUPABASE_PROJECT_URL'] ?? ''), '/') . '/rest/v1/rpc/' . $fn;
+    $srv = (string) ($cfg['SUPABASE_SERVICE_ROLE_KEY'] ?? '');
+    [$status, $body] = bl_http_post(
+        $url,
+        (string) json_encode($params, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+        [
+            'apikey: ' . $srv,
+            'Authorization: Bearer ' . $srv,
+            'Content-Type: application/json',
+            'Accept: application/json',
+        ]
+    );
+    return [$status, json_decode($body, true)];
+}
+
+/**
  * Devuelve true si la (bank, ref, date) ya fue validada antes para CUALQUIER
  * conductor. Usa el unique index parcial uq_payment_reports_ref_validated.
  * RLS limita a sólo las filas del propio driver, así que esto detecta sus
@@ -265,6 +289,9 @@ $amountRaw = $in['amount'] ?? null;
 $phoneRaw  = trim((string) ($in['phone']     ?? ''));
 $date      = trim((string) ($in['date']      ?? date('Y-m-d')));
 $bank      = trim((string) ($in['bank']      ?? ''));
+// store_id opcional: si viene, es un pago de membresía de TIENDA (merchant);
+// si no, es de membresía de conductor. Se valida como UUID.
+$storeId   = trim((string) ($in['store_id']  ?? ''));
 
 $errors = [];
 if ($reference === '' || !preg_match('/^\d{1,12}$/', $reference)) {
@@ -282,6 +309,9 @@ if (!preg_match('/^\d{4}$/', $bank)) {
 $phoneNorm = bl_normalize_phone($phoneRaw);
 if ($phoneNorm === false) {
     $errors[] = 'phone inválido. Formatos aceptados: 04XXXXXXXXX o 58XXXXXXXXXX.';
+}
+if ($storeId !== '' && !preg_match('/^[0-9a-fA-F-]{36}$/', $storeId)) {
+    $errors[] = 'store_id inválido (se espera UUID).';
 }
 if ($errors) {
     bv_send_json(422, ['ok' => false, 'errorCode' => 'VALIDATION', 'errorMessage' => implode(' ', $errors)]);
@@ -365,8 +395,9 @@ $amountRl = isset($first['amount']) && is_numeric($first['amount']) ? (float) $f
 $diff     = $amountRl !== null ? $amountRl - $expectedBs : null;
 $pct      = $amountRl !== null ? ($diff / $expectedBs) * 100.0 : null;
 $within   = $amountRl !== null && $amountRl >= $expectedBs * 0.99;
+$trnDate  = (string) ($first['trnDate'] ?? $date);
 
-bv_send_json(200, [
+$resp = [
     'ok'              => true,
     'statusCode'      => $statusCode,
     'amountReal'      => $amountRl,
@@ -379,11 +410,80 @@ bv_send_json(200, [
     'diff'            => $diff,
     'diffPct'         => $pct,
     'withinTolerance' => $within,
-    'trnDate'         => (string) ($first['trnDate'] ?? $date),
+    'trnDate'         => $trnDate,
     'trnTime'         => (string) ($first['trnTime'] ?? ''),
     'referenceNumber' => (string) ($first['referenceNumber'] ?? $reference),
     'sourceBankId'    => (string) ($first['sourceBankId'] ?? ''),
     'destBankId'      => (string) ($first['destBankId'] ?? ''),
     'concept'         => trim((string) ($first['concept'] ?? '')),
     'raw'             => $parsed,
-]);
+];
+
+// ═══ Activación server-side de la membresía ═══════════════════════════
+// La activación NO está expuesta al cliente (mig 77 revocó las RPC de
+// authenticated). Solo acá, tras confirmar el abono real contra Banesco,
+// activamos vía RPC con SERVICE_ROLE_KEY. Si el monto no alcanza, NO se
+// activa (el cliente muestra "monto insuficiente").
+if ($within) {
+    $srvKey = (string) ($cfg['SUPABASE_SERVICE_ROLE_KEY'] ?? '');
+    if ($srvKey === '') {
+        bv_send_json(503, [
+            'ok'           => false,
+            'errorCode'    => 'CONFIG',
+            'errorMessage' => 'Activación no disponible (falta SERVICE_ROLE_KEY en el servidor).',
+        ]);
+    }
+
+    if ($storeId !== '') {
+        [$rpcStatus, $rpcBody] = bv_rpc_service($cfg, 'register_store_membership_payment', [
+            'p_store_id'        => $storeId,
+            'p_bank_origin'     => $bank,
+            'p_reference_last6' => $reference,
+            'p_sender_phone'    => $phoneNorm,
+            'p_amount_reported' => $amount,
+            'p_amount_real'     => $amountRl,
+            'p_trn_date'        => $trnDate,
+            'p_banesco_status'  => $statusCode,
+            'p_raw_response'    => $parsed,
+            'p_caller_id'       => $user['id'],
+        ]);
+    } else {
+        [$rpcStatus, $rpcBody] = bv_rpc_service($cfg, 'register_membership_payment', [
+            'p_bank_origin'     => $bank,
+            'p_reference_last6' => $reference,
+            'p_sender_phone'    => $phoneNorm,
+            'p_amount_reported' => $amount,
+            'p_amount_real'     => $amountRl,
+            'p_trn_date'        => $trnDate,
+            'p_banesco_status'  => $statusCode,
+            'p_raw_response'    => $parsed,
+            'p_driver_id'       => $user['id'],
+        ]);
+    }
+
+    // Duplicado (unique index uq_payment_reports_ref_validated → 23505) o
+    // 409 de PostgREST: la referencia ya se usó para activar una membresía.
+    $rpcErrMsg = is_array($rpcBody) ? (string) ($rpcBody['message'] ?? '') : '';
+    if ($rpcStatus === 409 || stripos($rpcErrMsg, 'duplicate') !== false
+        || stripos($rpcErrMsg, 'unique') !== false) {
+        bv_send_json(409, [
+            'ok'           => false,
+            'errorCode'    => 'ALREADY_VALIDATED',
+            'errorMessage' => 'Esta referencia ya fue registrada como pago válido.',
+        ]);
+    }
+    if ($rpcStatus < 200 || $rpcStatus >= 300 || !is_array($rpcBody)) {
+        bl_log($logPath, '=== ACTIVACION FALLIDA === status=' . $rpcStatus . ' body=' . substr((string) json_encode($rpcBody), 0, 300));
+        bv_send_json(502, [
+            'ok'           => false,
+            'errorCode'    => 'ACTIVATION_FAILED',
+            'errorMessage' => 'Banesco confirmó el pago pero no se pudo activar la membresía. Contactá a soporte con tu referencia.',
+        ]);
+    }
+
+    $resp['membershipId'] = $rpcBody['membership_id'] ?? null;
+    $resp['expiresAt']    = $rpcBody['expires_at'] ?? null;
+    $resp['reportId']     = $rpcBody['report_id'] ?? null;
+}
+
+bv_send_json(200, $resp);

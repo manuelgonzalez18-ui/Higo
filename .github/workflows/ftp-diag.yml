@@ -19,6 +19,9 @@ on:
       - '.github/workflows/ftp-diag.yml'
       - '.diag-trigger'
 
+permissions:
+  contents: read
+
 jobs:
   diag:
     name: Diagnóstico
@@ -98,7 +101,10 @@ jobs:
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
         run: |
           lftp -c "
-          set ftp:ssl-allow no;
+          set ftp:ssl-allow yes;
+          set ftp:ssl-force true;
+          set ftp:ssl-protect-data true;
+          set ftp:ssl-protect-list true;
           set ssl:verify-certificate no;
           set net:timeout 15;
           set net:max-retries 1;

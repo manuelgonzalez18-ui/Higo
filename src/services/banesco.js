@@ -44,11 +44,17 @@ export const VENEZUELAN_BANKS = [
  * Cuando ok=false:
  *   { ok:false, errorCode, errorMessage, statusCode?, raw? }
  */
-export async function validateBanescoPayment({ reference, amount, phone, date, bank }) {
+export async function validateBanescoPayment({ reference, amount, phone, date, bank, storeId }) {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) {
         return { ok: false, errorCode: 'NO_SESSION', errorMessage: 'No hay sesión iniciada.' };
     }
+
+    // storeId opcional: presente sólo en pagos de membresía de TIENDA. El
+    // servidor activa la membresía correspondiente (tienda vs. conductor)
+    // con service_role tras confirmar el abono (mig 77).
+    const payload = { reference, amount, phone, date, bank };
+    if (storeId) payload.store_id = storeId;
 
     let resp;
     try {
@@ -58,7 +64,7 @@ export async function validateBanescoPayment({ reference, amount, phone, date, b
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${session.access_token}`,
             },
-            body: JSON.stringify({ reference, amount, phone, date, bank }),
+            body: JSON.stringify(payload),
         });
     } catch (err) {
         return { ok: false, errorCode: 'NETWORK', errorMessage: err?.message || 'Error de red.' };

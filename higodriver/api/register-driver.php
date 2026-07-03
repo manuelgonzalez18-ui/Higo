@@ -16,10 +16,17 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/_cors.php';
+require_once __DIR__ . '/_ratelimit.php';
 // H1.2 — CORS con whitelist explicita. Reemplaza el patron heredado
 // "Access-Control-Allow-Origin: *". El helper corta el preflight
 // OPTIONS y rechaza orígenes no autorizados con 403.
 hd_apply_cors('POST, OPTIONS');
+
+// Rate limit: endpoint público que envía correo SMTP con hasta 7 adjuntos
+// (~decenas de MB). Sin freno permitía email-bomb/agotar la cuota SMTP
+// (auditoría 2026-07-02, M4). 3 req/min/IP cubre el uso legítimo (un
+// aspirante enviando su solicitud) y corta ráfagas.
+api_rate_limit('register-driver', 3, sys_get_temp_dir() . '/higodriver_ratelimit.log');
 
 header('Content-Type: application/json; charset=utf-8');
 

@@ -13,6 +13,10 @@ concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: true
 
+# El deploy solo hace checkout + build + FTP; no necesita escribir en el repo.
+permissions:
+  contents: read
+
 jobs:
   web-deploy:
     name: Deploy
@@ -137,6 +141,14 @@ jobs:
       #
       # .builds/ lo crea el sistema interno de Hostinger; lo seguimos
       # excluyendo por las dudas.
+      # FTPS explícito (AUTH TLS): cifra credenciales y datos en tránsito.
+      # Antes iba en CLARO (ssl-allow no) → un MITM runner↔Hostinger leía la
+      # FTP_PASSWORD de producción (auditoría 2026-07-02). ssl-force aborta
+      # si el server no ofrece TLS. verify-certificate queda en `no` porque
+      # el hosting compartido de Hostinger suele presentar un cert que no
+      # valida por hostname; fijar `cafile` con el cert real es el
+      # hardening siguiente. Aun sin validar, el canal ya va cifrado, lo que
+      # cierra el sniffing pasivo de credenciales.
       - name: Deploy via lftp
         env:
           FTP_SERVER: ${{ secrets.FTP_SERVER }}
@@ -146,7 +158,10 @@ jobs:
           attempt=0
           max=3
           until lftp -c "
-          set ftp:ssl-allow no;
+          set ftp:ssl-allow yes;
+          set ftp:ssl-force true;
+          set ftp:ssl-protect-data true;
+          set ftp:ssl-protect-list true;
           set ssl:verify-certificate no;
           set net:timeout 60;
           set net:max-retries 10;
@@ -220,7 +235,10 @@ jobs:
           attempt=0
           max=3
           until lftp -c "
-          set ftp:ssl-allow no;
+          set ftp:ssl-allow yes;
+          set ftp:ssl-force true;
+          set ftp:ssl-protect-data true;
+          set ftp:ssl-protect-list true;
           set ssl:verify-certificate no;
           set net:timeout 60;
           set net:max-retries 10;

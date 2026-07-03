@@ -90,6 +90,15 @@ if ($rideId <= 0 || !in_array($kind, ['pickup', 'delivery'], true) || empty($pod
     spe_send(400, ['ok' => false, 'error' => 'bad_request', 'detail' => 'missing_parameters']);
 }
 
+// IDOR guard: el path del POD debe pertenecer a este ride. La convención de
+// subida es "<rideId>/<kind>.jpg" (ver src/components/DeliveryPodCapture.jsx).
+// Sin esto, el driver asignado al ride X podía pasar "<otroRideId>/..." y
+// firmar/filtrar la foto POD de otra entrega (auditoría 2026-07-02, M2).
+$podPrefix = $rideId . '/';
+if (strncmp($podPath, $podPrefix, strlen($podPrefix)) !== 0) {
+    spe_send(403, ['ok' => false, 'error' => 'forbidden', 'detail' => 'pod_path_mismatch']);
+}
+
 // ═══ Cargar Ride y validar Driver ═══════════════════════════════════════
 [$rStatus, $rBody] = bl_http_get(
     $supaUrl . '/rest/v1/rides?id=eq.' . $rideId

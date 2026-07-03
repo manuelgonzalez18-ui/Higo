@@ -11,6 +11,10 @@ on:
     tags:
       - 'v*'
 
+# Permiso mínimo: solo se necesita crear el GitHub Release con el APK/AAB.
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     name: Build APK
