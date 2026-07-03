@@ -283,6 +283,17 @@
   font-size: 1.6rem;
   flex-shrink: 0;
   box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.sheet-store-avatar-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .sheet-store-avatar--restaurant {

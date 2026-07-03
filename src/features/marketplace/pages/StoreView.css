@@ -16,6 +16,18 @@
   align-items: center;
   justify-content: center;
   font-size: 4rem;
+  position: relative;
+}
+
+/* Foto real del comercio sobre el gradiente; onError la oculta y queda el
+   emoji del placeholder. */
+.store-hero__image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .store-hero__bg--restaurant { background: linear-gradient(135deg, #FF6B6B 0%, #EE5A24 100%); }
@@ -221,6 +233,17 @@
   border-radius: var(--radius-sm);
   flex-shrink: 0;
   overflow: hidden;
+  position: relative;
+}
+
+/* Foto real del producto sobre el placeholder; onError la oculta. */
+.product-item__photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .product-item__image-placeholder {

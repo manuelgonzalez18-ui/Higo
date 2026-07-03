@@ -15,6 +15,7 @@ import { fetchStores } from '../../../services/shopStoreService.js';
 import { useLocationStore } from '../../../stores/shop/useLocationStore.js';
 import { useOrderStore } from '../../../stores/shop/useOrderStore.js';
 import { calculateDistance, formatDistance } from '../../../services/shopGeolocation.js';
+import { getStoreImage } from '../../../utils/shopImages.js';
 import { AddressPickerSheet } from '../../../components/shop/address/AddressPickerSheet.jsx';
 import { NotificationsPopover } from '../components/NotificationsPopover.jsx';
 import './MarketplaceHome.css';
@@ -202,6 +203,15 @@ export function MarketplaceHome() {
                   <span className="promo-emoji">
                     {store.category === 'restaurant' ? '🍔' : store.category === 'pharmacy' ? '💊' : store.category === 'bakery' ? '🥐' : '🛒'}
                   </span>
+                  {getStoreImage(store) && (
+                    <img
+                      src={getStoreImage(store)}
+                      alt={store.name}
+                      className="promo-card-image"
+                      loading="lazy"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  )}
                   <span className="promo-badge-tag">{promoBadge}</span>
                 </div>
                 <div className="promo-card-info">
@@ -300,7 +310,16 @@ function StoreCard({ store, userLocation }) {
       <Link to={`/shop/store/${store.id}`} className="store-feed-card" id={`store-${store.id}`}>
         <div className="store-feed-image-wrapper">
           <div className={`store-feed-image-placeholder store-feed-image-placeholder--${store.category}`}>
-            {categoryEmojis[store.category] || '🏪'}
+            <span className="store-feed-emoji">{categoryEmojis[store.category] || '🏪'}</span>
+            {getStoreImage(store) && (
+              <img
+                src={getStoreImage(store)}
+                alt={store.name}
+                className="store-feed-image"
+                loading="lazy"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
+            )}
           </div>
           {!store.isOpen && (
             <div className="store-feed-closed-overlay">Cerrado ahora</div>
