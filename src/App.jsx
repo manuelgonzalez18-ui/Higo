@@ -165,7 +165,7 @@ const App = () => {
     const checkSession = async () => {
       try {
         const path = window.location.hash.split('?')[0];
-        if (path === '#/auth' || path === '#/admin') {
+        if (path === '#/auth' || path === '#/admin' || path === '#/reset-password') {
           return;
         }
 
@@ -252,7 +252,7 @@ const App = () => {
           filter: `id=eq.${user.id}`
         }, (payload) => {
           const path = window.location.hash.split('?')[0];
-          if (path === '#/auth' || path === '#/admin') {
+          if (path === '#/auth' || path === '#/admin' || path === '#/reset-password') {
             return;
           }
 

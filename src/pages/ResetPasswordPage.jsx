@@ -27,6 +27,36 @@ import { supabase } from '../services/supabase';
 // H3.3 — 7 segundos en lugar de 3 para dar margen a WebView de gama baja.
 const PASSWORD_RECOVERY_GUARD_MS = 7000;
 
+// Extrae los parámetros de recovery de la URL, sin importar en qué
+// delimitador vengan. Con HashRouter + Supabase la URL puede llegar como:
+//   .../#/reset-password?token_hash=...&type=recovery   (plantilla nueva)
+//   .../#/reset-password#access_token=...&refresh_token=... (flujo implícito, doble #)
+//   .../?code=...#/reset-password                        (flujo PKCE)
+// El SDK no logra parsear el doble-# por sí solo, así que lo hacemos
+// nosotros escaneando cada segmento separado por '?' o '#'.
+const extractRecoveryParams = () => {
+    const params = {};
+    const raw = window.location.href;
+    const hashIndex = raw.indexOf('#');
+    const searchIndex = raw.indexOf('?');
+    let tail = '';
+    if (hashIndex !== -1) tail += raw.slice(hashIndex);
+    if (searchIndex !== -1 && searchIndex < hashIndex) tail += raw.slice(searchIndex, hashIndex);
+    // Los valores (JWT, code, token_hash) no contienen '#' ni '?', así que
+    // es seguro partir por ambos.
+    for (const seg of tail.split(/[#?]/)) {
+        if (!seg.includes('=')) continue;
+        for (const pair of seg.split('&')) {
+            const eq = pair.indexOf('=');
+            if (eq === -1) continue;
+            const k = decodeURIComponent(pair.slice(0, eq));
+            const v = decodeURIComponent(pair.slice(eq + 1));
+            if (k && !(k in params)) params[k] = v;
+        }
+    }
+    return params;
+};
+
 const ResetPasswordPage = () => {
     const navigate = useNavigate();
     const [status, setStatus] = useState('waiting'); // waiting | ready | invalid | saving | done
@@ -34,28 +64,88 @@ const ResetPasswordPage = () => {
     const [confirm, setConfirm] = useState('');
     const [message, setMessage] = useState('');
 
-    // Capturar el evento PASSWORD_RECOVERY. Supabase lo emite tras
-    // procesar el access_token del hash de la URL del email.
+    // Establecer la sesión de recovery. No dependemos solo del evento
+    // PASSWORD_RECOVERY (que no llega cuando el token viene en doble-#):
+    // parseamos la URL y canjeamos el token explícitamente según el flujo.
     useEffect(() => {
-        let resolvedReady = false;
+        let cancelled = false;
+        let resolved = false;
+        let guardTimer = null;
 
-        const { data: authSub } = supabase.auth.onAuthStateChange((event) => {
-            if (event === 'PASSWORD_RECOVERY') {
-                resolvedReady = true;
-                setStatus('ready');
+        const markReady = () => {
+            if (cancelled || resolved) return;
+            resolved = true;
+            setStatus('ready');
+        };
+        const markInvalid = () => {
+            if (cancelled || resolved) return;
+            resolved = true;
+            setStatus('invalid');
+        };
+
+        // Fallback: si el SDK detecta el token solo, emite el evento.
+        const { data: authSub } = supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session)) {
+                markReady();
             }
         });
 
-        // Si en GUARD_MS no llegó el evento, el link es inválido/expirado.
-        // 7s cubre WebView lento de Capacitor en gama baja.
-        const guardTimer = setTimeout(() => {
-            if (!resolvedReady) {
-                setStatus('invalid');
+        (async () => {
+            const params = extractRecoveryParams();
+
+            // Supabase pudo redirigir con un error explícito (link usado/vencido).
+            if (params.error || params.error_code) {
+                markInvalid();
+                return;
             }
-        }, PASSWORD_RECOVERY_GUARD_MS);
+
+            try {
+                // Flujo token_hash (plantilla de correo nueva).
+                if (params.token_hash && params.type) {
+                    const { error } = await supabase.auth.verifyOtp({
+                        type: params.type,
+                        token_hash: params.token_hash,
+                    });
+                    if (error) throw error;
+                    markReady();
+                    return;
+                }
+                // Flujo implícito: #access_token=...&refresh_token=...
+                if (params.access_token && params.refresh_token) {
+                    const { error } = await supabase.auth.setSession({
+                        access_token: params.access_token,
+                        refresh_token: params.refresh_token,
+                    });
+                    if (error) throw error;
+                    markReady();
+                    return;
+                }
+                // Flujo PKCE: ?code=...
+                if (params.code) {
+                    const { error } = await supabase.auth.exchangeCodeForSession(params.code);
+                    if (error) throw error;
+                    markReady();
+                    return;
+                }
+                // Sin token accionable: quizá ya hay una sesión de recovery.
+                const { data } = await supabase.auth.getSession();
+                if (data?.session) {
+                    markReady();
+                    return;
+                }
+            } catch {
+                markInvalid();
+                return;
+            }
+
+            // No había nada en la URL: esperamos el evento un rato (WebView
+            // lento de Capacitor) y si no llega, el link es inválido.
+            guardTimer = setTimeout(markInvalid, PASSWORD_RECOVERY_GUARD_MS);
+        })();
 
         return () => {
-            clearTimeout(guardTimer);
+            cancelled = true;
+            if (guardTimer) clearTimeout(guardTimer);
             authSub?.subscription?.unsubscribe?.();
         };
     }, []);
@@ -78,8 +168,14 @@ const ResetPasswordPage = () => {
             const { error } = await supabase.auth.updateUser({ password });
             if (error) throw error;
             setStatus('done');
-            // Redirect a / después de 1.5s para que el user vea la confirmación.
-            setTimeout(() => navigate('/', { replace: true }), 1500);
+            // Cerramos la sesión temporal de recovery y mandamos al login
+            // para que inicie con la clave nueva. Limpiar session_id evita
+            // el falso positivo de "cuenta abierta en otro dispositivo".
+            setTimeout(async () => {
+                try { await supabase.auth.signOut(); } catch { /* noop */ }
+                try { localStorage.removeItem('session_id'); } catch { /* noop */ }
+                navigate('/auth', { replace: true });
+            }, 1800);
         } catch (err) {
             setStatus('ready'); // permitir reintento
             setMessage(`No se pudo actualizar la clave: ${err.message || 'error desconocido'}`);
@@ -191,7 +287,7 @@ const ResetPasswordPage = () => {
                         </div>
                         <p className="text-white font-bold mb-2">¡Listo!</p>
                         <p className="text-gray-400 text-sm">
-                            Tu clave fue actualizada. Te llevamos al inicio…
+                            Tu clave fue actualizada. Te llevamos al inicio de sesión…
                         </p>
                     </div>
                 )}
