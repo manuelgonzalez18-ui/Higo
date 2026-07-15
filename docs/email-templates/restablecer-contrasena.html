@@ -1,17 +1,17 @@
 <!--
-  Plantilla de correo — CONFIRMAR REGISTRO (Higo)
-  ================================================
+  Plantilla de correo — RESTABLECER CONTRASEÑA (Higo)
+  ====================================================
   Dónde se pega: Supabase Dashboard → Authentication → Email Templates →
-  "Confirm signup". Pegar TODO este HTML en el cuerpo y usar el asunto
-  sugerido más abajo.
+  "Reset Password". Pegar TODO el HTML de abajo (desde <!DOCTYPE html>).
 
-  Logo: https://higodriver.com/assets/logo-email.jpg (JPG en https, se ve en
-  todos los clientes de correo). Ya está puesto en el <img> de abajo.
+  Asunto sugerido:  Restablece tu contraseña de Higo
 
-  Variable de Supabase usada: {{ .ConfirmationURL }} (el enlace de confirmación).
-  Diseñado con tablas + estilos inline para máxima compatibilidad de correo.
+  Variable de Supabase: {{ .ConfirmationURL }} (enlace de recuperación).
+  El enlace lleva al usuario a higoapp.com/#/reset-password (redirectTo
+  que setea la app en resetPasswordForEmail).
 
-  Asunto sugerido:  Confirma tu cuenta en Higo
+  Logo: https://higodriver.com/assets/logo-email.jpg (JPG en https).
+  Botón "bulletproof" con VML para que se vea bien también en Outlook.
 -->
 <!DOCTYPE html>
 <html lang="es">
@@ -19,13 +19,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>Confirma tu cuenta en Higo</title>
+  <title>Restablece tu contraseña de Higo</title>
 </head>
 <body style="margin:0; padding:0; background-color:#eef1f6; -webkit-font-smoothing:antialiased; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 
-  <!-- preheader (texto de vista previa en la bandeja, oculto) -->
   <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:#eef1f6; font-size:1px; line-height:1px;">
-    Estás a un clic de activar tu cuenta en Higo. Confirmá tu correo para empezar.
+    Recibimos una solicitud para restablecer tu contraseña de Higo.
   </div>
 
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#eef1f6; padding:24px 12px;">
@@ -34,7 +33,7 @@
 
         <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background-color:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 1px 4px rgba(10,19,48,0.08);">
 
-          <!-- Encabezado con logo sobre fondo navy -->
+          <!-- Encabezado -->
           <tr>
             <td align="center" style="background-color:#0A1330; padding:32px 24px;">
               <img src="https://higodriver.com/assets/logo-email.jpg"
@@ -48,28 +47,28 @@
           <tr>
             <td style="padding:36px 40px 8px;">
               <h1 style="margin:0 0 14px; color:#0A1330; font-size:24px; line-height:1.25; font-weight:700;">
-                ¡Bienvenido a Higo! 🎉
+                Restablecer tu contraseña
               </h1>
               <p style="margin:0 0 16px; color:#334155; font-size:16px; line-height:1.65;">
-                Gracias por crear tu cuenta. Estás a un solo paso de empezar a moverte
-                con Higo. Solo confirmá tu correo tocando el botón de abajo:
+                Recibimos una solicitud para restablecer la contraseña de tu cuenta de Higo.
+                Tocá el botón de abajo para crear una nueva:
               </p>
             </td>
           </tr>
 
-          <!-- Botón CTA (bulletproof: VML para Outlook) -->
+          <!-- Botón CTA (bulletproof) -->
           <tr>
             <td align="center" style="padding:14px 40px 8px;">
               <!--[if mso]>
-              <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ .ConfirmationURL }}" style="height:50px;v-text-anchor:middle;width:250px;" arcsize="20%" strokecolor="#2563EB" fillcolor="#2563EB">
+              <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ .ConfirmationURL }}" style="height:50px;v-text-anchor:middle;width:280px;" arcsize="20%" strokecolor="#2563EB" fillcolor="#2563EB">
                 <w:anchorlock/>
-                <center style="color:#ffffff;font-family:sans-serif;font-size:16px;font-weight:bold;">Confirmar mi cuenta</center>
+                <center style="color:#ffffff;font-family:sans-serif;font-size:16px;font-weight:bold;">Restablecer contraseña</center>
               </v:roundrect>
               <![endif]-->
               <!--[if !mso]><!-->
               <a href="{{ .ConfirmationURL }}" target="_blank"
                  style="display:inline-block; background-color:#2563EB; padding:15px 40px; color:#ffffff; font-size:16px; font-weight:700; text-decoration:none; border-radius:10px;">
-                Confirmar mi cuenta
+                Restablecer contraseña
               </a>
               <!--<![endif]-->
             </td>
@@ -90,11 +89,11 @@
           <!-- Nota de seguridad -->
           <tr>
             <td style="padding:22px 40px 32px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9; border-radius:10px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#fef2f2; border-radius:10px;">
                 <tr>
-                  <td style="padding:14px 18px; color:#475569; font-size:13px; line-height:1.6;">
-                    🔒 Si no creaste una cuenta en Higo, podés ignorar este correo tranquilo:
-                    no se activará ninguna cuenta sin esta confirmación.
+                  <td style="padding:14px 18px; color:#991b1b; font-size:13px; line-height:1.6;">
+                    🔒 Si no solicitaste este cambio, ignorá este correo: tu contraseña
+                    seguirá igual. Por seguridad, este enlace vence en poco tiempo.
                   </td>
                 </tr>
               </table>
