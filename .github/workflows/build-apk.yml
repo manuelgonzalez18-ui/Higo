@@ -43,6 +43,10 @@ jobs:
 
       - name: Build web (Vite)
         env:
+          # Higo Shop fuera del APK de Play Store hasta que el módulo esté
+          # pulido: sin rutas, sin botones de entrada y sin chunks en el
+          # bundle. La web (deploy.yml) no setea la variable → Shop activo.
+          VITE_SHOP_ENABLED: 'false'
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           # Maps key SEPARADO del de web (deploy.yml usa VITE_GOOGLE_MAPS_API_KEY,
