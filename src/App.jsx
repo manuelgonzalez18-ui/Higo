@@ -89,6 +89,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 const ONBOARDING_SKIP_PREFIXES = [
     '/onboarding', '/auth',
     '/admin', '/driver',
+    '/reset-password',
 ];
 
 // Gate del onboarding del pasajero (Fase 9 D.P1). Vive DENTRO del
