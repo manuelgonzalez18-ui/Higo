@@ -204,18 +204,23 @@ const AuthPage = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-[#152323] flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+        <div className="min-h-screen bg-gray-50 dark:bg-gradient-to-b dark:from-[#0A1330] dark:to-[#0d1836] flex flex-col justify-center py-12 sm:px-6 lg:px-8">
             <div className="sm:mx-auto sm:w-full sm:max-w-md">
-                <div className="flex justify-center text-blue-600">
-                    <span className="material-symbols-outlined text-5xl">local_taxi</span>
+                <div className="flex flex-col items-center">
+                    <img src="/higo-icon.svg" alt="Higo" className="w-16 h-16 rounded-2xl shadow-lg" />
+                    <span className="mt-3 text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">Higo</span>
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400">Tecnología en movilidad</span>
                 </div>
-                <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
-                    {isLogin ? 'Inicia sesión en tu cuenta' : 'Crea una nueva cuenta'}
+                <h2 className="mt-7 text-center text-2xl font-bold text-gray-900 dark:text-white">
+                    {isLogin ? 'Bienvenido de vuelta' : 'Creá tu cuenta'}
                 </h2>
+                <p className="mt-1 text-center text-sm text-gray-500 dark:text-gray-400">
+                    {isLogin ? 'Iniciá sesión para continuar' : 'Es rápido y solo toma un minuto'}
+                </p>
             </div>
 
             <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-                <div className="bg-white dark:bg-[#1a2c2c] py-8 px-4 shadow sm:rounded-lg sm:px-10 border border-gray-200 dark:border-gray-700">
+                <div className="bg-white dark:bg-[#0f1a3a] py-8 px-4 shadow sm:rounded-lg sm:px-10 border border-gray-200 dark:border-gray-700">
                     <form className="space-y-6" onSubmit={handleAuth}>
                         {!isLogin && (
                             <>
@@ -233,7 +238,7 @@ const AuthPage = () => {
                                             placeholder="Ej: Juan Pérez"
                                             value={fullName}
                                             onChange={(e) => setFullName(e.target.value)}
-                                            className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-[#233535] text-gray-900 dark:text-white"
+                                            className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-[#16224a] text-gray-900 dark:text-white"
                                         />
                                     </div>
                                 </div>
@@ -252,7 +257,7 @@ const AuthPage = () => {
                                             placeholder="Ej: +58 412 1234567"
                                             value={phone}
                                             onChange={(e) => setPhone(e.target.value)}
-                                            className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-[#233535] text-gray-900 dark:text-white"
+                                            className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-[#16224a] text-gray-900 dark:text-white"
                                         />
                                     </div>
                                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -275,7 +280,7 @@ const AuthPage = () => {
                                     required
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-[#233535] text-gray-900 dark:text-white"
+                                    className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-[#16224a] text-gray-900 dark:text-white"
                                 />
                             </div>
                         </div>
@@ -293,7 +298,7 @@ const AuthPage = () => {
                                     required
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-[#233535] text-gray-900 dark:text-white"
+                                    className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-[#16224a] text-gray-900 dark:text-white"
                                 />
                             </div>
                         </div>
@@ -310,7 +315,7 @@ const AuthPage = () => {
                                         value={referralCode}
                                         onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
                                         placeholder="Ej: ABC123"
-                                        className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-[#233535] text-gray-900 dark:text-white uppercase"
+                                        className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-[#16224a] text-gray-900 dark:text-white uppercase"
                                     />
                                 </div>
                                 <p className="text-xs text-gray-500 mt-1">Si alguien te invitó, ambos reciben $1 al primer viaje.</p>
@@ -327,7 +332,7 @@ const AuthPage = () => {
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                                className="w-full flex justify-center py-3 px-4 rounded-xl text-base font-bold text-white bg-[#2563EB] hover:bg-[#1d4fd7] shadow-lg shadow-blue-600/25 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-colors"
                             >
                                 {loading ? 'Procesando...' : (isLogin ? 'Iniciar Sesión' : 'Registrarse')}
                             </button>
@@ -353,7 +358,7 @@ const AuthPage = () => {
                     {/* H3.2 — modal de reset password */}
                     {showResetModal && (
                         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-                            <div className="bg-white dark:bg-[#1a2c2c] rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-700">
+                            <div className="bg-white dark:bg-[#0f1a3a] rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-700">
                                 <div className="flex items-center justify-between mb-4">
                                     <h3 className="text-lg font-bold text-gray-900 dark:text-white">
                                         Restablecer clave
@@ -377,7 +382,7 @@ const AuthPage = () => {
                                         placeholder="tu@correo.com"
                                         value={resetEmail}
                                         onChange={(e) => setResetEmail(e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white dark:bg-[#233535] text-gray-900 dark:text-white mb-4"
+                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white dark:bg-[#16224a] text-gray-900 dark:text-white mb-4"
                                     />
                                     <div className="flex gap-3">
                                         <button
@@ -407,7 +412,7 @@ const AuthPage = () => {
                                 <div className="w-full border-t border-gray-300 dark:border-gray-600" />
                             </div>
                             <div className="relative flex justify-center text-sm">
-                                <span className="px-2 bg-white dark:bg-[#1a2c2c] text-gray-500">
+                                <span className="px-2 bg-white dark:bg-[#0f1a3a] text-gray-500">
                                     O
                                 </span>
                             </div>
@@ -416,7 +421,7 @@ const AuthPage = () => {
                         <div className="mt-6">
                             <button
                                 onClick={() => setIsLogin(!isLogin)}
-                                className="w-full flex justify-center py-2 px-4 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-[#233535] hover:bg-gray-50 dark:hover:bg-[#152323]"
+                                className="w-full flex justify-center py-2 px-4 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-[#16224a] hover:bg-gray-50 dark:hover:bg-[#0A1330]"
                             >
                                 {isLogin ? 'Crear nueva cuenta' : 'Iniciar sesión en cuenta existente'}
                             </button>
