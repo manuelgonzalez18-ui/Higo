@@ -342,7 +342,10 @@ const DriverDashboard = () => {
             }
         };
 
-        App.addListener('appUrlOpen', handleDeepLink);
+        // Remover SOLO este listener en el cleanup: removeAllListeners
+        // pisaría también el handler global de App Links de App.jsx.
+        let deepLinkSub;
+        App.addListener('appUrlOpen', handleDeepLink).then(sub => { deepLinkSub = sub; });
 
         App.getLaunchUrl().then(launchUrl => {
             if (launchUrl && launchUrl.url) {
@@ -351,7 +354,7 @@ const DriverDashboard = () => {
         });
 
         return () => {
-            App.removeAllListeners('appUrlOpen');
+            deepLinkSub?.remove?.();
         };
     }, []);
 

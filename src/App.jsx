@@ -328,6 +328,48 @@ const App = () => {
     };
   }, []);
 
+  // App Links (https://higoapp.com/...): cuando el enlace del correo
+  // (reset de clave, confirmación de cuenta) abre la app nativa, hay que
+  // llevar la URL entrante a la ruta del HashRouter. Sin esto la app
+  // abre en la home y el token del enlace se pierde.
+  // Los deep links higo:// (aceptar viaje) NO pasan por acá: los maneja
+  // DriverDashboard con su propio listener.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    const routeFromUrl = ({ url }) => {
+      if (!url || !url.startsWith('https://')) return;
+      try {
+        const u = new URL(url);
+        if (u.hostname !== 'higoapp.com' && u.hostname !== 'www.higoapp.com') return;
+        // .../#/reset-password?token_hash=... → navegar a esa ruta hash.
+        const hashIdx = url.indexOf('#');
+        if (hashIdx !== -1 && url[hashIdx + 1] === '/') {
+          window.location.hash = url.slice(hashIdx);
+          return;
+        }
+        // Página estática de confirmación → a login con aviso.
+        if (u.pathname.startsWith('/cuenta-confirmada')) {
+          toast.success('¡Cuenta confirmada! Ya podés iniciar sesión.');
+          window.location.hash = '#/auth';
+        }
+      } catch { /* URL inválida: ignorar */ }
+    };
+
+    let sub;
+    (async () => {
+      try {
+        sub = await CapacitorApp.addListener('appUrlOpen', routeFromUrl);
+        const launch = await CapacitorApp.getLaunchUrl();
+        if (launch?.url) routeFromUrl(launch);
+      } catch (e) {
+        console.warn('[AppLinks] listener not available:', e);
+      }
+    })();
+
+    return () => { sub?.remove?.(); };
+  }, []);
+
   useEffect(() => {
     initGlobalAudio(); // Unlock audio context on first interaction
 
