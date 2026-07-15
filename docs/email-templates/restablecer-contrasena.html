@@ -6,9 +6,16 @@
 
   Asunto sugerido:  Restablece tu contraseña de Higo
 
-  Variable de Supabase: {{ .ConfirmationURL }} (enlace de recuperación).
-  El enlace lleva al usuario a higoapp.com/#/reset-password (redirectTo
-  que setea la app en resetPasswordForEmail).
+  Enlace de recuperación: usamos {{ .TokenHash }} en vez de
+  {{ .ConfirmationURL }}. Motivo: la app usa HashRouter y el redirect
+  server-side de ConfirmationURL genera una URL con doble '#'
+  (.../#/reset-password#access_token=...) que el SDK no logra parsear →
+  "enlace inválido". Con token_hash la app llama verifyOtp() y establece
+  la sesión de recovery de forma confiable.
+
+  IMPORTANTE (config en Supabase → Auth → URL Configuration):
+    - Site URL = https://higoapp.com   (así {{ .SiteURL }} resuelve bien)
+    - Redirect URLs debe incluir: https://higoapp.com/**
 
   Logo: https://higodriver.com/assets/logo-email.jpg (JPG en https).
   Botón "bulletproof" con VML para que se vea bien también en Outlook.
@@ -60,13 +67,13 @@
           <tr>
             <td align="center" style="padding:14px 40px 8px;">
               <!--[if mso]>
-              <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ .ConfirmationURL }}" style="height:50px;v-text-anchor:middle;width:280px;" arcsize="20%" strokecolor="#2563EB" fillcolor="#2563EB">
+              <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ .SiteURL }}/#/reset-password?token_hash={{ .TokenHash }}&type=recovery" style="height:50px;v-text-anchor:middle;width:280px;" arcsize="20%" strokecolor="#2563EB" fillcolor="#2563EB">
                 <w:anchorlock/>
                 <center style="color:#ffffff;font-family:sans-serif;font-size:16px;font-weight:bold;">Restablecer contraseña</center>
               </v:roundrect>
               <![endif]-->
               <!--[if !mso]><!-->
-              <a href="{{ .ConfirmationURL }}" target="_blank"
+              <a href="{{ .SiteURL }}/#/reset-password?token_hash={{ .TokenHash }}&type=recovery" target="_blank"
                  style="display:inline-block; background-color:#2563EB; padding:15px 40px; color:#ffffff; font-size:16px; font-weight:700; text-decoration:none; border-radius:10px;">
                 Restablecer contraseña
               </a>
@@ -81,7 +88,7 @@
                 Si el botón no funciona, copiá y pegá este enlace en tu navegador:
               </p>
               <p style="margin:0; word-break:break-all;">
-                <a href="{{ .ConfirmationURL }}" target="_blank" style="color:#2563EB; font-size:13px; text-decoration:underline;">{{ .ConfirmationURL }}</a>
+                <a href="{{ .SiteURL }}/#/reset-password?token_hash={{ .TokenHash }}&type=recovery" target="_blank" style="color:#2563EB; font-size:13px; text-decoration:underline;">{{ .SiteURL }}/#/reset-password?token_hash={{ .TokenHash }}&type=recovery</a>
               </p>
             </td>
           </tr>
