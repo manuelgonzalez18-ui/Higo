@@ -1,0 +1,127 @@
+<!--
+  Plantilla de correo — CONFIRMAR REGISTRO (Higo)
+  ================================================
+  Dónde se pega: Supabase Dashboard → Authentication → Email Templates →
+  "Confirm signup". Pegar TODO este HTML en el cuerpo y usar el asunto
+  sugerido más abajo.
+
+  Logo: https://higodriver.com/assets/logo-email.jpg (JPG en https, se ve en
+  todos los clientes de correo). Ya está puesto en el <img> de abajo.
+
+  Variable de Supabase usada: {{ .ConfirmationURL }} (el enlace de confirmación).
+  Diseñado con tablas + estilos inline para máxima compatibilidad de correo.
+
+  Asunto sugerido:  Confirma tu cuenta en Higo
+-->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Confirma tu cuenta en Higo</title>
+</head>
+<body style="margin:0; padding:0; background-color:#eef1f6; -webkit-font-smoothing:antialiased; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+
+  <!-- preheader (texto de vista previa en la bandeja, oculto) -->
+  <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:#eef1f6; font-size:1px; line-height:1px;">
+    Estás a un clic de activar tu cuenta en Higo. Confirmá tu correo para empezar.
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#eef1f6; padding:24px 12px;">
+    <tr>
+      <td align="center">
+
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background-color:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 1px 4px rgba(10,19,48,0.08);">
+
+          <!-- Encabezado con logo sobre fondo navy -->
+          <tr>
+            <td align="center" style="background-color:#0A1330; padding:32px 24px;">
+              <img src="https://higodriver.com/assets/logo-email.jpg"
+                   width="64" height="64" alt="Higo"
+                   style="display:block; width:64px; height:64px; border:0; outline:none; text-decoration:none; border-radius:12px;">
+              <div style="color:#ffffff; font-size:22px; font-weight:700; letter-spacing:-0.4px; margin-top:12px;">Higo</div>
+            </td>
+          </tr>
+
+          <!-- Cuerpo -->
+          <tr>
+            <td style="padding:36px 40px 8px;">
+              <h1 style="margin:0 0 14px; color:#0A1330; font-size:24px; line-height:1.25; font-weight:700;">
+                ¡Bienvenido a Higo! 🎉
+              </h1>
+              <p style="margin:0 0 16px; color:#334155; font-size:16px; line-height:1.65;">
+                Gracias por crear tu cuenta. Estás a un solo paso de empezar a moverte
+                con Higo. Solo confirmá tu correo tocando el botón de abajo:
+              </p>
+            </td>
+          </tr>
+
+          <!-- Botón CTA -->
+          <tr>
+            <td align="center" style="padding:14px 40px 8px;">
+              <table role="presentation" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" bgcolor="#2563EB" style="border-radius:10px;">
+                    <a href="{{ .ConfirmationURL }}" target="_blank"
+                       style="display:inline-block; padding:15px 40px; color:#ffffff; font-size:16px; font-weight:700; text-decoration:none; border-radius:10px;">
+                      Confirmar mi cuenta
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Enlace de respaldo -->
+          <tr>
+            <td style="padding:20px 40px 8px;">
+              <p style="margin:0 0 8px; color:#64748b; font-size:13px; line-height:1.6;">
+                Si el botón no funciona, copiá y pegá este enlace en tu navegador:
+              </p>
+              <p style="margin:0; word-break:break-all;">
+                <a href="{{ .ConfirmationURL }}" target="_blank" style="color:#2563EB; font-size:13px; text-decoration:underline;">{{ .ConfirmationURL }}</a>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Nota de seguridad -->
+          <tr>
+            <td style="padding:22px 40px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9; border-radius:10px;">
+                <tr>
+                  <td style="padding:14px 18px; color:#475569; font-size:13px; line-height:1.6;">
+                    🔒 Si no creaste una cuenta en Higo, podés ignorar este correo tranquilo:
+                    no se activará ninguna cuenta sin esta confirmación.
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#0A1330; padding:24px 40px; text-align:center;">
+              <p style="margin:0 0 10px; color:#cbd5e1; font-size:13px; line-height:1.6;">
+                ¿Necesitás ayuda? Escribinos a
+                <a href="mailto:soporte@higodriver.com" style="color:#93b4fb; text-decoration:none;">soporte@higodriver.com</a>
+              </p>
+              <p style="margin:0 0 4px;">
+                <a href="https://higodriver.com/privacy/" style="color:#93b4fb; font-size:12px; text-decoration:none;">Política de Privacidad</a>
+                <span style="color:#475569;">&nbsp;·&nbsp;</span>
+                <a href="https://higodriver.com/terms-and-conditions/" style="color:#93b4fb; font-size:12px; text-decoration:none;">Términos y Condiciones</a>
+              </p>
+              <p style="margin:10px 0 0; color:#64748b; font-size:11px;">
+                Higo · Tecnología en movilidad · Higuerote, Venezuela
+              </p>
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

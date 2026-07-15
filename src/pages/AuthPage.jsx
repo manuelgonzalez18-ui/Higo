@@ -72,7 +72,7 @@ const AuthPage = () => {
             setMessage('Si el email existe en nuestro sistema, te enviamos un enlace para restablecer tu clave. Revisá tu bandeja de entrada (y spam).');
             setShowResetModal(false);
             setResetEmail('');
-        } catch (err) {
+        } catch {
             // Tampoco filtramos error real: mensaje genérico.
             setMessage('Si el email existe en nuestro sistema, te enviamos un enlace para restablecer tu clave.');
             setShowResetModal(false);
@@ -151,6 +151,12 @@ const AuthPage = () => {
                     email,
                     password,
                     options: {
+                        // Al confirmar el correo, Supabase redirige acá (página
+                        // "cuenta confirmada" servida en higoapp.com). Debe
+                        // estar en el allowlist de Redirect URLs del proyecto
+                        // Supabase; si no, cae al Site URL. Evita el redirect a
+                        // localhost por defecto.
+                        emailRedirectTo: 'https://higoapp.com/cuenta-confirmada/',
                         data: {
                             full_name: fullName.trim(),
                             phone: phone.trim(),
