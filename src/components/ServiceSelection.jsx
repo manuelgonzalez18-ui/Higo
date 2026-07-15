@@ -1,6 +1,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
+// Higo Shop se apaga por build en el APK de Play Store (ver App.jsx).
+const SHOP_ENABLED = import.meta.env.VITE_SHOP_ENABLED !== 'false';
+
 const ServiceSelection = ({ onSelect }) => {
     const navigate = useNavigate();
 
@@ -39,6 +42,7 @@ const ServiceSelection = ({ onSelect }) => {
             </button>
 
             {/* Shop Card */}
+            {SHOP_ENABLED && (
             <button
                 onClick={() => navigate('/shop')}
                 className="bg-[#1A1F2E] p-6 rounded-[32px] border border-white/5 hover:border-violet-500/50 transition-all group text-left relative overflow-hidden"
@@ -52,6 +56,7 @@ const ServiceSelection = ({ onSelect }) => {
                     <p className="text-sm text-gray-400">Pide comida, medicinas, víveres y más a domicilio.</p>
                 </div>
             </button>
+            )}
         </div>
     );
 };

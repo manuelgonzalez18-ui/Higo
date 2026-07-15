@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { HashRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import AdminGuard from './components/AdminGuard';
 import ChatWidget from './components/ChatWidget';
 import SupportChatWidget from './components/SupportChatWidget';
@@ -51,17 +51,25 @@ const PublicTrackingPage      = lazy(() => import('./pages/PublicTrackingPage'))
 const MapboxSandbox           = lazy(() => import('./components/_dev/MapboxSandbox'));
 
 // ─── Higo Shop: lazy module imports ──────────────────────────────────
-const ShopMarketplaceHome   = lazy(() => import('./features/marketplace/pages/MarketplaceHome.jsx').then((m) => ({ default: m.MarketplaceHome })));
-const ShopSearchMap         = lazy(() => import('./features/marketplace/pages/SearchMap.jsx').then((m) => ({ default: m.SearchMap })));
-const ShopStoreView         = lazy(() => import('./features/marketplace/pages/StoreView.jsx').then((m) => ({ default: m.StoreView })));
-const ShopCartPage          = lazy(() => import('./features/cart/pages/CartPage.jsx').then((m) => ({ default: m.CartPage })));
-const ShopCheckoutPage      = lazy(() => import('./features/checkout/pages/CheckoutPage.jsx').then((m) => ({ default: m.CheckoutPage })));
-const ShopOrdersPage        = lazy(() => import('./features/orders/pages/OrdersPage.jsx').then((m) => ({ default: m.OrdersPage })));
-const ShopOrderDetailPage   = lazy(() => import('./features/orders/pages/OrderDetailPage.jsx').then((m) => ({ default: m.OrderDetailPage })));
-const ShopProfilePage       = lazy(() => import('./features/profile/pages/ProfilePage.jsx').then((m) => ({ default: m.ProfilePage })));
-const ShopMerchantDashboard = lazy(() => import('./features/merchant/pages/MerchantDashboard.jsx').then((m) => ({ default: m.MerchantDashboard })));
-const ShopDriverDashboard   = lazy(() => import('./features/driver/pages/DriverDashboard.jsx').then((m) => ({ default: m.DriverDashboard })));
-const ShopAppShell          = lazy(() => import('./components/shop/layout/AppShell.jsx').then((m) => ({ default: m.AppShell })));
+// SHOP_ENABLED (bandera de build): el APK de Play Store se compila con
+// VITE_SHOP_ENABLED=false mientras el módulo Shop se termina de pulir —
+// con la bandera apagada las rutas no se registran y Rollup ni siquiera
+// genera los chunks del Shop (los ternarios de abajo quedan en la rama
+// null tras el define de Vite). La web se buildea sin la variable →
+// default encendido, sin cambios.
+const SHOP_ENABLED = import.meta.env.VITE_SHOP_ENABLED !== 'false';
+
+const ShopMarketplaceHome   = SHOP_ENABLED ? lazy(() => import('./features/marketplace/pages/MarketplaceHome.jsx').then((m) => ({ default: m.MarketplaceHome }))) : null;
+const ShopSearchMap         = SHOP_ENABLED ? lazy(() => import('./features/marketplace/pages/SearchMap.jsx').then((m) => ({ default: m.SearchMap }))) : null;
+const ShopStoreView         = SHOP_ENABLED ? lazy(() => import('./features/marketplace/pages/StoreView.jsx').then((m) => ({ default: m.StoreView }))) : null;
+const ShopCartPage          = SHOP_ENABLED ? lazy(() => import('./features/cart/pages/CartPage.jsx').then((m) => ({ default: m.CartPage }))) : null;
+const ShopCheckoutPage      = SHOP_ENABLED ? lazy(() => import('./features/checkout/pages/CheckoutPage.jsx').then((m) => ({ default: m.CheckoutPage }))) : null;
+const ShopOrdersPage        = SHOP_ENABLED ? lazy(() => import('./features/orders/pages/OrdersPage.jsx').then((m) => ({ default: m.OrdersPage }))) : null;
+const ShopOrderDetailPage   = SHOP_ENABLED ? lazy(() => import('./features/orders/pages/OrderDetailPage.jsx').then((m) => ({ default: m.OrderDetailPage }))) : null;
+const ShopProfilePage       = SHOP_ENABLED ? lazy(() => import('./features/profile/pages/ProfilePage.jsx').then((m) => ({ default: m.ProfilePage }))) : null;
+const ShopMerchantDashboard = SHOP_ENABLED ? lazy(() => import('./features/merchant/pages/MerchantDashboard.jsx').then((m) => ({ default: m.MerchantDashboard }))) : null;
+const ShopDriverDashboard   = SHOP_ENABLED ? lazy(() => import('./features/driver/pages/DriverDashboard.jsx').then((m) => ({ default: m.DriverDashboard }))) : null;
+const ShopAppShell          = SHOP_ENABLED ? lazy(() => import('./components/shop/layout/AppShell.jsx').then((m) => ({ default: m.AppShell }))) : null;
 
 import { useAuthStore } from './stores/shop/useAuthStore.js';
 import { GoogleMapsProvider } from './components/shop/maps/MapView.jsx';
@@ -463,17 +471,21 @@ const App = () => {
         <Route path="/admin/support/stats" element={<AdminGuard><AdminSupportStatsPage /></AdminGuard>} />
         <Route path="/join" element={<DriverLandingPage />} />
 
-        {/* Módulo Higo Shop */}
-        <Route path="/shop" element={<GoogleMapsProvider><ShopAppShell /></GoogleMapsProvider>}>
-          <Route index element={<ShopHomeSelector />} />
-          <Route path="search" element={<ShopSearchMap />} />
-          <Route path="store/:storeId" element={<ShopStoreView />} />
-          <Route path="cart" element={<ShopCartPage />} />
-          <Route path="checkout/:storeId" element={<ShopCheckoutPage />} />
-          <Route path="orders" element={<ShopOrdersPage />} />
-          <Route path="orders/:orderId" element={<ShopOrderDetailPage />} />
-          <Route path="profile" element={<ShopProfilePage />} />
-        </Route>
+        {/* Módulo Higo Shop (solo si la bandera de build lo habilita) */}
+        {SHOP_ENABLED ? (
+          <Route path="/shop" element={<GoogleMapsProvider><ShopAppShell /></GoogleMapsProvider>}>
+            <Route index element={<ShopHomeSelector />} />
+            <Route path="search" element={<ShopSearchMap />} />
+            <Route path="store/:storeId" element={<ShopStoreView />} />
+            <Route path="cart" element={<ShopCartPage />} />
+            <Route path="checkout/:storeId" element={<ShopCheckoutPage />} />
+            <Route path="orders" element={<ShopOrdersPage />} />
+            <Route path="orders/:orderId" element={<ShopOrderDetailPage />} />
+            <Route path="profile" element={<ShopProfilePage />} />
+          </Route>
+        ) : (
+          <Route path="/shop/*" element={<Navigate to="/" replace />} />
+        )}
 
         <Route path="/terms" element={<TermsOfDeliveryPage />} />
         <Route path="/terms/envios" element={<TermsOfDeliveryPage />} />

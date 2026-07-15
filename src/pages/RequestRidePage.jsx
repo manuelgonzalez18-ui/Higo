@@ -12,6 +12,9 @@ import { toast } from '../components/Toast';
 import { openLegalLink } from '../utils/openLegalLink';
 import { TERMS_URL, PRIVACY_URL } from '../constants/legalUrls';
 
+// Higo Shop se apaga por build en el APK de Play Store (ver App.jsx).
+const SHOP_ENABLED = import.meta.env.VITE_SHOP_ENABLED !== 'false';
+
 
 const RequestRidePage = () => {
     const navigate = useNavigate();
@@ -619,7 +622,7 @@ const RequestRidePage = () => {
 
                         {/* Menú principal */}
                         <nav className="flex-1 overflow-y-auto py-2">
-                            {currentUser && (
+                            {currentUser && SHOP_ENABLED && (
                                 <button
                                     onClick={() => { closeDrawer(); navigate('/shop'); }}
                                     className="w-full px-5 py-3 flex items-center gap-4 text-left hover:bg-white/5 transition-colors border-b border-white/5 bg-blue-600/10"
