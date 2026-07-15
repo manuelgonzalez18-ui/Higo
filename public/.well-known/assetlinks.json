@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.higoapp.ve",
+      "sha256_cert_fingerprints": [
+        "7B:61:B4:34:37:AC:15:4B:46:51:3B:E2:DE:84:EE:03:A2:29:B1:E2:B3:FE:B5:61:15:C9:F7:B4:9D:7F:40:BF"
+      ]
+    }
+  }
+]

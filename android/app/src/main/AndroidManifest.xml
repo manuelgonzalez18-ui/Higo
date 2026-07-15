@@ -33,6 +33,19 @@
                 <data android:scheme="higo" />
             </intent-filter>
 
+            <!-- App Links: los enlaces https://higoapp.com (reset de clave,
+                 confirmación de cuenta) abren la app instalada directamente.
+                 autoVerify exige que higoapp.com/.well-known/assetlinks.json
+                 liste el SHA-256 del certificado de firma (ya desplegado
+                 desde public/.well-known/). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="higoapp.com" />
+                <data android:scheme="https" android:host="www.higoapp.com" />
+            </intent-filter>
+
         </activity>
 
         <provider
