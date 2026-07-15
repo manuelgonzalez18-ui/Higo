@@ -168,13 +168,16 @@ const ResetPasswordPage = () => {
             const { error } = await supabase.auth.updateUser({ password });
             if (error) throw error;
             setStatus('done');
-            // Cerramos la sesión temporal de recovery y mandamos al login
-            // para que inicie con la clave nueva. Limpiar session_id evita
-            // el falso positivo de "cuenta abierta en otro dispositivo".
+            // Cerramos la sesión temporal de recovery y recargamos limpio en
+            // /auth para que inicie con la clave nueva. Usamos reload (no
+            // navigate SPA) para descartar cualquier estado residual de la
+            // sesión de recovery que pudiera disparar el ErrorBoundary.
+            // Limpiar session_id evita el falso positivo de "otro dispositivo".
             setTimeout(async () => {
                 try { await supabase.auth.signOut(); } catch { /* noop */ }
                 try { localStorage.removeItem('session_id'); } catch { /* noop */ }
-                navigate('/auth', { replace: true });
+                window.location.hash = '#/auth';
+                window.location.reload();
             }, 1800);
         } catch (err) {
             setStatus('ready'); // permitir reintento
