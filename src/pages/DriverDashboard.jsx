@@ -80,17 +80,27 @@ const DriverDashboard = () => {
                 ? 'Tu membresía Higo vence mañana'
                 : `Tu membresía Higo vence en ${membershipDaysLeft} días`;
 
-            const n = new Notification(title, {
-                body: 'Abrí Higo Pay para renovarla y seguir activo.',
-                icon: '/higo-icon.svg',
-                tag: 'membership-expiry',
-                renotify: false,
-            });
-            n.onclick = () => {
-                window.focus();
-                window.location.hash = '/higo-pay';
-                n.close();
-            };
+            // Chrome en Android prohíbe `new Notification()` en páginas web
+            // (tira "Illegal constructor"; solo lo permite vía Service
+            // Worker) → crasheaba el dashboard entero al entrar como driver
+            // desde el navegador del teléfono. try/catch: si no se puede,
+            // seguimos sin notificación — el banner de vencimiento del
+            // dashboard ya comunica lo mismo.
+            try {
+                const n = new Notification(title, {
+                    body: 'Abrí Higo Pay para renovarla y seguir activo.',
+                    icon: '/higo-icon.svg',
+                    tag: 'membership-expiry',
+                    renotify: false,
+                });
+                n.onclick = () => {
+                    window.focus();
+                    window.location.hash = '/higo-pay';
+                    n.close();
+                };
+            } catch {
+                // Mobile web: constructor no soportado — omitir sin romper.
+            }
         }
     }, [membershipDaysLeft]);
 
