@@ -191,7 +191,16 @@ const AuthPage = () => {
                         writePendingReferral(referralCode.trim().toUpperCase());
                     }
                 }
-                setMessage('¡Registro exitoso! Por favor verifica tu correo electrónico.');
+                // Volver al login limpio: el formulario de registro cumplió su
+                // función. Dejamos el email precargado (es con el que se va a
+                // loguear) y limpiamos el resto para que al volver de confirmar
+                // el correo lo espere la pantalla de iniciar sesión.
+                setPassword('');
+                setFullName('');
+                setPhone('');
+                setReferralCode('');
+                setIsLogin(true);
+                setMessage('¡Registro exitoso! Te enviamos un correo para confirmar tu cuenta. Confirmalo y luego iniciá sesión acá.');
             }
         } catch (error) {
             // H5.3 — mensaje friendly en español + reporte interno con
@@ -323,7 +332,7 @@ const AuthPage = () => {
                         )}
 
                         {message && (
-                            <div className={`text-sm ${message.includes('success') ? 'text-green-600' : 'text-red-600'}`}>
+                            <div className={`text-sm ${(message.includes('success') || message.includes('exitoso')) ? 'text-green-600 dark:text-green-400' : 'text-red-600'}`}>
                                 {message}
                             </div>
                         )}
