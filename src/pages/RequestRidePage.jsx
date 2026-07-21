@@ -280,21 +280,32 @@ const RequestRidePage = () => {
 
     // Start Auth Check on Profile Click
     const handleProfileClick = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-            // Check role
+        // Invitado: no consultamos la red — navegamos directo a /auth.
+        // (Antes esperábamos supabase.auth.getUser(); si esa llamada se
+        // colgaba o fallaba en el WebView, sin try/catch el tap "Iniciar
+        // Sesión" no hacía nada.)
+        if (!currentUser) {
+            navigate('/auth');
+            return;
+        }
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                navigate('/auth');
+                return;
+            }
             const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
             if (profile?.role === 'driver') {
                 navigate('/driver');
-            } else {
-                // Logout logic for passenger
-                if (window.confirm("¿Deseas cerrar sesión?")) {
-                    await supabase.auth.signOut();
-                    setCurrentUser(null);
-                    navigate('/auth');
-                }
+            } else if (window.confirm("¿Deseas cerrar sesión?")) {
+                await supabase.auth.signOut();
+                setCurrentUser(null);
+                navigate('/auth');
             }
-        } else {
+        } catch (err) {
+            // Ante cualquier error de red, no dejamos el tap muerto:
+            // mandamos al login, que es la acción segura.
+            console.error('[RequestRidePage] handleProfileClick error:', err);
             navigate('/auth');
         }
     };
