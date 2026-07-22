@@ -4,7 +4,7 @@ import { supabase } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
 import LegalConsentText from '../components/LegalConsentText';
 import { friendlyError } from '../utils/friendlyError';
-import { withTimeout } from '../utils/withTimeout';
+import { withTimeout, withRetry } from '../utils/withTimeout';
 
 // pending_referral_code: lo guardamos al signup cuando el user todavía
 // no está autenticado (espera verificación por email). Antes vivía en
@@ -91,11 +91,16 @@ const AuthPage = () => {
         try {
             if (isLogin) {
                 // Login
-                // withTimeout: en el WebView de Android el fetch colgado no se
-                // aborta y esto quedaba en "Procesando..." eterno. Con el tope,
-                // si no resuelve en 20s se lanza error y el user reintenta.
-                const { data: { user }, error } = await withTimeout(
-                    supabase.auth.signInWithPassword({ email, password })
+                // La conexión a Supabase desde algunas redes es intermitente
+                // ("Failed to fetch"). withRetry reintenta 3 veces ante errores
+                // de red (no ante clave incorrecta); withTimeout evita que una
+                // petición colgada bloquee el reintento.
+                const { data: { user }, error } = await withRetry(
+                    () => withTimeout(
+                        supabase.auth.signInWithPassword({ email, password }),
+                        15000,
+                    ),
+                    { attempts: 3, baseDelayMs: 1000 },
                 );
                 if (error) throw error;
 
