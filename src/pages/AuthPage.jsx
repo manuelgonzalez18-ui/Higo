@@ -54,6 +54,7 @@ const AuthPage = () => {
     const [referralCode, setReferralCode] = useState('');
     const [isLogin, setIsLogin] = useState(true);
     const [message, setMessage] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     // H3.2 — flujo "Olvidé mi clave"
     const [showResetModal, setShowResetModal] = useState(false);
     const [resetEmail, setResetEmail] = useState('');
@@ -301,17 +302,27 @@ const AuthPage = () => {
                             <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                 Contraseña
                             </label>
-                            <div className="mt-1">
+                            <div className="mt-1 relative">
                                 <input
                                     id="password"
                                     name="password"
-                                    type="password"
+                                    type={showPassword ? 'text' : 'password'}
                                     autoComplete="current-password"
                                     required
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-[#16224a] text-gray-900 dark:text-white"
+                                    className="appearance-none block w-full px-3 py-2 pr-11 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-[#16224a] text-gray-900 dark:text-white"
                                 />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword((v) => !v)}
+                                    aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                                >
+                                    <span className="material-symbols-outlined text-[20px]">
+                                        {showPassword ? 'visibility_off' : 'visibility'}
+                                    </span>
+                                </button>
                             </div>
                         </div>
 
