@@ -234,6 +234,16 @@ const RequestRidePage = () => {
             return;
         }
 
+        // Invitado: pedir login ANTES de armar el viaje. Antes el invitado
+        // llegaba a /confirm y ahí getSession lo redirigía, pero si esa
+        // llamada se colgaba quedaba en "Confirmando..." eterno. Cortamos
+        // acá, sin tocar la red.
+        if (!currentUser) {
+            toast.info('Iniciá sesión para pedir tu Higo.');
+            navigate('/auth');
+            return;
+        }
+
         if (serviceType === 'delivery') {
             // Start delivery flow: Show prohibited items first
             setShowProhibitedModal(true);
@@ -349,7 +359,10 @@ const RequestRidePage = () => {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                {/* z-30 > z-10 del grupo del título: sin esto, el área (invisible)
+                    del título "Solicitar Viaje" se monta sobre estos botones y
+                    se come el tap de "Iniciar Sesión". */}
+                <div className="flex items-center gap-2 relative z-30">
                 {/* Botón Menú: abre drawer lateral con links (incluida sección Legal) */}
                 <button
                     onClick={() => setShowDrawer(true)}
