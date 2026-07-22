@@ -49,6 +49,7 @@ const AUTH_PATTERNS = [
     { test: /rate limit/i,                   msg: 'Demasiados intentos. Esperá unos minutos antes de probar otra vez.' },
     { test: /jwt expired|invalid token/i,    msg: 'Tu sesión expiró. Iniciá sesión de nuevo.' },
     { test: /network|fetch|failed to fetch/i, msg: 'Problema de conexión. Verificá tu internet y probá de nuevo.' },
+    { test: /tardó demasiado|tiempo de espera|timed out|timeout/i, msg: 'La conexión está lenta o inestable. Probá de nuevo.' },
     { test: /aborted/i,                      msg: 'La operación se canceló.' },
 ];
 
