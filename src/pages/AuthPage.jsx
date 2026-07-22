@@ -4,6 +4,7 @@ import { supabase } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
 import LegalConsentText from '../components/LegalConsentText';
 import { friendlyError } from '../utils/friendlyError';
+import { withTimeout } from '../utils/withTimeout';
 
 // pending_referral_code: lo guardamos al signup cuando el user todavía
 // no está autenticado (espera verificación por email). Antes vivía en
@@ -66,9 +67,9 @@ const AuthPage = () => {
         try {
             // No leak de existencia: Supabase devuelve OK aunque el email
             // no exista. Mostramos siempre el mismo mensaje neutral.
-            await supabase.auth.resetPasswordForEmail(resetEmail.trim().toLowerCase(), {
+            await withTimeout(supabase.auth.resetPasswordForEmail(resetEmail.trim().toLowerCase(), {
                 redirectTo: `${window.location.origin}/#/reset-password`,
-            });
+            }));
             setMessage('Si el email existe en nuestro sistema, te enviamos un enlace para restablecer tu clave. Revisá tu bandeja de entrada (y spam).');
             setShowResetModal(false);
             setResetEmail('');
@@ -89,10 +90,12 @@ const AuthPage = () => {
         try {
             if (isLogin) {
                 // Login
-                const { data: { user }, error } = await supabase.auth.signInWithPassword({
-                    email,
-                    password,
-                });
+                // withTimeout: en el WebView de Android el fetch colgado no se
+                // aborta y esto quedaba en "Procesando..." eterno. Con el tope,
+                // si no resuelve en 20s se lanza error y el user reintenta.
+                const { data: { user }, error } = await withTimeout(
+                    supabase.auth.signInWithPassword({ email, password })
+                );
                 if (error) throw error;
 
 
@@ -147,7 +150,7 @@ const AuthPage = () => {
                 // un trigger handle_new_user en Supabase, puede copiarlos
                 // directo a profiles. Igual los upserteamos manualmente
                 // abajo para garantía.
-                const { data: { user }, error } = await supabase.auth.signUp({
+                const { data: { user }, error } = await withTimeout(supabase.auth.signUp({
                     email,
                     password,
                     options: {
@@ -162,7 +165,7 @@ const AuthPage = () => {
                             phone: phone.trim(),
                         },
                     },
-                });
+                }));
                 if (error) throw error;
 
                 // Upsert al profile con los datos del registro. Si el user
