@@ -341,9 +341,14 @@ const RequestRidePage = () => {
             </div>
 
             {/* HEADER - Transparent */}
-            <header className="absolute top-0 left-0 right-0 z-20 px-6 py-4 flex items-center justify-between">
+            {/* z-40 > z-30 del <main>: header y main son hermanos con position
+                absolute, así que el z-index del header DEBE superar al del main
+                o todo el header (incl. "Iniciar Sesión") queda tapado por las
+                tarjetas de servicio. pointer-events-none deja pasar el tap por
+                la zona transparente del medio; los grupos hijos lo re-activan. */}
+            <header className="absolute top-0 left-0 right-0 z-40 px-6 py-4 flex items-center justify-between pointer-events-none">
                 {/* Header / Back Button / Service Title */}
-                <div className="flex items-center gap-4 relative z-10">
+                <div className="flex items-center gap-4 relative z-10 pointer-events-auto">
                     {/* Back logic: If selecting service, back to null? Or back to home? */}
                     {/* If in main flow, back to service selection if needed */}
                     <button
@@ -359,10 +364,7 @@ const RequestRidePage = () => {
                     </div>
                 </div>
 
-                {/* z-30 > z-10 del grupo del título: sin esto, el área (invisible)
-                    del título "Solicitar Viaje" se monta sobre estos botones y
-                    se come el tap de "Iniciar Sesión". */}
-                <div className="flex items-center gap-2 relative z-30">
+                <div className="flex items-center gap-2 relative z-30 pointer-events-auto">
                 {/* Botón Menú: abre drawer lateral con links (incluida sección Legal) */}
                 <button
                     onClick={() => setShowDrawer(true)}
