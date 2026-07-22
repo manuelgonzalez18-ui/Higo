@@ -83,7 +83,33 @@ if (!supabaseUrl || !supabaseKey) {
     renderFatalConfigError('SUPABASE_URL_INVALID_FORMAT');
     _supabase = createNullSupabase();
 } else {
-    _supabase = createClient(supabaseUrl, supabaseKey);
+    // Fetch con timeout (20s). En redes móviles inestables una petición
+    // puede quedar colgada indefinidamente (TCP muerto sin RST). Sin tope:
+    //   1. la UI queda en "Procesando..." para siempre, y
+    //   2. el lock interno de auth de supabase-js queda tomado por la
+    //      petición zombie → TODOS los intentos siguientes (login, insert
+    //      de rides, etc.) se encolan y nunca corren hasta matar la app.
+    // Con el tope, la petición colgada falla con AbortError, el caller
+    // muestra su mensaje de error y el usuario puede reintentar.
+    const FETCH_TIMEOUT_MS = 20000;
+    const fetchWithTimeout = (input, init = {}) => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+        let signal = controller.signal;
+        if (init.signal) {
+            // Respetar también el abort propio del caller.
+            if (typeof AbortSignal !== 'undefined' && AbortSignal.any) {
+                signal = AbortSignal.any([init.signal, controller.signal]);
+            } else {
+                init.signal.addEventListener('abort', () => controller.abort(), { once: true });
+            }
+        }
+        return fetch(input, { ...init, signal }).finally(() => clearTimeout(timer));
+    };
+
+    _supabase = createClient(supabaseUrl, supabaseKey, {
+        global: { fetch: fetchWithTimeout },
+    });
 }
 
 function createNullSupabase() {
