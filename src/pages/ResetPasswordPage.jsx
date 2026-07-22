@@ -23,6 +23,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import { withTimeout } from '../utils/withTimeout';
 
 // H3.3 — 7 segundos en lugar de 3 para dar margen a WebView de gama baja.
 const PASSWORD_RECOVERY_GUARD_MS = 7000;
@@ -165,7 +166,7 @@ const ResetPasswordPage = () => {
 
         setStatus('saving');
         try {
-            const { error } = await supabase.auth.updateUser({ password });
+            const { error } = await withTimeout(supabase.auth.updateUser({ password }));
             if (error) throw error;
             setStatus('done');
             // Cerramos la sesión temporal de recovery y recargamos limpio en
