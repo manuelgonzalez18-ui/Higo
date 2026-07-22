@@ -83,29 +83,15 @@ if (!supabaseUrl || !supabaseKey) {
     renderFatalConfigError('SUPABASE_URL_INVALID_FORMAT');
     _supabase = createNullSupabase();
 } else {
-    // Fetch con timeout (20s). En redes móviles inestables una petición
-    // puede quedar colgada indefinidamente (TCP muerto sin RST). Sin tope:
-    //   1. la UI queda en "Procesando..." para siempre, y
-    //   2. el lock interno de auth de supabase-js queda tomado por la
-    //      petición zombie → TODOS los intentos siguientes (login, insert
-    //      de rides, etc.) se encolan y nunca corren hasta matar la app.
-    // Con el tope, la petición colgada falla con AbortError, el caller
-    // muestra su mensaje de error y el usuario puede reintentar.
-    const FETCH_TIMEOUT_MS = 20000;
-    const fetchWithTimeout = (input, init = {}) => {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-        let signal = controller.signal;
-        if (init.signal) {
-            // Respetar también el abort propio del caller.
-            if (typeof AbortSignal !== 'undefined' && AbortSignal.any) {
-                signal = AbortSignal.any([init.signal, controller.signal]);
-            } else {
-                init.signal.addEventListener('abort', () => controller.abort(), { once: true });
-            }
-        }
-        return fetch(input, { ...init, signal }).finally(() => clearTimeout(timer));
-    };
+    // NOTA (2026-07-22): NO envolvemos fetch con un AbortController custom.
+    // El intento anterior usaba AbortSignal.any([...]) para combinar el
+    // abort del caller con un timeout de 20s. Chrome lo maneja bien, pero
+    // en el WebView de Android esa combinación dejaba la petición de auth
+    // COLGADA (login hacía timeout aun con 28 Mbps de WiFi, mientras la web
+    // en el mismo teléfono entraba). Dejamos el fetch nativo del WebView,
+    // que sí completa. El tope de tiempo se maneja a nivel de UI con
+    // withTimeout (src/utils/withTimeout.js), que es un Promise.race puro y
+    // no toca el fetch.
 
     // Lock pasa-directo. supabase-js usa navigator.locks (Web Locks) para
     // serializar las operaciones de auth ENTRE PESTAÑAS del mismo origen.
@@ -123,7 +109,6 @@ if (!supabaseUrl || !supabaseKey) {
     const passThroughLock = async (_name, _acquireTimeout, fn) => fn();
 
     _supabase = createClient(supabaseUrl, supabaseKey, {
-        global: { fetch: fetchWithTimeout },
         auth: { lock: passThroughLock },
     });
 }
