@@ -66,13 +66,13 @@ export const mapSupabaseError = (err) => {
 
     // 1. Match por code de Postgres / PostgREST.
     if (code && POSTGRES_CODES[code]) {
-        return { code, message: POSTGRES_CODES[code] };
+        return { code, message: POSTGRES_CODES[code], matched: true };
     }
 
     // 2. Match por patrón de auth/red.
     for (const { test, msg } of AUTH_PATTERNS) {
         if (test.test(rawMsg)) {
-            return { code: code || 'pattern', message: msg };
+            return { code: code || 'pattern', message: msg, matched: true };
         }
     }
 
@@ -80,6 +80,7 @@ export const mapSupabaseError = (err) => {
     return {
         code: code || null,
         message: 'Algo salió mal. Intentá de nuevo en unos segundos.',
+        matched: false,
     };
 };
 
@@ -107,9 +108,12 @@ export const friendlyError = (err, fallback, context = {}) => {
         });
     }
 
-    // Si tenemos match, usar el mapped. Si no, usar fallback custom o
-    // el mapped default.
-    if (mapped.code && POSTGRES_CODES[mapped.code]) {
+    // Si reconocimos el error (code de Postgres O patrón de auth/red),
+    // mostramos SIEMPRE el mensaje específico — antes solo se usaba para
+    // codes de Postgres, así que "Email o clave incorrectos" y "Problema
+    // de conexión" quedaban pisados por el fallback genérico y el user
+    // nunca sabía la causa real (bug 2026-07-22).
+    if (mapped.matched) {
         return mapped.message;
     }
     return fallback || mapped.message;

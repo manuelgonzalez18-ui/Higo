@@ -64,6 +64,7 @@ const ResetPasswordPage = () => {
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
     const [message, setMessage] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
 
     // Establecer la sesión de recovery. No dependemos solo del evento
     // PASSWORD_RECOVERY (que no llega cuando el token viene en doble-#):
@@ -238,17 +239,29 @@ const ResetPasswordPage = () => {
                                 <label htmlFor="newPwd" className="block text-xs font-bold text-gray-400 uppercase mb-2">
                                     Nueva clave
                                 </label>
-                                <input
-                                    id="newPwd"
-                                    type="password"
-                                    autoComplete="new-password"
-                                    required
-                                    minLength={8}
-                                    placeholder="Mínimo 8 caracteres"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full bg-[#0a101f] border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500"
-                                />
+                                <div className="relative">
+                                    <input
+                                        id="newPwd"
+                                        type={showPassword ? 'text' : 'password'}
+                                        autoComplete="new-password"
+                                        required
+                                        minLength={8}
+                                        placeholder="Mínimo 8 caracteres"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="w-full bg-[#0a101f] border border-white/10 rounded-xl px-4 py-3 pr-11 text-white outline-none focus:border-blue-500"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword((v) => !v)}
+                                        aria-label={showPassword ? 'Ocultar clave' : 'Mostrar clave'}
+                                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-white"
+                                    >
+                                        <span className="material-symbols-outlined text-[20px]">
+                                            {showPassword ? 'visibility_off' : 'visibility'}
+                                        </span>
+                                    </button>
+                                </div>
                             </div>
                             <div>
                                 <label htmlFor="confirmPwd" className="block text-xs font-bold text-gray-400 uppercase mb-2">
@@ -256,7 +269,7 @@ const ResetPasswordPage = () => {
                                 </label>
                                 <input
                                     id="confirmPwd"
-                                    type="password"
+                                    type={showPassword ? 'text' : 'password'}
                                     autoComplete="new-password"
                                     required
                                     minLength={8}
