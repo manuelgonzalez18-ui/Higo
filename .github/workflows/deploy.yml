@@ -172,6 +172,8 @@ jobs:
           set mirror:parallel-transfer-count 1;
           open -u '$FTP_USERNAME','$FTP_PASSWORD' '$FTP_SERVER';
           mirror --reverse --verbose --parallel=1 --no-perms --ignore-time --exclude-glob .ftp-deploy-sync-state.json --exclude '(^|\/)\.builds(\/|$)' ./dist/ ./;
+          put -O ./ ./dist/index.html;
+          put -O ./ ./dist/.htaccess;
           " || [ $attempt -ge $max ]; do
             attempt=$((attempt + 1))
             echo "::warning::lftp mirror falló (intento $attempt/$max). Reintentando en 15s..."
@@ -183,11 +185,17 @@ jobs:
           fi
 
       # H7.1 — smoke test post-deploy de higoapp.com.
-      # Verifica que el index.html servido contenga el title canonico.
+      # Verifica (a) que el index.html servido tenga el title canonico Y
+      # (b) que el bundle JS principal que referencia RESPONDA 200 — no
+      # solo que exista el HTML. El bug del 2026-07-22 fue justamente ese:
+      # `mirror --ignore-time` compara por tamaño y el index.html nuevo
+      # pesaba igual que el viejo (los hashes tienen largo fijo) → nunca
+      # se re-subia y quedaba apuntando a un chunk que no existia → pagina
+      # en blanco, pero con title correcto (el smoke viejo pasaba igual).
+      # Ahora forzamos put de index.html/.htaccess en el deploy y acá
+      # validamos que el JS cargue.
       # Hostinger a veces sirve HTML viejo 5-10s post-upload (caché del
       # MTA / antivirus); reintentamos hasta 3 veces con backoff.
-      # Si las 3 fallan, el workflow se marca rojo aunque el upload haya
-      # completado: el deploy quedo en estado invalido y hay que mirarlo.
       - name: Smoke test higoapp.com
         run: |
           echo "Esperando 10s para que Hostinger sirva el HTML nuevo..."
@@ -196,8 +204,16 @@ jobs:
             echo "Smoke test intento $i/3..."
             if curl -fsS -o /tmp/index.html --max-time 20 "https://higoapp.com/?cb=$(date +%s)"; then
               if grep -q "Higo - Tecnología" /tmp/index.html; then
-                echo "✓ Smoke test OK — title encontrado en HTML servido."
-                exit 0
+                # Extraer el primer <script src="/assets/....js"> y verificar 200.
+                js_path=$(grep -oE '/assets/[A-Za-z0-9._-]+\.js' /tmp/index.html | head -1)
+                if [ -z "$js_path" ]; then
+                  echo "::warning::No se hallo ningun /assets/*.js en el HTML."
+                elif curl -fsS -o /dev/null --max-time 20 "https://higoapp.com${js_path}?cb=$(date +%s)"; then
+                  echo "✓ Smoke test OK — title presente y bundle JS ($js_path) responde 200."
+                  exit 0
+                else
+                  echo "::warning::El HTML referencia $js_path pero NO responde 200 (deploy parcial)."
+                fi
               else
                 echo "::warning::HTML sirvio pero NO contiene 'Higo - Tecnología'. Posible cache o deploy parcial."
               fi
