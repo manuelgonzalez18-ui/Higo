@@ -107,8 +107,24 @@ if (!supabaseUrl || !supabaseKey) {
         return fetch(input, { ...init, signal }).finally(() => clearTimeout(timer));
     };
 
+    // Lock pasa-directo. supabase-js usa navigator.locks (Web Locks) para
+    // serializar las operaciones de auth ENTRE PESTAÑAS del mismo origen.
+    // Problema observado (2026-07-22): si un intento de login/refresh queda
+    // colgado (red inestable) o una pestaña muere sin soltar el lock, el
+    // lock queda tomado y TODO login posterior espera para siempre —
+    // "Procesando..." eterno, sin siquiera disparar el fetch (por eso el
+    // timeout de 20s no lo alcanzaba). Con Web Locks compartido entre
+    // pestañas, una sola pestaña trabada bloquea a todas.
+    // Reemplazamos el lock por uno que corre la función directo, sin
+    // adquirir nada. Trade-off aceptable: en el caso raro de dos pestañas
+    // refrescando el token a la vez, una podría reintentar; a cambio, el
+    // auth nunca se deadlockea. (Es lo que hacen los entornos sin Web
+    // Locks, p.ej. React Native.)
+    const passThroughLock = async (_name, _acquireTimeout, fn) => fn();
+
     _supabase = createClient(supabaseUrl, supabaseKey, {
         global: { fetch: fetchWithTimeout },
+        auth: { lock: passThroughLock },
     });
 }
 
