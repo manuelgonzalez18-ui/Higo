@@ -1,6 +1,6 @@
 -- Read-only post-deploy checks for the platform hardening migrations.
--- Expected result: every object_exists value is true and every duplicate count
--- is zero. Run in staging after migrations, before enabling feature flags.
+-- Expected result: every object_exists value is true, every violation count is
+-- zero, and event ingestion is denied to anon but allowed to authenticated.
 
 select 'driver_membership_checkout' as object_name,
        to_regprocedure('public.driver_membership_checkout()') is not null as object_exists
@@ -11,11 +11,11 @@ union all
 select 'register_membership_payment_v3',
        to_regprocedure('public.register_membership_payment_v3(uuid,uuid,text,text,text,text,numeric,numeric,date,text,jsonb)') is not null
 union all
-select 'higo_quote_ride_v2',
-       to_regprocedure('public.higo_quote_ride_v2(double precision,double precision,double precision,double precision,text,text,numeric,integer,text,uuid)') is not null
+select 'higo_quote_ride_v3',
+       to_regprocedure('public.higo_quote_ride_v3(double precision,double precision,double precision,double precision,text,text,numeric,integer,text,uuid,numeric)') is not null
 union all
-select 'create_ride_request_v3',
-       to_regprocedure('public.create_ride_request_v3(uuid,text,text,double precision,double precision,double precision,double precision,text,text,numeric,jsonb,text,text,jsonb,text,numeric,text,numeric)') is not null
+select 'create_ride_request_v4',
+       to_regprocedure('public.create_ride_request_v4(uuid,text,text,double precision,double precision,double precision,double precision,text,text,numeric,jsonb,text,text,jsonb,text,numeric,text,numeric)') is not null
 union all
 select 'driver_accept_ride_v2',
        to_regprocedure('public.driver_accept_ride_v2(bigint)') is not null
@@ -28,6 +28,9 @@ select 'driver_list_ride_offers',
 union all
 select 'track_platform_event',
        to_regprocedure('public.track_platform_event(text,text,text,text,jsonb,text,text,text)') is not null
+union all
+select 'admin_platform_funnel',
+       to_regprocedure('public.admin_platform_funnel(integer)') is not null
 union all
 select 'ride_state_events',
        to_regclass('public.ride_state_events') is not null
@@ -84,3 +87,15 @@ select
     count(*) filter (where active and period = 'weekly') as weekly_plans,
     count(*) filter (where active and period = 'monthly') as monthly_plans
 from public.driver_membership_plans;
+
+select
+    has_function_privilege(
+        'anon',
+        'public.track_platform_event(text,text,text,text,jsonb,text,text,text)',
+        'EXECUTE'
+    ) as anon_can_track,
+    has_function_privilege(
+        'authenticated',
+        'public.track_platform_event(text,text,text,text,jsonb,text,text,text)',
+        'EXECUTE'
+    ) as authenticated_can_track;
