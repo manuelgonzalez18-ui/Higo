@@ -3,8 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { getAdminContext } from '../services/adminApi';
 import { useAdminKeyboardNav } from '../hooks/useAdminKeyboardNav';
-
-const SHOP_ENABLED = import.meta.env.VITE_SHOP_ENABLED === 'true';
+import { FEATURES } from '../config/features';
 
 const ITEMS = [
     { to: '/admin/dashboard', label: 'Resumen', icon: 'dashboard', group: 'Principal', permissions: ['view_dashboard'] },
@@ -52,7 +51,7 @@ export default function AdminNav() {
 
     const groups = useMemo(() => {
         const visible = ITEMS.filter(item => {
-            if (item.shop && !SHOP_ENABLED) return false;
+            if (item.shop && !FEATURES.shop) return false;
             if (!context) return item.to === '/admin/dashboard';
             return item.permissions.some(permission => context.permissions?.[permission]);
         });
