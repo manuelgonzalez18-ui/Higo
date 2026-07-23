@@ -71,6 +71,17 @@ export const createRideRequest = async ({
     p_client_price_floor: clientPriceFloor == null || clientPriceFloor === '' ? null : Number(clientPriceFloor),
 }));
 
+export const listDirectedRideOffers = async (limit = 20) => {
+    const rows = unwrap(await supabase.rpc('driver_list_ride_offers', { p_limit: limit })) || [];
+    return rows.map((row) => ({
+        offerId: row.offer_id,
+        expiresAt: row.expires_at,
+        distanceKm: row.distance_km,
+        score: row.score,
+        ...(row.ride || {}),
+    }));
+};
+
 export const acceptRide = async (rideId) => unwrap(await supabase.rpc('driver_accept_ride_v2', {
     p_ride_id: rideId,
 }));
