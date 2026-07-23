@@ -206,8 +206,6 @@ export default function ConfirmTripPage() {
                 p_ride_amount: Number(price || 0),
             });
             if (promoError) {
-                // Legacy compatibility: restore the undiscounted price if promo
-                // redemption fails, avoiding a free client-side discount.
                 await supabase.from('rides').update({ price: Number(price || 0) }).eq('id', data.id);
                 throw new Error('La promoción cambió mientras confirmabas. Volvé a intentarlo.');
             }
@@ -244,6 +242,7 @@ export default function ConfirmTripPage() {
                         payer: deliveryData?.payer || (isDelivery ? 'sender' : null),
                         codAmount: deliveryData?.cod_amount || null,
                         termsVersion: deliveryData?.terms_version || null,
+                        clientPriceFloor: finalPrice,
                     }),
                     timeoutAfter(20000),
                 ])
