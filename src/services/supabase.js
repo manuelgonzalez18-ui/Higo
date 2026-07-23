@@ -1,50 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
-
-// Configuración del cliente Supabase.
-//
-// HOTFIX (2026-05-22): producción quedó en pantalla SUPABASE_ENV_MISSING
-// porque el bundle se subió sin las env vars baked-in (probable secret
-// missing/roto en GitHub Actions). Restauramos FALLBACK hardcoded acá
-// como red de seguridad — las env vars siguen ganando si están seteadas
-// (rotación coordinada via secret de CI sigue funcionando), pero si
-// faltan el bundle arranca igual con la URL/anon-key públicas.
-//
-// Por qué es aceptable hardcodear estos valores:
-//   - La URL del proyecto Supabase es pública por diseño.
-//   - La anon key está protegida por RLS y rate limit en el server.
-//   - Es lo MISMO que tenía main antes del refactor H1.1, y main vivió
-//     así por meses sin incidentes de seguridad.
-//
-// ROTACIÓN COORDINADA (cuando se invalide la anon key):
-//   1. Crear nueva anon key en Supabase dashboard.
-//   2. Actualizar GitHub secret VITE_SUPABASE_ANON_KEY con la nueva.
-//   3. Actualizar FALLBACK_KEY abajo con la nueva.
-//   4. Subir APK nuevo al Play Store con la key nueva.
-//   5. Esperar 15-30 días (ventana de adopción del APK).
-//   6. Recién entonces invalidar la key vieja desde Supabase.
-// Si se invalida la vieja antes del paso 5, todos los users con APK
-// viejo quedan sin acceso. Documentado en docs/OPERATIONS.md.
+import { createSingleFlight } from '../utils/singleFlight'
 
 const FALLBACK_URL = 'https://yfgomicdcwifgeumqsvv.supabase.co';
 const FALLBACK_KEY = 'sb_publishable_d0f_4LR1PqQBc87ThKaxqQ_wm9CGAI1';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || FALLBACK_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || FALLBACK_KEY;
-
-// HOTFIX: NO usamos throw a nivel de modulo. Eso rompe el import
-// chain entero (React nunca monta -> pantalla en blanco), pisando
-// incluso al ErrorBoundary global.
-//
-// En su lugar, si las env vars faltan o tienen formato invalido:
-//   1. Logueamos un error loud para que aparezca en DevTools y
-//      eventualmente en client_errors si supabase logra reportar.
-//   2. Pintamos un mensaje fullscreen via DOM manipulation directo
-//      (no necesitamos React montado para mostrar texto al user).
-//   3. Devolvemos un cliente "null-safe" no-op para que el resto del
-//      bundle no crashee en su primer import.
-// El CI check de deploy.yml (regex sobre los secrets) sigue siendo
-// la BARRERA real. Esto es defensa en profundidad: si algo se filtro
-// igual, el user ve un mensaje claro en lugar de un blank screen.
 
 const renderFatalConfigError = (msg) => {
     if (typeof document === 'undefined') return;
@@ -65,72 +26,24 @@ const renderFatalConfigError = (msg) => {
             </div>
         `;
     } catch {
-        // Si ni siquiera podemos tocar el DOM, ya no hay nada que hacer.
+        // Sin otra vía segura para informar el error de configuración.
     }
 };
 
-let _supabase;
-
-if (!supabaseUrl || !supabaseKey) {
-    // eslint-disable-next-line no-console
-    console.error('[supabase] Missing env vars. URL:', !!supabaseUrl, 'KEY:', !!supabaseKey);
-    renderFatalConfigError('SUPABASE_ENV_MISSING');
-    // Stub que no crashea cuando otros modulos lo importan.
-    _supabase = createNullSupabase();
-} else if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(supabaseUrl)) {
-    // eslint-disable-next-line no-console
-    console.error('[supabase] Invalid URL format:', supabaseUrl);
-    renderFatalConfigError('SUPABASE_URL_INVALID_FORMAT');
-    _supabase = createNullSupabase();
-} else {
-    // NOTA (2026-07-22): NO envolvemos fetch con un AbortController custom.
-    // El intento anterior usaba AbortSignal.any([...]) para combinar el
-    // abort del caller con un timeout de 20s. Chrome lo maneja bien, pero
-    // en el WebView de Android esa combinación dejaba la petición de auth
-    // COLGADA (login hacía timeout aun con 28 Mbps de WiFi, mientras la web
-    // en el mismo teléfono entraba). Dejamos el fetch nativo del WebView,
-    // que sí completa. El tope de tiempo se maneja a nivel de UI con
-    // withTimeout (src/utils/withTimeout.js), que es un Promise.race puro y
-    // no toca el fetch.
-
-    // Lock pasa-directo. supabase-js usa navigator.locks (Web Locks) para
-    // serializar las operaciones de auth ENTRE PESTAÑAS del mismo origen.
-    // Problema observado (2026-07-22): si un intento de login/refresh queda
-    // colgado (red inestable) o una pestaña muere sin soltar el lock, el
-    // lock queda tomado y TODO login posterior espera para siempre —
-    // "Procesando..." eterno, sin siquiera disparar el fetch (por eso el
-    // timeout de 20s no lo alcanzaba). Con Web Locks compartido entre
-    // pestañas, una sola pestaña trabada bloquea a todas.
-    // Reemplazamos el lock por uno que corre la función directo, sin
-    // adquirir nada. Trade-off aceptable: en el caso raro de dos pestañas
-    // refrescando el token a la vez, una podría reintentar; a cambio, el
-    // auth nunca se deadlockea. (Es lo que hacen los entornos sin Web
-    // Locks, p.ej. React Native.)
-    const passThroughLock = async (_name, _acquireTimeout, fn) => fn();
-
-    _supabase = createClient(supabaseUrl, supabaseKey, {
-        auth: { lock: passThroughLock },
-    });
-}
-
 function createNullSupabase() {
-    // Stub mínimo: cualquier call devuelve un error suave en lugar de
-    // tirar TypeError "auth of undefined". El bundle no crashea al
-    // import time; los call sites que dependan de supabase verán el
-    // error en runtime y caerán por el ErrorBoundary global / try-catch.
     const err = { message: 'supabase client not initialized' };
     const resp = { data: null, error: err };
     const channelStub = { on: () => channelStub, subscribe: () => channelStub };
     return {
         auth: {
-            getUser:        async () => ({ data: { user: null }, error: err }),
-            getSession:     async () => ({ data: { session: null }, error: err }),
+            getUser: async () => ({ data: { user: null }, error: err }),
+            getSession: async () => ({ data: { session: null }, error: err }),
             signInWithPassword: async () => resp,
-            signUp:         async () => resp,
-            signOut:        async () => resp,
+            signUp: async () => resp,
+            signOut: async () => resp,
             onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
             resetPasswordForEmail: async () => resp,
-            updateUser:     async () => resp,
+            updateUser: async () => resp,
         },
         from: () => ({
             select: () => ({ eq: () => ({ maybeSingle: async () => resp, single: async () => resp }), single: async () => resp, maybeSingle: async () => resp }),
@@ -139,29 +52,98 @@ function createNullSupabase() {
             upsert: async () => resp,
             delete: () => ({ eq: async () => resp }),
         }),
-        rpc:            async () => resp,
-        storage:        { from: () => ({ upload: async () => resp, createSignedUrl: async () => resp, remove: async () => resp }) },
-        channel:        () => channelStub,
-        removeChannel:  () => {},
+        rpc: async () => resp,
+        storage: { from: () => ({ upload: async () => resp, createSignedUrl: async () => resp, remove: async () => resp }) },
+        channel: () => channelStub,
+        removeChannel: () => {},
     };
 }
 
-export const supabase = _supabase;
+let _supabase;
 
-// withNetworkRetry — envuelve una llamada async (típicamente una query de
-// Supabase) con timeout + reintentos ante fallos transitorios de red.
-//
-// Motivo (incidente login intermitente 2026-07-23): en redes móviles/ISP
-// venezolanos las peticiones a la nube de Supabase fallan de a ratos con
-// "Failed to fetch" / cuelgan sin resolver. Una sola llamada fallida en la
-// cadena del login (leer rol, persistir session_id) tumbaba TODO el login.
-// Este helper hace que esas llamadas secundarias sobrevivan a un blip:
-// corta la espera a `timeoutMs` (Promise.race, no toca el fetch) y reintenta
-// hasta `maxRetries` veces con backoff lineal. NO reintenta indefinidamente
-// para no bloquear la UI.
-//
-// Devuelve lo que devuelva `asyncFn`. Si agota los reintentos, relanza el
-// último error para que el caller decida (abortar vs degradar).
+if (!supabaseUrl || !supabaseKey) {
+    console.error('[supabase] Missing env vars. URL:', !!supabaseUrl, 'KEY:', !!supabaseKey);
+    renderFatalConfigError('SUPABASE_ENV_MISSING');
+    _supabase = createNullSupabase();
+} else if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(supabaseUrl)) {
+    console.error('[supabase] Invalid URL format:', supabaseUrl);
+    renderFatalConfigError('SUPABASE_URL_INVALID_FORMAT');
+    _supabase = createNullSupabase();
+} else {
+    const passThroughLock = async (_name, _acquireTimeout, fn) => fn();
+    _supabase = createClient(supabaseUrl, supabaseKey, {
+        auth: { lock: passThroughLock },
+    });
+}
+
+// Supabase Auth puede seguir ejecutando el fetch aunque el timeout de UI deje de
+// esperarlo. Sin este guard, el retry iniciaba otro /token en paralelo. Ahora
+// todos los intentos para el mismo email comparten una única Promise real.
+const authSingleFlight = createSingleFlight();
+const nativeSignInWithPassword = _supabase.auth.signInWithPassword.bind(_supabase.auth);
+
+const writeAuthTrace = (entry) => {
+    try {
+        const previous = JSON.parse(sessionStorage.getItem('higo_auth_trace') || '[]');
+        const next = [...previous.slice(-19), entry];
+        sessionStorage.setItem('higo_auth_trace', JSON.stringify(next));
+        window.dispatchEvent(new CustomEvent('higo:auth-trace', { detail: entry }));
+    } catch {
+        // Diagnóstico opcional: nunca debe afectar el login.
+    }
+};
+
+_supabase.auth.signInWithPassword = (credentials) => {
+    const normalizedEmail = String(credentials?.email || '').trim().toLowerCase();
+    const key = `password:${normalizedEmail}`;
+    const joinedExisting = authSingleFlight.has(key);
+    const attemptId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+
+    writeAuthTrace({
+        attemptId,
+        event: joinedExisting ? 'joined_inflight' : 'started',
+        at: new Date().toISOString(),
+        platform: typeof window !== 'undefined' ? window.navigator?.userAgent : 'unknown',
+    });
+
+    return authSingleFlight.run(key, async () => {
+        const startedAt = Date.now();
+        try {
+            const result = await nativeSignInWithPassword(credentials);
+            writeAuthTrace({
+                attemptId,
+                event: result?.error ? 'completed_with_error' : 'completed',
+                at: new Date().toISOString(),
+                durationMs: Date.now() - startedAt,
+                status: result?.error?.status || null,
+                errorName: result?.error?.name || null,
+                errorMessage: result?.error?.message || null,
+            });
+            return result;
+        } catch (error) {
+            writeAuthTrace({
+                attemptId,
+                event: 'threw',
+                at: new Date().toISOString(),
+                durationMs: Date.now() - startedAt,
+                status: error?.status || null,
+                errorName: error?.name || null,
+                errorMessage: error?.message || String(error),
+            });
+            throw error;
+        }
+    });
+};
+
+export const supabase = _supabase;
+export const getAuthTrace = () => {
+    try {
+        return JSON.parse(sessionStorage.getItem('higo_auth_trace') || '[]');
+    } catch {
+        return [];
+    }
+};
+
 export const withNetworkRetry = async (asyncFn, maxRetries = 2, timeoutMs = 8000) => {
     let lastErr;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -184,55 +166,31 @@ export const withNetworkRetry = async (asyncFn, maxRetries = 2, timeoutMs = 8000
 };
 
 export const getUserProfile = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
 
     const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .single()
+        .single();
 
-    if (error || !data) {
-        // Fallback if no profile exists yet
-        return { id: user.id, role: 'passenger' }
-    }
-    return data
-}
+    if (error || !data) return { id: user.id, role: 'passenger' };
+    return data;
+};
 
-// Wrapper de subscribe con retry exponencial. Supabase Realtime ya
-// hace reconexión automática por debajo, pero cuando el channel se
-// cae con CHANNEL_ERROR o TIMED_OUT (típicamente: red mala, server
-// reinicio, cambio de auth token), el callback de status lo reporta
-// y el channel queda inactivo. Sin retry quedamos colgados hasta el
-// próximo unmount/remount del componente.
-//
-// Patrón de uso (ver DriverDashboard / RideStatusPage):
-//   const channel = supabase.channel('foo').on(...).subscribe(handler);
-// Pasa a:
-//   const stop = subscribeWithRetry(() =>
-//       supabase.channel('foo').on(...),
-//   );
-//   return stop; // cleanup
-//
-// El factory crea el channel desde cero en cada retry (no podemos
-// re-suscribir un channel removido). Backoff base 1s, máximo 30s,
-// con jitter ±20% para evitar thundering herd al reconectar miles
-// de drivers en simultáneo después de una caída de Supabase.
 export const subscribeWithRetry = (channelFactory, opts = {}) => {
     const baseMs = opts.baseMs ?? 1000;
-    const maxMs  = opts.maxMs  ?? 30000;
-    const onStatus = opts.onStatus; // opcional: callback al consumidor.
-
+    const maxMs = opts.maxMs ?? 30000;
+    const onStatus = opts.onStatus;
     let attempt = 0;
     let channel = null;
     let retryTimer = null;
     let stopped = false;
 
     const computeDelay = () => {
-        const exp   = Math.min(maxMs, baseMs * 2 ** attempt);
-        const jitter = exp * (0.8 + Math.random() * 0.4); // ±20%
-        return Math.round(jitter);
+        const exp = Math.min(maxMs, baseMs * 2 ** attempt);
+        return Math.round(exp * (0.8 + Math.random() * 0.4));
     };
 
     const connect = () => {
@@ -241,7 +199,7 @@ export const subscribeWithRetry = (channelFactory, opts = {}) => {
         channel.subscribe((status) => {
             onStatus?.(status);
             if (status === 'SUBSCRIBED') {
-                attempt = 0; // reset backoff al primer éxito
+                attempt = 0;
             } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
                 if (stopped) return;
                 const delay = computeDelay();
@@ -256,16 +214,9 @@ export const subscribeWithRetry = (channelFactory, opts = {}) => {
     };
 
     connect();
-
     return () => {
         stopped = true;
-        if (retryTimer) {
-            clearTimeout(retryTimer);
-            retryTimer = null;
-        }
-        if (channel) {
-            supabase.removeChannel(channel);
-            channel = null;
-        }
+        if (retryTimer) clearTimeout(retryTimer);
+        if (channel) supabase.removeChannel(channel);
     };
 };
