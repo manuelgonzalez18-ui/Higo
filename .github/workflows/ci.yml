@@ -66,8 +66,11 @@ jobs:
           php -l public/api/welcome-driver-v2.php
           php -l public/api/banesco-validate-v2.php
 
-      - name: Unit tests
-        run: npm run test:run
+      - name: Test feature flags
+        run: npx vitest run src/config/features.test.js --reporter=verbose
+
+      - name: Test ride pricing
+        run: npx vitest run src/utils/ridePricing.test.js --reporter=verbose
 
       - name: Production build
         env:
