@@ -1,9 +1,9 @@
 // Client for the server-side Banesco validation endpoints.
-// Driver memberships use v2 (unified driver_membership_plans). Store payments
-// remain on the legacy endpoint until Higo Shop is re-enabled and migrated.
+// Driver memberships switch to v2 only when the rollout flag is enabled.
 
 import { supabase } from './supabase';
 import { apiUrl } from '../utils/apiUrl';
+import { FEATURES } from '../config/features';
 
 export const VENEZUELAN_BANKS = [
     { code: '0102', name: 'Banco de Venezuela' },
@@ -51,14 +51,14 @@ export async function validateBanescoPayment({
     }
 
     const payload = { reference, amount, phone, date, bank };
-    let endpoint = '/api/banesco-validate-v2.php';
+    const useUnifiedDriverFlow = !storeId && FEATURES.unifiedMembershipCheckout;
+    let endpoint = useUnifiedDriverFlow
+        ? '/api/banesco-validate-v2.php'
+        : '/api/banesco-validate.php';
 
     if (storeId) {
-        // Higo Shop compatibility path. The module is disabled by default and
-        // will receive its own unified catalogue before being enabled again.
-        endpoint = '/api/banesco-validate.php';
         payload.store_id = storeId;
-    } else {
+    } else if (useUnifiedDriverFlow) {
         if (planId) payload.plan_id = planId;
         payload.payment_type = paymentType || 'pm_banesco';
     }
@@ -69,7 +69,7 @@ export async function validateBanescoPayment({
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${session.access_token}`,
+                Authorization: `Bearer ${session.access_token}`,
             },
             body: JSON.stringify(payload),
         });
@@ -77,9 +77,8 @@ export async function validateBanescoPayment({
         return { ok: false, errorCode: 'NETWORK', errorMessage: error?.message || 'Error de red.' };
     }
 
-    let body;
     try {
-        body = await response.json();
+        return await response.json();
     } catch {
         return {
             ok: false,
@@ -87,5 +86,4 @@ export async function validateBanescoPayment({
             errorMessage: `Respuesta no válida (HTTP ${response.status}).`,
         };
     }
-    return body;
 }
