@@ -1,33 +1,59 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import { getAdminContext } from '../services/adminApi';
 import { useAdminKeyboardNav } from '../hooks/useAdminKeyboardNav';
 
-const TABS = [
-    { to: '/admin/dashboard', label: 'Dashboard',   icon: 'dashboard',      shortcut: 'g d' },
-    { to: '/admin/drivers',   label: 'Conductores', icon: 'directions_car', shortcut: 'g v' },
-    { to: '/admin/users',     label: 'Usuarios',    icon: 'group',          shortcut: 'g u' },
-    { to: '/admin/pricing',   label: 'Tarifas',     icon: 'payments',       shortcut: 'g p' },
-    { to: '/admin/promos',    label: 'Promos',      icon: 'local_offer',    shortcut: 'g r' },
-    { to: '/admin/disputes',  label: 'Disputas',    icon: 'report',         shortcut: 'g t' },
-    { to: '/admin/deliveries',label: 'Envíos',      icon: 'inventory_2',    shortcut: 'g e' },
-    { to: '/admin/shop',      label: 'Higo Shop',   icon: 'shopping_bag',   shortcut: 'g h' },
-    { to: '/admin/support',   label: 'Soporte',     icon: 'support_agent',  shortcut: 'g s', badge: 'support' },
-    { to: '/admin/fraud',     label: 'Fraud',       icon: 'crisis_alert',   shortcut: 'g f' },
-    { to: '/admin/analytics', label: 'Analytics',   icon: 'bar_chart',      shortcut: 'g a' },
-    { to: '/admin/zones',     label: 'Zonas',       icon: 'place',          shortcut: 'g z' },
+const SHOP_ENABLED = import.meta.env.VITE_SHOP_ENABLED !== 'false';
+
+const GROUPS = [
+    {
+        label: 'Principal',
+        items: [
+            { to: '/admin/dashboard', label: 'Resumen', icon: 'dashboard' },
+            { to: '/admin/drivers', label: 'Drivers y membresías', icon: 'badge' },
+            { to: '/admin/analytics', label: 'Analítica', icon: 'monitoring' },
+        ],
+    },
+    {
+        label: 'Operación',
+        items: [
+            { to: '/admin/deliveries', label: 'Envíos', icon: 'inventory_2' },
+            { to: '/admin/disputes', label: 'Disputas', icon: 'report' },
+            { to: '/admin/support', label: 'Soporte', icon: 'support_agent', badge: 'support' },
+            { to: '/admin/fraud', label: 'Alertas', icon: 'crisis_alert' },
+        ],
+    },
+    {
+        label: 'Crecimiento',
+        items: [
+            { to: '/admin/users', label: 'Usuarios y staff', icon: 'group' },
+            { to: '/admin/promos', label: 'Promociones', icon: 'local_offer', permission: 'super_admin' },
+        ],
+    },
+    {
+        label: 'Configuración',
+        items: [
+            { to: '/admin/pricing', label: 'Tarifas', icon: 'payments' },
+            { to: '/admin/zones', label: 'Zonas', icon: 'place' },
+            { to: '/admin/shop', label: 'Higo Shop', icon: 'shopping_bag', shop: true },
+        ],
+    },
 ];
 
-const AdminNav = () => {
+export default function AdminNav() {
     const { pathname } = useLocation();
     const [supportUnread, setSupportUnread] = useState(0);
-    // Keyboard shortcuts globales del panel admin (D.X4).
+    const [context, setContext] = useState(null);
+    const [open, setOpen] = useState(false);
     useAdminKeyboardNav();
 
-    // Contador global de hilos de soporte sin leer (para badge en la tab).
+    useEffect(() => {
+        getAdminContext().then(setContext).catch(() => setContext(null));
+    }, []);
+
     useEffect(() => {
         let active = true;
-
         const refresh = async () => {
             const { count } = await supabase
                 .from('support_threads')
@@ -37,44 +63,68 @@ const AdminNav = () => {
             if (active) setSupportUnread(count || 0);
         };
         refresh();
-
-        const channel = supabase
-            .channel('admin_nav_support_unread')
-            .on('postgres_changes',
-                { event: '*', schema: 'public', table: 'support_threads' },
-                () => refresh())
+        const ch = supabase.channel('admin-nav-support')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'support_threads' }, refresh)
             .subscribe();
-
-        return () => { active = false; supabase.removeChannel(channel); };
+        return () => { active = false; supabase.removeChannel(ch); };
     }, []);
 
-    return (
-        <nav className="bg-[#1A1F2E] rounded-[24px] border border-white/5 p-2 mb-6 flex gap-1 overflow-x-auto">
-            {TABS.map(t => {
-                const active = pathname === t.to;
-                const showBadge = t.badge === 'support' && supportUnread > 0;
-                return (
-                    <Link
-                        key={t.to}
-                        to={t.to}
-                        title={t.shortcut ? `Atajo: ${t.shortcut}` : undefined}
-                        className={`relative flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm whitespace-nowrap transition-all ${active
-                            ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/20'
-                            : 'text-gray-400 hover:text-white hover:bg-white/5'
-                            }`}
-                    >
-                        <span className="material-symbols-outlined text-[18px]">{t.icon}</span>
-                        {t.label}
-                        {showBadge && (
-                            <span className="ml-1 min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-black flex items-center justify-center">
-                                {supportUnread > 99 ? '99+' : supportUnread}
-                            </span>
-                        )}
-                    </Link>
-                );
-            })}
-        </nav>
-    );
-};
+    const groups = useMemo(() => GROUPS.map(group => ({
+        ...group,
+        items: group.items.filter(item => {
+            if (item.shop && !SHOP_ENABLED) return false;
+            if (item.permission === 'super_admin' && context?.staff_role !== 'super_admin') return false;
+            return true;
+        }),
+    })).filter(group => group.items.length), [context]);
 
-export default AdminNav;
+    const content = (
+        <div className="space-y-5">
+            {groups.map(group => (
+                <div key={group.label}>
+                    <p className="px-3 mb-1 text-[10px] uppercase tracking-[0.18em] font-black text-gray-600">{group.label}</p>
+                    <div className="space-y-1">
+                        {group.items.map(item => {
+                            const active = pathname === item.to;
+                            const badge = item.badge === 'support' ? supportUnread : 0;
+                            return (
+                                <Link key={item.to} to={item.to} onClick={() => setOpen(false)}
+                                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-colors ${active ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
+                                    <span className="material-symbols-outlined text-[19px]">{item.icon}</span>
+                                    <span className="flex-1">{item.label}</span>
+                                    {badge > 0 && <span className="min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center">{badge > 99 ? '99+' : badge}</span>}
+                                </Link>
+                            );
+                        })}
+                    </div>
+                </div>
+            ))}
+            {context?.staff_role && (
+                <div className="px-3 pt-3 border-t border-white/5">
+                    <p className="text-[10px] text-gray-600 uppercase">Perfil administrativo</p>
+                    <p className="text-xs text-gray-400 mt-1">{context.staff_role.replace('_', ' ')}</p>
+                </div>
+            )}
+        </div>
+    );
+
+    return (
+        <>
+            <div className="lg:hidden mb-5 flex items-center justify-between bg-[#1A1F2E] border border-white/5 rounded-2xl p-2">
+                <span className="px-3 font-bold text-sm text-white">Administración</span>
+                <button onClick={() => setOpen(v => !v)} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center" aria-label="Abrir navegación">
+                    <span className="material-symbols-outlined">{open ? 'close' : 'menu'}</span>
+                </button>
+            </div>
+            {open && <div className="lg:hidden mb-6 bg-[#1A1F2E] border border-white/5 rounded-2xl p-3">{content}</div>}
+            <aside className="hidden lg:block fixed left-4 top-4 bottom-4 w-64 bg-[#151925] border border-white/5 rounded-3xl p-4 overflow-y-auto z-30">
+                <Link to="/admin/dashboard" className="flex items-center gap-3 px-2 mb-6">
+                    <div className="w-10 h-10 rounded-xl bg-violet-600 flex items-center justify-center"><span className="material-symbols-outlined">admin_panel_settings</span></div>
+                    <div><p className="font-black">Higo Admin</p><p className="text-[10px] text-gray-500">Membresías y operación</p></div>
+                </Link>
+                {content}
+            </aside>
+            <div className="hidden lg:block w-64 shrink-0" aria-hidden="true" />
+        </>
+    );
+}
