@@ -12,11 +12,15 @@ const files = (await readdir(MIGRATION_DIR))
 
 const errors = [];
 const timestamps = new Map();
+let hardenedCount = 0;
 
 for (const filename of files) {
+    const isHardening = filename.startsWith(HARDENING_PREFIX);
     const match = filename.match(filenamePattern);
     if (!match) {
-        errors.push(`${filename}: nombre inválido; usar YYYYMMDDHHMMSS_descripcion.sql`);
+        if (isHardening) {
+            errors.push(`${filename}: nombre inválido; usar YYYYMMDDHHMMSS_descripcion.sql`);
+        }
         continue;
     }
 
@@ -45,7 +49,8 @@ for (const filename of files) {
         if (count % 2 !== 0) errors.push(`${filename}: delimitador ${token} sin pareja`);
     }
 
-    if (filename.startsWith(HARDENING_PREFIX)) {
+    if (isHardening) {
+        hardenedCount += 1;
         if (!/^begin\s*;/im.test(normalized)) {
             errors.push(`${filename}: migración de hardening sin BEGIN`);
         }
@@ -61,10 +66,14 @@ for (const filename of files) {
     }
 }
 
+if (hardenedCount === 0) {
+    errors.push('No se encontraron migraciones de hardening 202607241*.sql');
+}
+
 if (errors.length) {
     console.error('Migration validation failed:\n');
     for (const error of errors) console.error(`- ${error}`);
     process.exit(1);
 }
 
-console.log(`✓ ${files.length} migrations validated; timestamps and hardening structure are consistent.`);
+console.log(`✓ ${files.length} SQL files scanned; ${hardenedCount} hardening migrations validated.`);
