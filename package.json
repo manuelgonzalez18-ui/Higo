@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/check-migrations.mjs && node --test tests/*.test.mjs",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
