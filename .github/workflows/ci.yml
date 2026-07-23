@@ -44,11 +44,20 @@ jobs:
           npx eslint
           src/config/features.js
           src/config/features.test.js
+          src/services/banesco.js
           src/services/membershipApi.js
           src/services/rideApi.js
+          src/utils/apiUrl.js
           src/utils/ridePricing.js
           src/utils/ridePricing.test.js
           src/main.jsx
+
+      - name: PHP syntax validation
+        run: |
+          php -l public/api/_cors.php
+          php -l public/api/welcome-driver.php
+          php -l public/api/welcome-driver-v2.php
+          php -l public/api/banesco-validate-v2.php
 
       - name: Unit tests
         run: npm run test:run
