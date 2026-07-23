@@ -51,6 +51,9 @@ jobs:
           src/config/features.js
           src/config/parseBooleanFlag.js
           src/hooks/useBackgroundLocation.js
+          src/hooks/useDriverActiveTrip.js
+          src/pages/ConfirmTripPage.jsx
+          src/pages/HigoPayPage.jsx
           src/services/adminApi.js
           src/services/analytics.js
           src/services/banesco.js
