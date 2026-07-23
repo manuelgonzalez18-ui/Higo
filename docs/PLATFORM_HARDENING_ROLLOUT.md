@@ -28,16 +28,17 @@ Aplicar en staging, en este orden:
 2. `20260724101000_driver_onboarding_membership_reconciliation.sql`
 3. `20260724102000_ride_creation_price_floor.sql`
 4. `20260724102100_ride_quote_subtotal_floor.sql`
-5. `20260724102300_ride_coverage_guard.sql`
-6. `20260724103000_membership_payment_suspension_guard.sql`
-7. `20260724103100_membership_payment_guard_binding.sql`
-8. `20260724104000_ride_transition_guard.sql`
-9. `20260724105000_directed_ride_offers.sql`
-10. `20260724105100_ride_offer_acceptance_guard.sql`
-11. `20260724105200_directed_offers_runtime_gate.sql`
-12. `20260724106000_platform_event_analytics.sql`
-13. `20260724106100_platform_funnel_db_facts.sql`
-14. `20260724106200_platform_events_authenticated_only.sql`
+5. `20260724102200_ride_quote_optional_promo.sql`
+6. `20260724102300_ride_coverage_guard.sql`
+7. `20260724103000_membership_payment_suspension_guard.sql`
+8. `20260724103100_membership_payment_guard_binding.sql`
+9. `20260724104000_ride_transition_guard.sql`
+10. `20260724105000_directed_ride_offers.sql`
+11. `20260724105100_ride_offer_acceptance_guard.sql`
+12. `20260724105200_directed_offers_runtime_gate.sql`
+13. `20260724106000_platform_event_analytics.sql`
+14. `20260724106100_platform_funnel_db_facts.sql`
+15. `20260724106200_platform_events_authenticated_only.sql`
 
 No aplicar estas migraciones directamente en producción antes de que el mismo
 SHA haya pasado Quality Gate, Vercel y staging.
@@ -113,7 +114,7 @@ VITE_SERVER_SIDE_RIDE_PRICING=true
 
 Validar:
 
-- Viaje sin promo.
+- Viaje sin promo; la cotización debe devolver `promoValid=false`, `promoId=null` y no fallar.
 - Viaje con parada.
 - Envío con tarifa adicional.
 - Promo porcentual y fija.
@@ -177,6 +178,25 @@ Validar con al menos tres dispositivos:
 - Un viaje sin oferta queda visible para Operaciones y puede redistribuirse.
 - La política Realtime oculta solicitudes no ofertadas a otros drivers.
 - Medir batería, uso de datos y tiempo de aceptación durante 48 horas.
+
+## Validación automatizada local y CI
+
+El Quality Gate debe pasar antes de staging:
+
+- validación estática de nombres y transacciones de migración;
+- replay de las 15 migraciones sobre Supabase local;
+- aserciones post-deploy de objetos, triggers, permisos y duplicados;
+- pruebas conductuales con usuarios no privilegiados simulados:
+  - cobertura fuera de zona;
+  - viaje sin promoción;
+  - idempotencia de `client_request_id`;
+  - piso de precio mostrado;
+  - rechazo de driver sin membresía por RPC y por escritura legacy;
+  - aceptación de driver con membresía;
+  - rechazo de finalización antes de iniciar.
+
+El fixture `supabase/tests/platform_base_fixture.sql` es exclusivo de CI y no se
+despliega. El baseline definitivo debe extraerse del proyecto real.
 
 ## Observabilidad
 
