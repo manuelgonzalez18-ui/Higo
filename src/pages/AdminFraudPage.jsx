@@ -1,272 +1,73 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../services/supabase';
 import AdminNav from '../components/AdminNav';
-import AdminGuard from '../components/AdminGuard';
+import { supabase } from '../services/supabase';
 import { toast } from '../components/Toast';
 
-// Fraud signals panel (Fase 11 D.A3).
-// Lee la materialized view fraud_signals via RPC get_fraud_signals
-// (la RPC valida is_admin server-side; SELECT directo a la MV está
-// revoked). El refresh es manual via RPC refresh_fraud_signals — un
-// admin lo dispara antes de revisar para tener data fresca.
-//
-// Heurísticas en mig 44:
-//   - multiple_cancellations (passenger): 3+ rides cancelados sin
-//     ningún ride completado en 30 días.
-//   - low_rating (driver): avg rating < 3 con >= 5 rides en 60 días.
-//   - impossible_speed (ride): velocidad promedio > 150 km/h.
-
-const SIGNAL_LABELS = {
-    multiple_cancellations: { label: 'Cancelaciones excesivas', icon: 'cancel',     color: 'text-rose-400' },
-    low_rating:             { label: 'Rating bajo sostenido',   icon: 'star',       color: 'text-amber-400' },
-    impossible_speed:       { label: 'Velocidad imposible',     icon: 'speed',      color: 'text-red-400' },
+const LABELS = {
+    multiple_cancellations: ['Cancelaciones excesivas', 'cancel', 'text-rose-400'],
+    low_rating: ['Rating bajo sostenido', 'star', 'text-amber-400'],
+    impossible_speed: ['Velocidad imposible', 'speed', 'text-red-400'],
 };
-const SEVERITY_CLS = {
-    high:   'bg-rose-500/15 text-rose-300 border-rose-500/40',
-    medium: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
-    low:    'bg-gray-500/15 text-gray-300 border-gray-500/40',
+const SEVERITY = {
+    high: 'bg-red-500/15 text-red-300 border-red-500/30',
+    medium: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+    low: 'bg-gray-500/15 text-gray-300 border-gray-500/30',
 };
-const SUBJECT_LABELS = {
-    passenger: 'Pasajero',
-    driver:    'Conductor',
-    ride:      'Viaje',
-};
+const PAGE = 50;
 
-const fmtDate = (iso) => {
-    if (!iso) return '—';
-    return new Date(iso).toLocaleString('es-VE', {
-        day: '2-digit', month: 'short',
-        hour: '2-digit', minute: '2-digit',
-    });
-};
-
-// H4.5 — la vista materializada fraud_signals se devuelve entera por
-// el RPC get_fraud_signals (no acepta cursor del lado server). Para
-// no colgar la UI con miles de signals, paginamos client-side: la
-// primera carga muestra PAGE_SIZE rows; el botón "Cargar más" expande
-// VISIBLE_COUNT de a tandas. El cap evita render de 5000 nodes DOM.
-const FRAUD_PAGE_SIZE = 50;
-
-const FraudPanel = () => {
+export default function AdminFraudPage() {
     const navigate = useNavigate();
     const [signals, setSignals] = useState([]);
-    const [profilesMap, setProfilesMap] = useState({}); // uid → profile
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [filter, setFilter] = useState('all'); // all | passenger | driver | ride
-    const [computedAt, setComputedAt] = useState(null);
-    const [visibleCount, setVisibleCount] = useState(FRAUD_PAGE_SIZE);
+    const [filter, setFilter] = useState('all');
+    const [visible, setVisible] = useState(PAGE);
 
     const load = async () => {
         setLoading(true);
-        const { data, error } = await supabase.rpc('get_fraud_signals');
-        if (error) {
-            console.error('get_fraud_signals failed:', error);
-            setSignals([]);
-            setLoading(false);
-            return;
-        }
-        const rows = data || [];
-        setSignals(rows);
-        setComputedAt(rows[0]?.computed_at || null);
-
-        // Hidratar nombres de subject_id para passenger/driver vía
-        // get_public_profile (mig 34) — la RLS de profiles bloquea
-        // el SELECT directo. ride no necesita hidratación.
-        const uids = [...new Set(
-            rows.filter(s => s.subject_type !== 'ride')
-                .map(s => s.subject_id)
-        )];
-        const map = {};
-        await Promise.all(uids.map(async (uid) => {
-            const { data: p } = await supabase.rpc('get_public_profile', { p_id: uid });
-            if (p?.[0]) map[uid] = p[0];
-        }));
-        setProfilesMap(map);
+        const { data, error } = await supabase.rpc('admin_get_fraud_signals_v2');
+        if (error) toast.error(error.message);
+        setSignals(data || []);
         setLoading(false);
     };
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => { load(); }, []);  // load() es estable, OK ejecutar al mount.
+    useEffect(() => { load(); }, []);
+    useEffect(() => { setVisible(PAGE); }, [filter]);
 
     const refresh = async () => {
         setRefreshing(true);
         const { error } = await supabase.rpc('refresh_fraud_signals');
-        if (error) {
-            toast.error(`Error refrescando: ${error.message}`);
-            setRefreshing(false);
-            return;
-        }
-        await load();
+        if (error) toast.error(error.message);
+        else await load();
         setRefreshing(false);
     };
 
-    const filtered = filter === 'all'
-        ? signals
-        : signals.filter(s => s.subject_type === filter);
-
-    // H4.5 — slice client-side. Resetear visibleCount al cambiar filtro.
-    useEffect(() => { setVisibleCount(FRAUD_PAGE_SIZE); }, [filter]);
-    const visible = filtered.slice(0, visibleCount);
-    const hasMore = filtered.length > visibleCount;
-
-    const countBy = {
-        all:       signals.length,
+    const filtered = useMemo(() => filter === 'all' ? signals : signals.filter(s => s.subject_type === filter), [signals, filter]);
+    const counts = useMemo(() => ({
+        all: signals.length,
         passenger: signals.filter(s => s.subject_type === 'passenger').length,
-        driver:    signals.filter(s => s.subject_type === 'driver').length,
-        ride:      signals.filter(s => s.subject_type === 'ride').length,
-    };
+        driver: signals.filter(s => s.subject_type === 'driver').length,
+        ride: signals.filter(s => s.subject_type === 'ride').length,
+    }), [signals]);
 
     return (
-        <div className="min-h-screen bg-[#0F1014] text-white">
-            <div className="max-w-6xl lg:max-w-7xl mx-auto px-4 py-6">
-                <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => navigate('/admin/dashboard')}
-                            className="w-10 h-10 rounded-full bg-[#1A1F2E] flex items-center justify-center hover:bg-[#252A3A]"
-                            aria-label="Volver"
-                        >
-                            <span className="material-symbols-outlined">arrow_back</span>
-                        </button>
-                        <div>
-                            <h1 className="text-2xl font-extrabold flex items-center gap-2">
-                                <span className="material-symbols-outlined text-rose-400">crisis_alert</span>
-                                Fraud signals
-                            </h1>
-                            <p className="text-xs text-gray-500">
-                                {computedAt ? `Última actualización: ${fmtDate(computedAt)}` : 'Sin datos todavía. Refrescá para calcular.'}
-                            </p>
-                        </div>
-                    </div>
-                    <button
-                        onClick={refresh}
-                        disabled={refreshing}
-                        className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 text-sm font-bold"
-                    >
-                        <span className={`material-symbols-outlined text-[18px] ${refreshing ? 'animate-spin' : ''}`}>
-                            {refreshing ? 'progress_activity' : 'refresh'}
-                        </span>
-                        {refreshing ? 'Refrescando…' : 'Refrescar señales'}
-                    </button>
-                </div>
-
-                <AdminNav />
-
-                <div className="flex gap-2 my-4 overflow-x-auto">
-                    {[
-                        { id: 'all',       label: 'Todas' },
-                        { id: 'passenger', label: 'Pasajeros' },
-                        { id: 'driver',    label: 'Conductores' },
-                        { id: 'ride',      label: 'Viajes' },
-                    ].map(t => (
-                        <button
-                            key={t.id}
-                            onClick={() => setFilter(t.id)}
-                            className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
-                                filter === t.id
-                                    ? 'bg-rose-600 text-white'
-                                    : 'bg-[#1A1F2E] text-gray-400 hover:text-white'
-                            }`}
-                        >
-                            {t.label}
-                            <span className={`ml-1 ${filter === t.id ? 'text-rose-100' : 'text-gray-500'}`}>
-                                ({countBy[t.id]})
-                            </span>
-                        </button>
-                    ))}
-                </div>
-
-                {loading ? (
-                    <div className="flex justify-center py-20">
-                        <div className="w-8 h-8 border-4 border-rose-600 border-t-transparent rounded-full animate-spin" />
-                    </div>
-                ) : filtered.length === 0 ? (
-                    <div className="text-center py-20 bg-[#1A1F2E] rounded-2xl border border-dashed border-white/10">
-                        <span className="material-symbols-outlined text-emerald-400 text-5xl">verified_user</span>
-                        <p className="mt-3 font-medium text-emerald-300">Sin señales en esta categoría.</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                            Si esperabas resultados, asegurate de haber refrescado la vista materializada.
-                        </p>
-                    </div>
-                ) : (
-                    <ul className="space-y-2">
-                        {visible.map((s, i) => {
-                            const sig = SIGNAL_LABELS[s.signal] || { label: s.signal, icon: 'warning', color: 'text-gray-400' };
-                            const sevCls = SEVERITY_CLS[s.severity] || SEVERITY_CLS.low;
-                            const subject = s.subject_type !== 'ride' ? profilesMap[s.subject_id] : null;
-                            const subjectLabel = SUBJECT_LABELS[s.subject_type] || s.subject_type;
-                            return (
-                                <li key={`${s.subject_type}-${s.subject_id}-${s.signal}-${i}`}
-                                    className="bg-[#1A1F2E] border border-white/5 rounded-2xl p-4 flex items-start gap-3"
-                                >
-                                    <div className={`w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center shrink-0 ${sig.color}`}>
-                                        <span className="material-symbols-outlined text-[20px]">{sig.icon}</span>
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">{subjectLabel}</span>
-                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${sevCls}`}>
-                                                {s.severity}
-                                            </span>
-                                            <p className="font-bold text-sm">{sig.label}</p>
-                                        </div>
-                                        <p className="text-xs text-gray-400 mt-1 truncate">
-                                            {s.subject_type === 'ride'
-                                                ? `Ride #${s.subject_id} · ${s.metadata?.pickup || ''} → ${s.metadata?.dropoff || ''}`
-                                                : (subject?.full_name || s.subject_id)}
-                                        </p>
-                                        <div className="mt-2 flex gap-3 text-[11px] text-gray-300 flex-wrap">
-                                            {Object.entries(s.metadata || {}).map(([k, v]) => {
-                                                if (k === 'pickup' || k === 'dropoff') return null;
-                                                return (
-                                                    <span key={k} className="bg-white/5 px-2 py-0.5 rounded font-mono">
-                                                        {k}: {typeof v === 'number' ? v.toLocaleString() : String(v)}
-                                                    </span>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                    {s.subject_type === 'driver' && (
-                                        <button
-                                            onClick={() => navigate(`/admin/drivers?focus=${s.subject_id}`)}
-                                            className="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 shrink-0"
-                                        >
-                                            Ver chofer
-                                        </button>
-                                    )}
-                                </li>
-                            );
-                        })}
-                    </ul>
-                )}
-
-                {/* H4.5 — paginación client-side: botón "Ver más" */}
-                {!loading && hasMore && (
-                    <div className="flex justify-center pt-6">
-                        <button
-                            onClick={() => setVisibleCount(c => c + FRAUD_PAGE_SIZE)}
-                            className="px-6 py-3 rounded-full bg-[#1A1F2E] text-gray-300 text-sm font-bold hover:bg-[#252A3A] border border-white/10"
-                        >
-                            Ver más señales ({filtered.length - visibleCount} restantes)
-                        </button>
-                    </div>
-                )}
-                {!loading && !hasMore && filtered.length > FRAUD_PAGE_SIZE && (
-                    <p className="text-center text-xs text-gray-500 pt-6">
-                        — mostrando todas las {filtered.length} señales —
-                    </p>
-                )}
+        <div className="min-h-screen bg-[#0F1014] text-white p-4 md:p-8">
+            <AdminNav />
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
+                <div><h1 className="text-2xl font-black">Alertas operativas</h1><p className="text-sm text-gray-400 mt-1">Señales calculadas en lote, con perfiles resueltos en una sola consulta.</p></div>
+                <button onClick={refresh} disabled={refreshing} className="px-4 py-3 rounded-xl bg-red-600 disabled:opacity-50 font-bold flex items-center gap-2"><span className={`material-symbols-outlined ${refreshing ? 'animate-spin' : ''}`}>refresh</span>{refreshing ? 'Actualizando…' : 'Recalcular señales'}</button>
             </div>
+
+            <div className="flex gap-2 mb-5 overflow-x-auto">{[['all','Todas'],['passenger','Pasajeros'],['driver','Drivers'],['ride','Viajes']].map(([id,label]) => <button key={id} onClick={() => setFilter(id)} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap ${filter === id ? 'bg-red-600' : 'bg-[#1A1F2E] text-gray-400'}`}>{label} ({counts[id]})</button>)}</div>
+
+            {loading ? <div className="py-24 flex justify-center"><div className="w-8 h-8 border-4 border-red-500 border-t-transparent rounded-full animate-spin" /></div> : <div className="space-y-3">{filtered.slice(0, visible).map((item, index) => {
+                const [label, icon, tone] = LABELS[item.signal] || [item.signal, 'warning', 'text-gray-400'];
+                return <article key={`${item.subject_type}-${item.subject_id}-${item.signal}-${index}`} className="bg-[#1A1F2E] border border-white/5 rounded-2xl p-4 flex gap-4 items-start">
+                    <div className={`w-11 h-11 rounded-xl bg-white/5 flex items-center justify-center shrink-0 ${tone}`}><span className="material-symbols-outlined">{icon}</span></div>
+                    <div className="flex-1 min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="text-[10px] uppercase tracking-wider text-gray-500 font-bold">{item.subject_type}</span><span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${SEVERITY[item.severity] || SEVERITY.low}`}>{item.severity}</span><p className="font-bold">{label}</p></div><p className="text-sm text-gray-400 mt-1 truncate">{item.subject_name || (item.subject_type === 'ride' ? `Viaje #${item.subject_id}` : item.subject_id)}{item.subject_phone ? ` · ${item.subject_phone}` : ''}</p><div className="flex flex-wrap gap-2 mt-3">{Object.entries(item.metadata || {}).map(([key,value]) => <span key={key} className="text-[10px] font-mono px-2 py-1 rounded bg-[#0F1014] text-gray-400">{key}: {String(value)}</span>)}</div></div>
+                    {item.subject_type === 'driver' && <button onClick={() => navigate(`/admin/drivers?focus=${item.subject_id}`)} className="px-3 py-2 rounded-lg bg-white/5 text-xs font-bold">Ver driver</button>}
+                </article>;
+            })}{!filtered.length && <div className="py-20 text-center rounded-2xl bg-[#1A1F2E] border border-dashed border-white/10 text-emerald-300"><span className="material-symbols-outlined text-5xl">verified_user</span><p className="mt-2">Sin alertas en esta categoría.</p></div>}{visible < filtered.length && <div className="text-center pt-4"><button onClick={() => setVisible(v => v + PAGE)} className="px-6 py-3 rounded-full bg-[#1A1F2E] border border-white/10 text-sm font-bold">Ver más ({filtered.length - visible})</button></div>}</div>}
         </div>
     );
-};
-
-const AdminFraudPage = () => (
-    <AdminGuard>
-        <FraudPanel />
-    </AdminGuard>
-);
-
-export default AdminFraudPage;
+}
