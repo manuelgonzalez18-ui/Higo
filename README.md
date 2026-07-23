@@ -2,9 +2,11 @@
 
 Plataforma de movilidad + envíos de Venezuela. Stack React/Vite/Capacitor (cliente) + PHP/Hostinger (endpoints) + Supabase (DB/Auth/Realtime/Storage) + Firebase (FCM push).
 
-## Runbook operacional
+## Runbooks operacionales
 
-Procedimientos comunes (rollback, rotar Supabase key, investigar crashes, suspender chofer): **[docs/OPERATIONS.md](./docs/OPERATIONS.md)**.
+- Procedimientos comunes — rollback, rotación de claves, investigación de crashes y suspensión de choferes: **[docs/OPERATIONS.md](./docs/OPERATIONS.md)**.
+- Rollout del hardening de membresías, viajes, despacho y analítica: **[docs/PLATFORM_HARDENING_ROLLOUT.md](./docs/PLATFORM_HARDENING_ROLLOUT.md)**.
+- Reconciliación de cambios ejecutados manualmente con el historial de Supabase CLI: **[docs/SUPABASE_MIGRATION_HISTORY.md](./docs/SUPABASE_MIGRATION_HISTORY.md)**.
 
 ---
 
@@ -14,13 +16,13 @@ This template provides a minimal setup to get React working in Vite with HMR and
 
 Currently, two official plugins are available:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) or [oxc](https://vite.dev/guide/rolldown) for Fast Refresh.
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses SWC for Fast Refresh.
 
 ## React Compiler
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The React Compiler is not enabled because of its impact on development and build performance.
 
-## Expanding the ESLint configuration
+## Type safety
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+The current client remains JavaScript. New service contracts should migrate gradually to TypeScript with type-aware linting, beginning with payments, rides and administrative RPC clients.
