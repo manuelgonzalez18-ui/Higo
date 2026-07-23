@@ -18,6 +18,9 @@ union all
 select 'create_ride_request_v4',
        to_regprocedure('public.create_ride_request_v4(uuid,text,text,double precision,double precision,double precision,double precision,text,text,numeric,jsonb,text,text,jsonb,text,numeric,text,numeric)') is not null
 union all
+select 'higo_guard_ride_coverage',
+       to_regprocedure('public.higo_guard_ride_coverage()') is not null
+union all
 select 'driver_accept_ride_v2',
        to_regprocedure('public.driver_accept_ride_v2(bigint)') is not null
 union all
@@ -84,6 +87,7 @@ select
 from information_schema.triggers
 where trigger_schema = 'public'
   and trigger_name in (
+      'trg_higo_guard_ride_coverage',
       'trg_higo_guard_ride_transition',
       'trg_higo_audit_ride_transition',
       'trg_higo_dispatch_new_ride',
