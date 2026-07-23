@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { supabase } from '../services/supabase';
-import { useAdminContext } from './AdminGuard';
+import { useAdminContext } from '../contexts/AdminContext';
 import { useAdminKeyboardNav } from '../hooks/useAdminKeyboardNav';
 import { FEATURES } from '../config/features';
 
