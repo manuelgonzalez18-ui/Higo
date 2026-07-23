@@ -79,3 +79,13 @@ export const listAuditLog = async (limit = 100) => unwrap(await supabase
     .select('*')
     .order('created_at', { ascending: false })
     .limit(limit));
+
+export const saveFundedPromo = async (id, payload) => unwrap(await supabase.rpc('admin_save_promo', {
+    p_id: id || null,
+    p_payload: payload,
+}));
+
+export const archivePromo = async (id, reason) => unwrap(await supabase.rpc('admin_archive_promo', {
+    p_id: id,
+    p_reason: reason,
+}));
