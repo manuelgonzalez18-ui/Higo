@@ -13,6 +13,8 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: write
+  issues: write
 
 jobs:
   build-test:
@@ -102,12 +104,42 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Start fresh local database and apply migrations
+        id: migration_start
+        continue-on-error: true
         shell: bash
         run: |
-          set -o pipefail
-          supabase db start 2>&1 | tail -n 180
+          set +e
+          supabase db start > /tmp/supabase-db-start.log 2>&1
+          status=$?
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          tail -n 120 /tmp/supabase-db-start.log
+          exit 0
+
+      - name: Publish migration failure on PR
+        if: steps.migration_start.outputs.exit_code != '0' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          {
+            echo '<!-- higo-migration-replay-failure -->'
+            echo '### Supabase migration replay failed'
+            echo
+            echo 'The fresh local database could not apply the migration history. Last log lines:'
+            echo
+            echo '```text'
+            tail -n 90 /tmp/supabase-db-start.log
+            echo '```'
+          } > /tmp/migration-comment.md
+          gh pr comment "$PR_NUMBER" --body-file /tmp/migration-comment.md
+
+      - name: Stop when migration replay failed
+        if: steps.migration_start.outputs.exit_code != '0'
+        run: exit 1
 
       - name: Run post-deploy database assertions
+        if: steps.migration_start.outputs.exit_code == '0'
         env:
           PGPASSWORD: postgres
         run: >-
