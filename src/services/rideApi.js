@@ -49,7 +49,8 @@ export const createRideRequest = async ({
     payer = null,
     codAmount = null,
     termsVersion = null,
-}) => unwrap(await supabase.rpc('create_ride_request_v2', {
+    clientPriceFloor = null,
+}) => unwrap(await supabase.rpc('create_ride_request_v3', {
     p_client_request_id: clientRequestId,
     p_pickup: pickup,
     p_dropoff: dropoff,
@@ -67,6 +68,7 @@ export const createRideRequest = async ({
     p_payer: payer || null,
     p_cod_amount: codAmount == null || codAmount === '' ? null : Number(codAmount),
     p_terms_version: termsVersion || null,
+    p_client_price_floor: clientPriceFloor == null || clientPriceFloor === '' ? null : Number(clientPriceFloor),
 }));
 
 export const acceptRide = async (rideId) => unwrap(await supabase.rpc('driver_accept_ride_v2', {
