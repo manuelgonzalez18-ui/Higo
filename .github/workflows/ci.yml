@@ -179,6 +179,19 @@ jobs:
           --set ON_ERROR_STOP=1
           --file supabase/tests/platform_hardening_postdeploy.sql
 
+      - name: Run behavioral database assertions
+        if: steps.migration_start.outputs.exit_code == '0'
+        env:
+          PGPASSWORD: postgres
+        run: >-
+          psql
+          --host 127.0.0.1
+          --port 54322
+          --username postgres
+          --dbname postgres
+          --set ON_ERROR_STOP=1
+          --file supabase/tests/platform_hardening_behavior.sql
+
       - name: Stop local Supabase
         if: always()
         run: supabase stop --no-backup
