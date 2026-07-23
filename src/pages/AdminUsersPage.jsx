@@ -1,306 +1,145 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase, getUserProfile } from '../services/supabase';
+import React, { useEffect, useMemo, useState } from 'react';
 import AdminNav from '../components/AdminNav';
+import { supabase } from '../services/supabase';
+import {
+    changeProfileRole,
+    getAdminContext,
+    listAdminStaff,
+    listAuditLog,
+    setAdminSecuritySettings,
+    updateAdminStaffRole,
+} from '../services/adminApi';
+import { toast } from '../components/Toast';
 
-const ROLES = [
-    { id: 'user',   label: 'Pasajero', icon: 'person',              color: 'text-gray-300'     },
-    { id: 'driver', label: 'Driver',   icon: 'directions_car',      color: 'text-sky-400'      },
-    { id: 'admin',  label: 'Admin',    icon: 'admin_panel_settings', color: 'text-violet-400'  }
+const STAFF_ROLES = [
+    ['super_admin', 'Super admin'],
+    ['operations', 'Operaciones'],
+    ['support', 'Soporte'],
+    ['finance', 'Finanzas'],
+    ['viewer', 'Solo lectura'],
 ];
+const PROFILE_ROLES = ['passenger', 'driver', 'merchant', 'admin'];
 
-const FILTERS = [
-    { id: 'all',    label: 'Todos'     },
-    { id: 'user',   label: 'Pasajeros' },
-    { id: 'driver', label: 'Drivers'   },
-    { id: 'admin',  label: 'Admins'    }
-];
+const formatDate = value => value ? new Date(value).toLocaleString('es-VE') : '—';
 
-// H4.2 — cursor pagination. PAGE_SIZE=50 (igual que RideHistoryPage).
-const PAGE_SIZE = 50;
-
-const AdminUsersPage = () => {
-    const navigate = useNavigate();
-    const [authorized, setAuthorized] = useState(false);
-    const [me, setMe] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [loadingMore, setLoadingMore] = useState(false);
+export default function AdminUsersPage() {
+    const [tab, setTab] = useState('users');
+    const [context, setContext] = useState(null);
     const [users, setUsers] = useState([]);
-    const [hasMore, setHasMore] = useState(true);
-    const [filter, setFilter] = useState('all');
-    const [searchTerm, setSearchTerm] = useState('');
-    const [message, setMessage] = useState(null);
+    const [staff, setStaff] = useState([]);
+    const [audit, setAudit] = useState([]);
+    const [query, setQuery] = useState('');
+    const [role, setRole] = useState('all');
+    const [loading, setLoading] = useState(true);
+    const [requireMfa, setRequireMfa] = useState(false);
+    const [sessionMinutes, setSessionMinutes] = useState(60);
 
-    useEffect(() => {
-        (async () => {
-            const profile = await getUserProfile();
-            if (!profile || profile.role !== 'admin') {
-                navigate('/');
-                return;
-            }
-            setMe(profile);
-            setAuthorized(true);
-        })();
-    }, [navigate]);
+    const superAdmin = context?.staff_role === 'super_admin';
 
-    // H4.2 — fetch con cursor. Si reset=true arranca de cero (cambio de
-    // filtro); si false, paginá con el created_at del último item local.
-    const fetchPage = useCallback(async (reset = false) => {
-        if (!authorized) return;
-        const cursor = reset ? null : users[users.length - 1]?.created_at;
+    const loadContext = async () => {
+        const ctx = await getAdminContext();
+        setContext(ctx);
+        setRequireMfa(!!ctx?.require_mfa);
+    };
 
-        let q = supabase
-            .from('profiles')
-            .select('id, full_name, phone, role, subscription_status, referral_code, referral_credit_balance, created_at')
-            .order('created_at', { ascending: false })
-            .limit(PAGE_SIZE);
-
-        if (filter !== 'all') q = q.eq('role', filter);
-        if (cursor) q = q.lt('created_at', cursor);
-
-        const { data, error } = await q;
-        if (error) {
-            setMessage({ type: 'error', text: error.message });
-            return;
-        }
-        const next = reset ? (data || []) : [...users, ...(data || [])];
-        setUsers(next);
-        setHasMore((data || []).length === PAGE_SIZE);
-    }, [authorized, filter, users]);
-
-    // Reset al cambiar filtro
-    useEffect(() => {
-        if (!authorized) return;
+    const loadUsers = async () => {
         setLoading(true);
-        setUsers([]);
-        setHasMore(true);
-        (async () => {
-            await fetchPage(true);
-            setLoading(false);
-        })();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [authorized, filter]);
-
-    const loadMore = async () => {
-        if (loadingMore || !hasMore) return;
-        setLoadingMore(true);
-        await fetchPage(false);
-        setLoadingMore(false);
+        try {
+            let q = supabase.from('profiles')
+                .select('id,full_name,phone,email,role,created_at,archived_at')
+                .order('created_at', { ascending: false })
+                .limit(100);
+            if (role !== 'all') q = q.eq('role', role);
+            const term = query.trim();
+            if (term) q = q.or(`full_name.ilike.%${term}%,phone.ilike.%${term}%,email.ilike.%${term}%`);
+            const { data, error } = await q;
+            if (error) throw error;
+            setUsers(data || []);
+        } catch (err) { toast.error(err.message); } finally { setLoading(false); }
     };
 
-    const openSupportChat = async (user) => {
-        // Admin abre chat con un usuario desde /admin/users → role_context
-        // 'passenger' por default. Si el user también tiene cuenta driver
-        // tendrá 2 threads (UNIQUE (user_id, role_context) de mig 33),
-        // este flow apunta al de passenger.
-        const { data: existing } = await supabase
-            .from('support_threads')
-            .select('id')
-            .eq('user_id', user.id)
-            .eq('role_context', 'passenger')
-            .maybeSingle();
-
-        let threadId = existing?.id;
-        if (!threadId) {
-            const { data: created, error } = await supabase
-                .from('support_threads')
-                .upsert(
-                    { user_id: user.id, role_context: 'passenger' },
-                    { onConflict: 'user_id,role_context' }
-                )
-                .select('id')
-                .single();
-            if (error) { setMessage({ type: 'error', text: error.message }); return; }
-            threadId = created.id;
-        }
-        navigate(`/admin/support?thread=${threadId}`);
+    const loadStaff = async () => {
+        setLoading(true);
+        try { setStaff(await listAdminStaff() || []); }
+        catch (err) { toast.error(err.message); }
+        finally { setLoading(false); }
     };
 
-    const changeRole = async (user, newRole) => {
-        if (user.id === me?.id && newRole !== 'admin') {
-            setMessage({ type: 'error', text: 'No podés quitarte a vos mismo el rol de admin desde acá.' });
-            return;
-        }
-        if (!confirm(`¿Cambiar rol de "${user.full_name || user.id.slice(0, 8)}" a ${newRole.toUpperCase()}?`)) return;
-        const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', user.id);
-        if (error) setMessage({ type: 'error', text: error.message });
-        else {
-            setMessage({ type: 'success', text: `Rol actualizado a ${newRole}.` });
-            // Refrescar la lista entera para reflejar el cambio en el filtro activo.
-            setLoading(true);
-            setUsers([]);
-            setHasMore(true);
-            await fetchPage(true);
-            setLoading(false);
-        }
+    const loadAudit = async () => {
+        setLoading(true);
+        try { setAudit(await listAuditLog(150) || []); }
+        catch (err) { toast.error(err.message); }
+        finally { setLoading(false); }
     };
 
-    // Búsqueda client-side sobre la página cargada. Si el usuario buscado
-    // está más allá del cursor actual, hay que cargar más.
-    const filtered = users.filter(u => {
-        const s = searchTerm.toLowerCase();
-        const matchesSearch = !s ||
-            (u.full_name?.toLowerCase().includes(s)) ||
-            (u.phone?.toLowerCase().includes(s)) ||
-            (u.referral_code?.toLowerCase().includes(s));
-        return matchesSearch;
-    });
+    useEffect(() => { loadContext().catch(err => toast.error(err.message)); }, []);
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (tab === 'users') loadUsers();
+            if (tab === 'staff') loadStaff();
+            if (tab === 'audit') loadAudit();
+        }, tab === 'users' ? 250 : 0);
+        return () => clearTimeout(timer);
+    }, [tab, query, role]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const roleMeta = (r) => ROLES.find(x => x.id === r) || ROLES[0];
+    const updateProfileRole = async (user, nextRole) => {
+        if (!superAdmin) return toast.error('Solo un super admin puede cambiar roles de cuenta.');
+        if (!confirm(`Cambiar a ${user.full_name || user.id} al rol ${nextRole}?`)) return;
+        try { await changeProfileRole(user.id, nextRole); toast.success('Rol actualizado y auditado.'); loadUsers(); loadStaff(); }
+        catch (err) { toast.error(err.message); }
+    };
 
-    if (!authorized) {
-        return (
-            <div className="min-h-screen bg-[#0F1014] flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-        );
-    }
+    const updateStaff = async (item, nextRole, active = item.active) => {
+        if (!superAdmin) return toast.error('Solo un super admin puede administrar permisos.');
+        try { await updateAdminStaffRole({ userId: item.user_id, staffRole: nextRole, active }); toast.success('Permisos actualizados.'); loadStaff(); }
+        catch (err) { toast.error(err.message); }
+    };
+
+    const saveSecurity = async () => {
+        if (!superAdmin) return toast.error('Solo un super admin puede cambiar la política de seguridad.');
+        if (requireMfa && !confirm('Antes de exigir MFA, todos los administradores deben haber configurado su autenticador. ¿Activar igualmente?')) return;
+        try { await setAdminSecuritySettings({ requireMfa, sessionMinutes: Number(sessionMinutes) }); toast.success('Política de seguridad actualizada.'); await loadContext(); }
+        catch (err) { toast.error(err.message); }
+    };
+
+    const tabs = useMemo(() => [
+        ['users', 'Usuarios'],
+        ['staff', 'Staff y permisos'],
+        ['security', 'Seguridad'],
+        ['audit', 'Auditoría'],
+    ], []);
 
     return (
-        <div className="min-h-screen bg-[#0F1014] p-4 md:p-8 font-sans text-white">
+        <div className="min-h-screen bg-[#0F1014] text-white p-4 md:p-8">
             <AdminNav />
+            <div className="mb-6"><h1 className="text-2xl font-black">Usuarios y administración</h1><p className="text-sm text-gray-400 mt-1">Roles operativos, seguridad y trazabilidad de cambios.</p></div>
 
-            <div className="flex items-center gap-4 mb-8">
-                <div className="bg-gradient-to-br from-violet-600 to-fuchsia-600 p-3 rounded-2xl shadow-lg shadow-violet-600/20">
-                    <span className="material-symbols-outlined text-white text-2xl">group</span>
+            <div className="flex gap-2 border-b border-white/5 mb-6 overflow-x-auto">{tabs.map(([id,label]) => <button key={id} onClick={() => setTab(id)} className={`px-4 py-3 text-sm font-bold border-b-2 whitespace-nowrap ${tab === id ? 'border-violet-500 text-white' : 'border-transparent text-gray-500'}`}>{label}</button>)}</div>
+
+            {tab === 'users' && <>
+                <div className="bg-[#1A1F2E] border border-white/5 rounded-2xl p-4 mb-5 flex flex-col md:flex-row gap-3">
+                    <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar por nombre, teléfono o correo…" className="flex-1 p-3 bg-[#0F1014] border border-white/10 rounded-xl outline-none focus:border-violet-500" />
+                    <select value={role} onChange={e => setRole(e.target.value)} className="p-3 bg-[#0F1014] border border-white/10 rounded-xl"><option value="all">Todos los roles</option>{PROFILE_ROLES.map(r => <option key={r} value={r}>{r}</option>)}</select>
                 </div>
-                <div>
-                    <h1 className="text-2xl font-black tracking-tight text-white">Usuarios</h1>
-                    <p className="text-gray-400 text-sm font-medium">Gestioná roles (pasajero, driver, admin)</p>
-                </div>
-            </div>
+                {loading ? <Spinner /> : <div className="space-y-3">{users.map(user => <article key={user.id} className="bg-[#1A1F2E] border border-white/5 rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center gap-4"><div className="flex-1 min-w-0"><p className="font-bold truncate">{user.full_name || 'Sin nombre'}</p><p className="text-xs text-gray-400 truncate">{user.email || 'Sin correo'} · {user.phone || 'Sin teléfono'}</p><p className="text-[10px] text-gray-600 mt-1">Alta: {formatDate(user.created_at)}</p></div><span className="px-3 py-1 rounded-full text-xs font-bold bg-white/5 text-gray-300">{user.role}</span>{superAdmin && <select value={user.role === 'user' ? 'passenger' : user.role} onChange={e => updateProfileRole(user, e.target.value)} className="p-2 bg-[#0F1014] border border-white/10 rounded-lg text-xs">{PROFILE_ROLES.map(r => <option key={r} value={r}>{r}</option>)}</select>}</article>)}{!users.length && <Empty text="No se encontraron usuarios." />}</div>}
+            </>}
 
-            <div className="bg-[#1A1F2E] p-6 rounded-[24px] border border-white/5 mb-6">
-                <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
-                    <div className="relative w-full md:w-96">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 material-symbols-outlined">search</span>
-                        <input
-                            type="text"
-                            placeholder="Buscar por nombre, teléfono o código..."
-                            className="w-full pl-12 pr-4 py-3 bg-[#0F1014] border border-white/10 rounded-xl outline-none focus:border-violet-500/50 text-white placeholder:text-gray-600"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </div>
-                    <div className="flex gap-2 bg-[#0F1014] p-1.5 rounded-xl border border-white/5">
-                        {FILTERS.map(f => (
-                            <button
-                                key={f.id}
-                                onClick={() => setFilter(f.id)}
-                                className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${filter === f.id
-                                    ? 'bg-[#2C3345] text-white shadow-lg'
-                                    : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
-                            >
-                                {f.label}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-                {/* H4.2 — hint sobre paginación + búsqueda */}
-                {searchTerm && hasMore && (
-                    <p className="text-xs text-amber-400 mt-3 text-center">
-                        La búsqueda solo cubre los usuarios cargados ({users.length}). Si no encontrás a quien buscás, cargá más resultados.
-                    </p>
-                )}
-            </div>
+            {tab === 'staff' && <>
+                <div className="mb-5 p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 text-sm text-blue-200">Los permisos administrativos ya no dependen de un único rol genérico. Solo el super admin puede modificar esta tabla.</div>
+                {loading ? <Spinner /> : <div className="space-y-3">{staff.map(item => <article key={item.user_id} className="bg-[#1A1F2E] border border-white/5 rounded-2xl p-4 flex flex-col md:flex-row md:items-center gap-4"><div className="flex-1"><p className="font-bold">{item.full_name || item.user_id}</p><p className="text-xs text-gray-500">{item.phone || 'Sin teléfono'}</p></div><select disabled={!superAdmin} value={item.staff_role} onChange={e => updateStaff(item, e.target.value)} className="p-3 bg-[#0F1014] border border-white/10 rounded-xl disabled:opacity-60">{STAFF_ROLES.map(([id,label]) => <option key={id} value={id}>{label}</option>)}</select><label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={!superAdmin} checked={item.active} onChange={e => updateStaff(item, item.staff_role, e.target.checked)} /> Activo</label></article>)}</div>}
+            </>}
 
-            {message && (
-                <div className={`mb-6 p-4 rounded-xl flex items-center gap-3 ${message.type === 'success' ? 'bg-green-500/10 border border-green-500/20 text-green-400' : 'bg-red-500/10 border border-red-500/20 text-red-400'}`}>
-                    <span className="material-symbols-outlined">{message.type === 'success' ? 'check_circle' : 'error'}</span>
-                    <span className="font-medium">{message.text}</span>
-                </div>
-            )}
+            {tab === 'security' && <div className="max-w-2xl bg-[#1A1F2E] border border-white/5 rounded-2xl p-6 space-y-5">
+                <div><h2 className="font-black text-lg">Política del panel</h2><p className="text-sm text-gray-400 mt-1">MFA se entrega desactivado para no bloquear cuentas existentes. Debe activarse después de enrolar a todo el staff.</p></div>
+                <label className="flex items-start gap-3 p-4 bg-[#0F1014] rounded-xl border border-white/10"><input type="checkbox" disabled={!superAdmin} checked={requireMfa} onChange={e => setRequireMfa(e.target.checked)} className="mt-1" /><div><p className="font-bold">Exigir autenticación de dos pasos</p><p className="text-xs text-gray-500 mt-1">Las acciones críticas también verifican AAL2 del lado de la base de datos.</p></div></label>
+                <div><label className="text-xs uppercase text-gray-500 font-bold">Duración objetivo de sesión administrativa</label><input type="number" min="15" max="720" disabled={!superAdmin} value={sessionMinutes} onChange={e => setSessionMinutes(e.target.value)} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl" /><p className="text-[10px] text-gray-600 mt-1">La expiración completa requiere aplicar este valor también a la configuración JWT del proyecto Supabase.</p></div>
+                <button disabled={!superAdmin} onClick={saveSecurity} className="px-5 py-3 rounded-xl bg-violet-600 disabled:opacity-40 font-bold">Guardar política</button>
+            </div>}
 
-            <div className="space-y-3">
-                {loading ? (
-                    <div className="flex justify-center py-20">
-                        <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin"></div>
-                    </div>
-                ) : filtered.length === 0 ? (
-                    <div className="text-center py-20 bg-[#1A1F2E] rounded-2xl border border-dashed border-white/10">
-                        <span className="material-symbols-outlined text-gray-500 text-4xl">group_off</span>
-                        <p className="text-gray-400 font-medium mt-2">No hay usuarios en este filtro.</p>
-                    </div>
-                ) : filtered.map(u => {
-                    const rm = roleMeta(u.role);
-                    const isSelf = u.id === me?.id;
-                    return (
-                        <div key={u.id} className="bg-[#1A1F2E] p-4 md:p-5 rounded-[20px] border border-white/5 flex flex-col md:flex-row items-center gap-4">
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                                <div className={`w-11 h-11 rounded-full bg-[#0F1014] border border-white/10 flex items-center justify-center ${rm.color}`}>
-                                    <span className="material-symbols-outlined">{rm.icon}</span>
-                                </div>
-                                <div className="min-w-0">
-                                    <p className="font-bold text-white truncate flex items-center gap-2">
-                                        {u.full_name || <span className="text-gray-500 italic">sin nombre</span>}
-                                        {isSelf && <span className="text-[10px] bg-violet-600/20 text-violet-400 px-2 py-0.5 rounded-full font-bold">VOS</span>}
-                                    </p>
-                                    <p className="text-xs text-gray-400 truncate">{u.phone || '—'} · <span className="font-mono">{u.referral_code || '—'}</span></p>
-                                </div>
-                            </div>
-
-                            <div className="text-center md:text-left">
-                                <p className="text-[10px] text-gray-500 uppercase font-bold mb-0.5">Rol actual</p>
-                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${u.role === 'admin' ? 'bg-violet-500/10 text-violet-400 border-violet-500/30'
-                                    : u.role === 'driver' ? 'bg-sky-500/10 text-sky-400 border-sky-500/30'
-                                    : 'bg-gray-500/10 text-gray-400 border-gray-500/30'}`}>
-                                    {rm.label}
-                                </span>
-                            </div>
-
-                            <div className="text-center md:text-left">
-                                <p className="text-[10px] text-gray-500 uppercase font-bold mb-0.5">Créditos</p>
-                                <p className="font-mono text-sm text-gray-300">${(u.referral_credit_balance ?? 0).toFixed(2)}</p>
-                            </div>
-
-                            <div className="flex gap-2 flex-wrap items-center">
-                                <button
-                                    onClick={() => openSupportChat(u)}
-                                    className="px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1 bg-[#0F1014] text-gray-300 hover:bg-fuchsia-600 hover:text-white border border-white/10 transition-all"
-                                    title="Abrir chat de soporte con este usuario"
-                                >
-                                    <span className="material-symbols-outlined text-[14px]">chat</span>
-                                    Chat
-                                </button>
-                                {ROLES.map(r => (
-                                    <button
-                                        key={r.id}
-                                        onClick={() => changeRole(u, r.id)}
-                                        disabled={u.role === r.id}
-                                        className={`px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${u.role === r.id
-                                            ? 'bg-white/5 text-gray-600 cursor-not-allowed'
-                                            : 'bg-[#0F1014] text-gray-300 hover:bg-violet-600 hover:text-white border border-white/10'}`}
-                                        title={u.role === r.id ? 'Ya es ' + r.label : 'Cambiar a ' + r.label}
-                                    >
-                                        <span className="material-symbols-outlined text-[14px]">{r.icon}</span>
-                                        {r.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-
-            {/* H4.2 — botón "Cargar más" */}
-            {!loading && users.length > 0 && hasMore && (
-                <div className="flex justify-center pt-6">
-                    <button
-                        onClick={loadMore}
-                        disabled={loadingMore}
-                        className="px-6 py-3 rounded-full bg-[#1A1F2E] text-gray-300 text-sm font-bold hover:bg-[#252A3A] disabled:opacity-50 border border-white/10"
-                    >
-                        {loadingMore ? 'Cargando…' : `Cargar más (de a ${PAGE_SIZE})`}
-                    </button>
-                </div>
-            )}
-            {!loading && users.length > 0 && !hasMore && (
-                <p className="text-center text-xs text-gray-500 pt-6">
-                    — fin de la lista ({users.length} usuarios) —
-                </p>
-            )}
+            {tab === 'audit' && <>{loading ? <Spinner /> : <div className="overflow-x-auto bg-[#1A1F2E] border border-white/5 rounded-2xl"><table className="w-full text-sm"><thead className="text-left text-gray-500 text-xs uppercase"><tr><th className="p-4">Fecha</th><th className="p-4">Acción</th><th className="p-4">Entidad</th><th className="p-4">Actor</th><th className="p-4">Motivo</th></tr></thead><tbody>{audit.map(row => <tr key={row.id} className="border-t border-white/5"><td className="p-4 whitespace-nowrap text-gray-400">{formatDate(row.created_at)}</td><td className="p-4 font-mono text-violet-300">{row.action}</td><td className="p-4">{row.entity_type}<span className="block text-[10px] text-gray-600">{row.entity_id}</span></td><td className="p-4 font-mono text-xs text-gray-400">{row.actor_id?.slice(0,8) || 'sistema'}</td><td className="p-4 text-gray-400">{row.reason || '—'}</td></tr>)}</tbody></table></div>}</>}
         </div>
     );
-};
+}
 
-export default AdminUsersPage;
+const Spinner = () => <div className="py-24 flex justify-center"><div className="w-8 h-8 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" /></div>;
+const Empty = ({ text }) => <div className="py-20 text-center bg-[#1A1F2E] border border-dashed border-white/10 rounded-2xl text-gray-500">{text}</div>;
