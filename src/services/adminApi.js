@@ -8,6 +8,7 @@ const unwrap = ({ data, error }) => {
 export const getAdminContext = async () => unwrap(await supabase.rpc('admin_get_context'));
 export const getAdminDashboardMetrics = async () => unwrap(await supabase.rpc('admin_dashboard_metrics'));
 export const getAdminAnalytics = async (days = 30) => unwrap(await supabase.rpc('admin_business_analytics', { p_days: days }));
+export const getAdminPlatformFunnel = async (days = 30) => unwrap(await supabase.rpc('admin_platform_funnel', { p_days: days }));
 
 export const listMembershipPlans = async () => unwrap(await supabase
     .from('driver_membership_plans')
