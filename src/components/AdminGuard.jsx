@@ -6,18 +6,18 @@ export const AdminContext = React.createContext(null);
 export const useAdminContext = () => React.useContext(AdminContext);
 
 const ROUTE_PERMISSIONS = [
-    ['/admin/dashboard', 'view_dashboard'],
-    ['/admin/drivers', 'manage_memberships'],
-    ['/admin/analytics', 'view_analytics'],
-    ['/admin/users', 'view_users'],
-    ['/admin/pricing', 'manage_pricing'],
-    ['/admin/zones', 'manage_zones'],
-    ['/admin/promos', 'manage_promos'],
-    ['/admin/disputes', 'manage_disputes'],
-    ['/admin/deliveries', 'manage_operations'],
-    ['/admin/support', 'manage_support'],
-    ['/admin/fraud', 'manage_operations'],
-    ['/admin/shop', 'manage_shop'],
+    ['/admin/dashboard', ['view_dashboard']],
+    ['/admin/drivers', ['manage_memberships', 'manage_drivers']],
+    ['/admin/analytics', ['view_analytics']],
+    ['/admin/users', ['view_users']],
+    ['/admin/pricing', ['manage_pricing']],
+    ['/admin/zones', ['manage_zones']],
+    ['/admin/promos', ['manage_promos']],
+    ['/admin/disputes', ['manage_disputes']],
+    ['/admin/deliveries', ['manage_operations']],
+    ['/admin/support', ['manage_support']],
+    ['/admin/fraud', ['manage_operations']],
+    ['/admin/shop', ['manage_shop']],
 ];
 
 export default function AdminGuard({ children }) {
@@ -35,9 +35,9 @@ export default function AdminGuard({ children }) {
         return () => { cancelled = true; };
     }, []);
 
-    const requiredPermission = useMemo(() => {
+    const requiredPermissions = useMemo(() => {
         const match = ROUTE_PERMISSIONS.find(([prefix]) => location.pathname.startsWith(prefix));
-        return match?.[1] || 'view_dashboard';
+        return match?.[1] || ['view_dashboard'];
     }, [location.pathname]);
 
     if (loading) return (
@@ -59,12 +59,13 @@ export default function AdminGuard({ children }) {
         </div>
     );
 
-    if (!context.permissions?.[requiredPermission]) return (
+    const allowed = requiredPermissions.some(permission => context.permissions?.[permission]);
+    if (!allowed) return (
         <div className="min-h-screen bg-[#0F1419] text-white flex items-center justify-center p-5">
             <div className="max-w-md w-full bg-[#1A1F2E] border border-red-500/25 rounded-3xl p-7 text-center">
                 <span className="material-symbols-outlined text-red-300 text-5xl">lock</span>
                 <h1 className="text-xl font-black mt-3">Acceso no autorizado</h1>
-                <p className="text-sm text-gray-400 mt-2">Tu perfil administrativo no tiene el permiso <span className="font-mono text-gray-300">{requiredPermission}</span>.</p>
+                <p className="text-sm text-gray-400 mt-2">Tu perfil administrativo no tiene ninguno de los permisos requeridos: <span className="font-mono text-gray-300">{requiredPermissions.join(', ')}</span>.</p>
                 <a href="#/admin/dashboard" className="mt-6 inline-flex px-5 py-3 rounded-xl bg-violet-600 font-bold">Volver al resumen</a>
             </div>
         </div>
