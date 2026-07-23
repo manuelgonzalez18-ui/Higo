@@ -33,9 +33,10 @@ Aplicar en staging, en este orden:
 7. `20260724104000_ride_transition_guard.sql`
 8. `20260724105000_directed_ride_offers.sql`
 9. `20260724105100_ride_offer_acceptance_guard.sql`
-10. `20260724106000_platform_event_analytics.sql`
-11. `20260724106100_platform_funnel_db_facts.sql`
-12. `20260724106200_platform_events_authenticated_only.sql`
+10. `20260724105200_directed_offers_runtime_gate.sql`
+11. `20260724106000_platform_event_analytics.sql`
+12. `20260724106100_platform_funnel_db_facts.sql`
+13. `20260724106200_platform_events_authenticated_only.sql`
 
 No aplicar estas migraciones directamente en producción antes de que el mismo
 SHA haya pasado Quality Gate, Vercel y staging.
@@ -135,10 +136,29 @@ Validar:
 
 ### E. Ofertas dirigidas
 
-Activar al final:
+Este rollout usa dos llaves. Primero se habilita la bandera de compilación:
 
 ```text
 VITE_DIRECTED_RIDE_OFFERS=true
+```
+
+Después de desplegar y comprobar que todos los drivers de prueba abren el
+dashboard correctamente, se habilita la bandera operativa en staging:
+
+```sql
+update public.platform_runtime_flags
+set directed_ride_offers = true,
+    updated_at = now()
+where singleton;
+```
+
+Para rollback inmediato del despacho, sin reconstruir la aplicación:
+
+```sql
+update public.platform_runtime_flags
+set directed_ride_offers = false,
+    updated_at = now()
+where singleton;
 ```
 
 Validar con al menos tres dispositivos:
@@ -147,6 +167,7 @@ Validar con al menos tres dispositivos:
 - Un driver sin membresía no recibe ofertas.
 - Al aceptar, las demás ofertas pasan a `withdrawn`.
 - Un viaje sin oferta queda visible para Operaciones y puede redistribuirse.
+- La política Realtime oculta solicitudes no ofertadas a otros drivers.
 - Medir batería, uso de datos y tiempo de aceptación durante 48 horas.
 
 ## Observabilidad
