@@ -3,6 +3,11 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { getAdminContext } from '../services/adminApi';
 import { AdminContext } from '../contexts/AdminContext';
 
+// Compatibility for existing admin pages. The context itself lives in a
+// separate module, so this re-export does not create duplicate state.
+// eslint-disable-next-line react-refresh/only-export-components
+export { useAdminContext } from '../contexts/AdminContext';
+
 const ROUTE_PERMISSIONS = [
     ['/admin/dashboard', ['view_dashboard']],
     ['/admin/drivers', ['manage_memberships', 'manage_drivers']],
