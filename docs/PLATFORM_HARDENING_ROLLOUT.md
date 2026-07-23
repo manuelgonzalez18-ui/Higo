@@ -27,11 +27,14 @@ Aplicar en staging, en este orden:
 1. `20260724100000_platform_finance_and_ride_hardening.sql`
 2. `20260724101000_driver_onboarding_membership_reconciliation.sql`
 3. `20260724102000_ride_creation_price_floor.sql`
-4. `20260724103000_membership_payment_suspension_guard.sql`
-5. `20260724103100_membership_payment_guard_binding.sql`
-6. `20260724104000_ride_transition_guard.sql`
-7. `20260724105000_directed_ride_offers.sql`
-8. `20260724106000_platform_event_analytics.sql`
+4. `20260724102100_ride_quote_subtotal_floor.sql`
+5. `20260724103000_membership_payment_suspension_guard.sql`
+6. `20260724103100_membership_payment_guard_binding.sql`
+7. `20260724104000_ride_transition_guard.sql`
+8. `20260724105000_directed_ride_offers.sql`
+9. `20260724105100_ride_offer_acceptance_guard.sql`
+10. `20260724106000_platform_event_analytics.sql`
+11. `20260724106100_platform_funnel_db_facts.sql`
 
 No aplicar estas migraciones directamente en producción antes de que el mismo
 SHA haya pasado Quality Gate, Vercel y staging.
@@ -108,7 +111,8 @@ Validar:
 - Promo porcentual y fija.
 - Promo vencida, agotada, por usuario y por presupuesto.
 - Doble toque o timeout crea un solo viaje (`client_request_id`).
-- El precio almacenado nunca es menor que el mostrado al pasajero.
+- El subtotal almacenado nunca es menor que el mostrado al pasajero.
+- El descuento se recalcula sobre ese subtotal y actualiza presupuesto/uso en la misma transacción.
 
 ### D. Máquina de estados
 
