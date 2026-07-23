@@ -50,6 +50,7 @@ jobs:
           tests/ridePricing.test.mjs
           src/config/features.js
           src/config/parseBooleanFlag.js
+          src/hooks/useBackgroundLocation.js
           src/services/adminApi.js
           src/services/analytics.js
           src/services/banesco.js
