@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readBoolean } from './features';
+import { readBoolean } from './parseBooleanFlag';
 
 describe('readBoolean', () => {
     it('recognizes enabled values', () => {
