@@ -1,11 +1,27 @@
-import React, { useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
 import { getAdminContext } from '../services/adminApi';
 
 export const AdminContext = React.createContext(null);
 export const useAdminContext = () => React.useContext(AdminContext);
 
+const ROUTE_PERMISSIONS = [
+    ['/admin/dashboard', 'view_dashboard'],
+    ['/admin/drivers', 'manage_memberships'],
+    ['/admin/analytics', 'view_analytics'],
+    ['/admin/users', 'view_users'],
+    ['/admin/pricing', 'manage_pricing'],
+    ['/admin/zones', 'manage_zones'],
+    ['/admin/promos', 'manage_promos'],
+    ['/admin/disputes', 'manage_disputes'],
+    ['/admin/deliveries', 'manage_operations'],
+    ['/admin/support', 'manage_support'],
+    ['/admin/fraud', 'manage_operations'],
+    ['/admin/shop', 'manage_shop'],
+];
+
 export default function AdminGuard({ children }) {
+    const location = useLocation();
     const [loading, setLoading] = useState(true);
     const [context, setContext] = useState(null);
     const [error, setError] = useState('');
@@ -18,6 +34,11 @@ export default function AdminGuard({ children }) {
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
     }, []);
+
+    const requiredPermission = useMemo(() => {
+        const match = ROUTE_PERMISSIONS.find(([prefix]) => location.pathname.startsWith(prefix));
+        return match?.[1] || 'view_dashboard';
+    }, [location.pathname]);
 
     if (loading) return (
         <div className="min-h-screen bg-[#0F1419] flex items-center justify-center text-gray-400">
@@ -34,6 +55,17 @@ export default function AdminGuard({ children }) {
                 <h1 className="text-xl font-black">Verificación de dos pasos requerida</h1>
                 <p className="text-sm text-gray-400 mt-3">La política del panel exige MFA para esta sesión. Volvé al acceso administrativo para completar el código del autenticador.</p>
                 <a href="#/admin" className="mt-6 inline-flex px-5 py-3 rounded-xl bg-violet-600 font-bold">Verificar acceso</a>
+            </div>
+        </div>
+    );
+
+    if (!context.permissions?.[requiredPermission]) return (
+        <div className="min-h-screen bg-[#0F1419] text-white flex items-center justify-center p-5">
+            <div className="max-w-md w-full bg-[#1A1F2E] border border-red-500/25 rounded-3xl p-7 text-center">
+                <span className="material-symbols-outlined text-red-300 text-5xl">lock</span>
+                <h1 className="text-xl font-black mt-3">Acceso no autorizado</h1>
+                <p className="text-sm text-gray-400 mt-2">Tu perfil administrativo no tiene el permiso <span className="font-mono text-gray-300">{requiredPermission}</span>.</p>
+                <a href="#/admin/dashboard" className="mt-6 inline-flex px-5 py-3 rounded-xl bg-violet-600 font-bold">Volver al resumen</a>
             </div>
         </div>
     );
