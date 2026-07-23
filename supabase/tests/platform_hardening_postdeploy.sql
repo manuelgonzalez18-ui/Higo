@@ -1,6 +1,7 @@
 -- Read-only post-deploy checks for the platform hardening migrations.
 -- Expected result: every object_exists value is true, every violation count is
--- zero, and event ingestion is denied to anon but allowed to authenticated.
+-- zero, directed dispatch remains disabled initially, and event ingestion is
+-- denied to anon but allowed to authenticated.
 
 select 'driver_membership_checkout' as object_name,
        to_regprocedure('public.driver_membership_checkout()') is not null as object_exists
@@ -26,6 +27,12 @@ union all
 select 'driver_list_ride_offers',
        to_regprocedure('public.driver_list_ride_offers(integer)') is not null
 union all
+select 'higo_directed_offers_enabled',
+       to_regprocedure('public.higo_directed_offers_enabled()') is not null
+union all
+select 'admin_set_platform_runtime_flags',
+       to_regprocedure('public.admin_set_platform_runtime_flags(boolean)') is not null
+union all
 select 'track_platform_event',
        to_regprocedure('public.track_platform_event(text,text,text,text,jsonb,text,text,text)') is not null
 union all
@@ -37,6 +44,9 @@ select 'ride_state_events',
 union all
 select 'ride_offers',
        to_regclass('public.ride_offers') is not null
+union all
+select 'platform_runtime_flags',
+       to_regclass('public.platform_runtime_flags') is not null
 union all
 select 'platform_events',
        to_regclass('public.platform_events') is not null;
@@ -87,6 +97,14 @@ select
     count(*) filter (where active and period = 'weekly') as weekly_plans,
     count(*) filter (where active and period = 'monthly') as monthly_plans
 from public.driver_membership_plans;
+
+select
+    directed_ride_offers,
+    directed_ride_offers = false as safe_default,
+    updated_at,
+    updated_by
+from public.platform_runtime_flags
+where singleton;
 
 select
     has_function_privilege(
