@@ -55,10 +55,9 @@ for (const filename of files) {
         if (/\bdrop\s+(table|schema|column)\b/i.test(normalized)) {
             errors.push(`${filename}: operación destructiva no permitida en rollout aditivo`);
         }
-    }
-
-    if (/security\s+definer/i.test(normalized) && !/set\s+search_path\s*=\s*public/i.test(normalized)) {
-        errors.push(`${filename}: SECURITY DEFINER sin SET search_path = public`);
+        if (/security\s+definer/i.test(normalized) && !/set\s+search_path\s*=\s*public/i.test(normalized)) {
+            errors.push(`${filename}: SECURITY DEFINER sin SET search_path = public`);
+        }
     }
 }
 
