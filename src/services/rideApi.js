@@ -22,7 +22,8 @@ export const quoteRide = async ({
     routeDistanceKm = null,
     stopsCount = 0,
     promoCode = null,
-}) => unwrap(await supabase.rpc('higo_quote_ride_v2', {
+    clientSubtotalFloor = null,
+}) => unwrap(await supabase.rpc('higo_quote_ride_v3', {
     p_pickup_lat: pickupCoords?.lat,
     p_pickup_lng: pickupCoords?.lng,
     p_dropoff_lat: dropoffCoords?.lat,
@@ -32,6 +33,7 @@ export const quoteRide = async ({
     p_route_distance_km: routeDistanceKm,
     p_stops_count: stopsCount,
     p_promo_code: promoCode || null,
+    p_client_subtotal_floor: clientSubtotalFloor == null || clientSubtotalFloor === '' ? null : Number(clientSubtotalFloor),
 }));
 
 export const createRideRequest = async ({
@@ -50,9 +52,9 @@ export const createRideRequest = async ({
     payer = null,
     codAmount = null,
     termsVersion = null,
-    clientPriceFloor = null,
+    clientSubtotalFloor = null,
 }) => {
-    const result = unwrap(await supabase.rpc('create_ride_request_v3', {
+    const result = unwrap(await supabase.rpc('create_ride_request_v4', {
         p_client_request_id: clientRequestId,
         p_pickup: pickup,
         p_dropoff: dropoff,
@@ -70,7 +72,7 @@ export const createRideRequest = async ({
         p_payer: payer || null,
         p_cod_amount: codAmount == null || codAmount === '' ? null : Number(codAmount),
         p_terms_version: termsVersion || null,
-        p_client_price_floor: clientPriceFloor == null || clientPriceFloor === '' ? null : Number(clientPriceFloor),
+        p_client_subtotal_floor: clientSubtotalFloor == null || clientSubtotalFloor === '' ? null : Number(clientSubtotalFloor),
     }));
     trackEventLater('ride.requested', {
         entityType: 'ride',
