@@ -1,10 +1,4 @@
-const readBoolean = (value, fallback = false) => {
-    if (value == null || value === '') return fallback;
-    const normalized = String(value).trim().toLowerCase();
-    if (['1', 'true', 'yes', 'on', 'enabled'].includes(normalized)) return true;
-    if (['0', 'false', 'no', 'off', 'disabled'].includes(normalized)) return false;
-    return fallback;
-};
+import { readBoolean } from './parseBooleanFlag';
 
 export const FEATURES = Object.freeze({
     shop: readBoolean(import.meta.env.VITE_SHOP_ENABLED, false),
