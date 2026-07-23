@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
-    "check": "npm run lint && npm run test:run && npm run build"
+    "check:migrations": "node scripts/check-migrations.mjs",
+    "check": "npm run check:migrations && npm run lint && npm run test:run && npm run build"
   },
   "dependencies": {
     "@capacitor-community/background-geolocation": "^1.2.26",
