@@ -53,10 +53,10 @@ export default function AdminZonesPage() {
     const archive = async zone => {
         const reason = prompt(`Desactivar la zona “${zone.name}”. Motivo:`, '');
         if (!reason?.trim()) return;
-        const { error } = await supabase.from('coverage_zones').update({ active: false }).eq('id', zone.id);
+        const { error } = await supabase.rpc('admin_archive_zone', { p_id: zone.id, p_reason: reason.trim() });
         if (error) return toast.error(error.message);
-        await supabase.from('admin_audit_log').insert({ action: 'zone.archive_request', entity_type: 'coverage_zones', entity_id: String(zone.id), reason: reason.trim() });
-        toast.success('Zona desactivada sin borrar su historial.'); load();
+        toast.success('Zona desactivada y auditada sin borrar su historial.');
+        load();
     };
 
     return (
