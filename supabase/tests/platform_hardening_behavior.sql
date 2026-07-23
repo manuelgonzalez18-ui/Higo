@@ -1,9 +1,9 @@
--- Transactional behavior tests for the platform hardening.
--- The fixed users and rides are rolled back at the end.
+-- Behavioral assertions for the platform hardening.
+-- This file runs only against the disposable local CI database.
 
-begin;
-
--- Test identities.
+-- ---------------------------------------------------------------------------
+-- Setup as the local database owner.
+-- ---------------------------------------------------------------------------
 insert into public.profiles(
     id, full_name, role, status, vehicle_type, vehicle_model,
     subscription_status, created_at, updated_at
@@ -45,16 +45,31 @@ where p.code = 'car-weekly'
       where dm.payment_reference = 'CI-ACTIVE-DRIVER'
   );
 
--- Exercise the compatibility triggers with the same table privileges an older
--- authenticated client would use. These grants are transaction-scoped because
--- the whole file is rolled back.
+do $$
+begin
+    if not exists (select 1 from pg_roles where rolname = 'higo_ci_authenticator') then
+        execute 'create role higo_ci_authenticator login password ''ci'' noinherit';
+    else
+        execute 'alter role higo_ci_authenticator login password ''ci'' noinherit';
+    end if;
+end;
+$$;
+
+grant authenticated to higo_ci_authenticator;
+grant usage on schema public to authenticated;
 grant select, insert, update on public.rides to authenticated;
+
+-- Connect as a non-privileged login that may assume the authenticated role.
+-- session_user is no longer postgres, so SQL-repair exemptions cannot bypass
+-- the production triggers under test.
+\setenv PGPASSWORD ci
+\connect postgres higo_ci_authenticator 127.0.0.1 54322
+set role authenticated;
+begin;
 
 -- ---------------------------------------------------------------------------
 -- Passenger context
 -- ---------------------------------------------------------------------------
-set session authorization authenticator;
-set role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000101', false);
 select set_config(
     'request.jwt.claims',
@@ -111,13 +126,12 @@ begin
 end;
 $$;
 
--- A repeated client_request_id must return the original ride and create only
--- one row. The stored price must never be below the passenger-visible floor.
+-- Repeated client_request_id: one row, same id and no price reduction below
+-- the value already shown to the passenger.
 do $$
 declare
     v_first jsonb;
     v_second jsonb;
-    v_ride_id bigint;
     v_count bigint;
     v_price numeric;
 begin
@@ -146,7 +160,6 @@ begin
         raise exception 'behavior_assertion_failed:idempotent_replay_not_reported';
     end if;
 
-    v_ride_id := (v_first->>'rideId')::bigint;
     select count(*), max(price)
     into v_count, v_price
     from public.rides
@@ -162,7 +175,6 @@ begin
 end;
 $$;
 
--- Create a second requested ride for the legacy direct-update guard test.
 select public.create_ride_request_v4(
     '00000000-0000-4000-8000-000000001003',
     'Higuerote center',
@@ -172,14 +184,9 @@ select public.create_ride_request_v4(
     null, null, null, null, null, null, 2.50
 );
 
-reset role;
-reset session authorization;
-
 -- ---------------------------------------------------------------------------
 -- Driver without membership
 -- ---------------------------------------------------------------------------
-set session authorization authenticator;
-set role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000102', false);
 select set_config(
     'request.jwt.claims',
@@ -187,7 +194,6 @@ select set_config(
     false
 );
 
--- New RPC path must reject acceptance without an active membership.
 do $$
 declare
     v_ride_id bigint;
@@ -208,7 +214,6 @@ begin
 end;
 $$;
 
--- Older APKs updating rides directly must hit the same membership guard.
 do $$
 declare
     v_ride_id bigint;
@@ -232,14 +237,9 @@ begin
 end;
 $$;
 
-reset role;
-reset session authorization;
-
 -- ---------------------------------------------------------------------------
 -- Active driver
 -- ---------------------------------------------------------------------------
-set session authorization authenticator;
-set role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000103', false);
 select set_config(
     'request.jwt.claims',
@@ -250,7 +250,6 @@ select set_config(
 do $$
 declare
     v_ride_id bigint;
-    v_result jsonb;
     v_status text;
     v_driver_id uuid;
 begin
@@ -258,7 +257,7 @@ begin
     from public.rides
     where client_request_id = '00000000-0000-4000-8000-000000001002';
 
-    v_result := public.driver_accept_ride_v2(v_ride_id);
+    perform public.driver_accept_ride_v2(v_ride_id);
 
     select status, driver_id
     into v_status, v_driver_id
@@ -270,7 +269,6 @@ begin
         raise exception 'behavior_assertion_failed:active_driver_accept_failed';
     end if;
 
-    -- Completing an accepted ride before starting it must remain impossible.
     begin
         perform public.driver_complete_ride_v2(v_ride_id);
         raise exception 'behavior_assertion_failed:completed_before_start_allowed';
@@ -287,9 +285,6 @@ begin
     end if;
 end;
 $$;
-
-reset role;
-reset session authorization;
 
 rollback;
 
