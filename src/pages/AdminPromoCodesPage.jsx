@@ -1,373 +1,122 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase, getUserProfile } from '../services/supabase';
 import AdminNav from '../components/AdminNav';
+import { supabase } from '../services/supabase';
+import { archivePromo, saveFundedPromo } from '../services/adminApi';
+import { toast } from '../components/Toast';
 
-const emptyForm = {
-    code: '',
-    description: '',
-    discount_type: 'percent',
-    discount_value: 10,
-    max_uses: '',
-    max_uses_per_user: 1,
-    min_ride_amount: 0,
-    expires_at: '',
-    active: true
+const EMPTY = {
+    code: '', description: '', discount_type: 'percent', discount_value: 10,
+    max_uses: '', max_uses_per_user: 1, min_ride_amount: 0, expires_at: '', active: true,
+    funding_source: 'higo', sponsor_name: '', budget_amount: '',
 };
 
-const AdminPromoCodesPage = () => {
-    const navigate = useNavigate();
-    const [authorized, setAuthorized] = useState(false);
-    const [loading, setLoading] = useState(true);
+const money = v => `$${Number(v || 0).toFixed(2)}`;
+
+export default function AdminPromoCodesPage() {
     const [promos, setPromos] = useState([]);
-    const [form, setForm] = useState(emptyForm);
-    const [editingId, setEditingId] = useState(null);
+    const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
-    const [message, setMessage] = useState(null);
+    const [editing, setEditing] = useState(null);
+    const [form, setForm] = useState(EMPTY);
 
-    useEffect(() => {
-        (async () => {
-            const profile = await getUserProfile();
-            if (!profile || profile.role !== 'admin') {
-                navigate('/');
-                return;
-            }
-            setAuthorized(true);
-            await fetchPromos();
-        })();
-    }, [navigate]);
-
-    const fetchPromos = async () => {
+    const load = async () => {
         setLoading(true);
-        const { data, error } = await supabase
-            .from('promo_codes')
-            .select('*')
-            .order('created_at', { ascending: false });
-        if (error) {
-            setMessage({ type: 'error', text: error.message });
-        } else {
-            setPromos(data || []);
-        }
+        const { data, error } = await supabase.from('promo_codes').select('*').is('archived_at', null).order('created_at', { ascending: false });
+        if (error) toast.error(error.message);
+        setPromos(data || []);
         setLoading(false);
     };
+    useEffect(() => { load(); }, []);
 
-    const openCreate = () => {
-        setForm(emptyForm);
-        setEditingId(null);
-        setShowModal(true);
-    };
-
-    const openEdit = (p) => {
-        setForm({
-            code: p.code,
-            description: p.description || '',
-            discount_type: p.discount_type,
-            discount_value: p.discount_value,
-            max_uses: p.max_uses ?? '',
-            max_uses_per_user: p.max_uses_per_user ?? 1,
-            min_ride_amount: p.min_ride_amount ?? 0,
-            expires_at: p.expires_at ? p.expires_at.split('T')[0] : '',
-            active: p.active
-        });
-        setEditingId(p.id);
+    const open = promo => {
+        setEditing(promo || null);
+        setForm(promo ? {
+            code: promo.code, description: promo.description || '', discount_type: promo.discount_type,
+            discount_value: promo.discount_value, max_uses: promo.max_uses ?? '', max_uses_per_user: promo.max_uses_per_user ?? 1,
+            min_ride_amount: promo.min_ride_amount ?? 0, expires_at: promo.expires_at?.slice(0,10) || '', active: promo.active,
+            funding_source: promo.funding_source || 'higo', sponsor_name: promo.sponsor_name || '', budget_amount: promo.budget_amount ?? '',
+        } : EMPTY);
         setShowModal(true);
     };
 
     const save = async () => {
-        if (!form.code.trim()) {
-            setMessage({ type: 'error', text: 'El código es obligatorio.' });
-            return;
-        }
-        const payload = {
-            code: form.code.trim().toUpperCase(),
-            description: form.description.trim() || null,
-            discount_type: form.discount_type,
-            discount_value: parseFloat(form.discount_value) || 0,
-            max_uses: form.max_uses === '' ? null : parseInt(form.max_uses, 10),
-            max_uses_per_user: parseInt(form.max_uses_per_user, 10) || 1,
-            min_ride_amount: parseFloat(form.min_ride_amount) || 0,
-            expires_at: form.expires_at || null,
-            active: !!form.active
-        };
-
-        const q = editingId
-            ? supabase.from('promo_codes').update(payload).eq('id', editingId)
-            : supabase.from('promo_codes').insert(payload);
-
-        const { error } = await q;
-        if (error) {
-            setMessage({ type: 'error', text: error.message });
-        } else {
-            setMessage({ type: 'success', text: editingId ? 'Código actualizado.' : 'Código creado.' });
-            setShowModal(false);
-            await fetchPromos();
-        }
+        if (!form.code.trim()) return toast.error('El código es obligatorio.');
+        if (!(Number(form.budget_amount) > 0)) return toast.error('Cada promoción debe tener un presupuesto mayor que cero.');
+        if (form.funding_source === 'sponsor' && !form.sponsor_name.trim()) return toast.error('Indicá el patrocinador.');
+        try {
+            await saveFundedPromo(editing?.id, {
+                ...form,
+                code: form.code.trim().toUpperCase(),
+                description: form.description.trim(),
+                discount_value: Number(form.discount_value),
+                max_uses: form.max_uses === '' ? '' : Number(form.max_uses),
+                max_uses_per_user: Number(form.max_uses_per_user || 1),
+                min_ride_amount: Number(form.min_ride_amount || 0),
+                budget_amount: Number(form.budget_amount),
+            });
+            toast.success(editing ? 'Promoción actualizada.' : 'Promoción creada con presupuesto y responsable.');
+            setShowModal(false); load();
+        } catch (err) { toast.error(err.message); }
     };
 
-    const toggleActive = async (p) => {
-        const { error } = await supabase.from('promo_codes').update({ active: !p.active }).eq('id', p.id);
-        if (error) setMessage({ type: 'error', text: error.message });
-        else fetchPromos();
+    const archive = async promo => {
+        const reason = prompt(`Archivar ${promo.code}. Motivo obligatorio:`, '');
+        if (!reason?.trim()) return;
+        try { await archivePromo(promo.id, reason); toast.success('Promoción archivada; el historial se conserva.'); load(); }
+        catch (err) { toast.error(err.message); }
     };
 
-    const remove = async (p) => {
-        if (!confirm(`¿Eliminar código "${p.code}"? Esto borrará el registro permanentemente.`)) return;
-        const { error } = await supabase.from('promo_codes').delete().eq('id', p.id);
-        if (error) setMessage({ type: 'error', text: error.message });
-        else {
-            setMessage({ type: 'success', text: 'Código eliminado.' });
-            fetchPromos();
-        }
+    const toggle = async promo => {
+        try {
+            await saveFundedPromo(promo.id, {
+                ...promo,
+                active: !promo.active,
+                expires_at: promo.expires_at?.slice(0,10) || '',
+                max_uses: promo.max_uses ?? '',
+                sponsor_name: promo.sponsor_name || '',
+                budget_amount: promo.budget_amount,
+            });
+            load();
+        } catch (err) { toast.error(err.message); }
     };
-
-    if (!authorized) {
-        return (
-            <div className="min-h-screen bg-[#0F1014] flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-        );
-    }
-
-    const fmtDiscount = (p) =>
-        p.discount_type === 'percent' ? `${p.discount_value}% off` : `$${p.discount_value} off`;
-
-    const fmtExpiry = (p) => p.expires_at ? new Date(p.expires_at).toLocaleDateString('es-VE') : 'Sin expiración';
-
-    const isExpired = (p) => p.expires_at && new Date(p.expires_at) < new Date();
 
     return (
-        <div className="min-h-screen bg-[#0F1014] p-4 md:p-8 font-sans text-white">
+        <div className="min-h-screen bg-[#0F1014] text-white p-4 md:p-8">
             <AdminNav />
-
-            <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-                <div className="flex items-center gap-4">
-                    <div className="bg-gradient-to-br from-violet-600 to-fuchsia-600 p-3 rounded-2xl shadow-lg shadow-violet-600/20">
-                        <span className="material-symbols-outlined text-white text-2xl">local_offer</span>
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-black tracking-tight text-white">Códigos Promocionales</h1>
-                        <p className="text-gray-400 text-sm font-medium">Descuentos aplicables a viajes</p>
-                    </div>
-                </div>
-                <button
-                    onClick={openCreate}
-                    className="bg-violet-600 hover:bg-violet-500 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:shadow-violet-600/30 transition-all active:scale-95"
-                >
-                    <span className="material-symbols-outlined">add</span>
-                    Nuevo Código
-                </button>
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
+                <div><h1 className="text-2xl font-black">Promociones financiadas</h1><p className="text-sm text-gray-400 mt-1">Todo descuento debe indicar quién lo financia y cuál es su presupuesto.</p></div>
+                <button onClick={() => open(null)} className="px-5 py-3 rounded-xl bg-violet-600 font-bold flex items-center gap-2"><span className="material-symbols-outlined">add</span>Nueva promoción</button>
             </div>
+            <div className="p-4 mb-6 rounded-xl bg-amber-500/10 border border-amber-500/25 text-sm text-amber-100/80">Higo no obtiene comisión de los viajes. Una promoción reduce lo que paga el pasajero y debe ser asumida por Higo, un patrocinador o una campaña acordada con drivers.</div>
 
-            {message && (
-                <div className={`mb-6 p-4 rounded-xl flex items-center gap-3 ${message.type === 'success' ? 'bg-green-500/10 border border-green-500/20 text-green-400' : 'bg-red-500/10 border border-red-500/20 text-red-400'}`}>
-                    <span className="material-symbols-outlined">{message.type === 'success' ? 'check_circle' : 'error'}</span>
-                    <span className="font-medium">{message.text}</span>
-                </div>
-            )}
+            {loading ? <div className="py-24 flex justify-center"><div className="w-8 h-8 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" /></div> : <div className="space-y-3">{promos.map(promo => {
+                const remaining = Math.max(0, Number(promo.budget_amount || 0) - Number(promo.spent_amount || 0));
+                return <article key={promo.id} className="bg-[#1A1F2E] border border-white/5 rounded-2xl p-4 md:p-5 grid lg:grid-cols-[1.2fr_1fr_1fr_auto] gap-4 items-center">
+                    <div><div className="flex gap-2 items-center"><span className="font-mono font-black text-violet-300 bg-violet-500/10 border border-violet-500/20 px-3 py-1.5 rounded-lg">{promo.code}</span><span className={`text-[10px] px-2 py-1 rounded-full ${promo.active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-gray-500/15 text-gray-400'}`}>{promo.active ? 'Activa' : 'Inactiva'}</span></div><p className="text-sm text-gray-400 mt-2">{promo.description || 'Sin descripción'}</p></div>
+                    <div><p className="text-xs text-gray-500 uppercase font-bold">Descuento</p><p className="font-black text-lg">{promo.discount_type === 'percent' ? `${promo.discount_value}%` : money(promo.discount_value)}</p><p className="text-[10px] text-gray-600">Usos: {promo.used_count || 0}{promo.max_uses ? ` / ${promo.max_uses}` : ''}</p></div>
+                    <div><p className="text-xs text-gray-500 uppercase font-bold">Financiamiento</p><p className="font-bold capitalize">{promo.funding_source?.replace('_',' ')}</p>{promo.sponsor_name && <p className="text-xs text-gray-400">{promo.sponsor_name}</p>}<p className="text-xs text-gray-500 mt-1">Presupuesto {money(promo.budget_amount)} · disponible {money(remaining)}</p></div>
+                    <div className="flex gap-2"><button onClick={() => toggle(promo)} className="px-3 py-2 rounded-lg bg-white/5 text-xs font-bold">{promo.active ? 'Pausar' : 'Activar'}</button><button onClick={() => open(promo)} className="w-9 h-9 rounded-lg bg-blue-500/10 text-blue-300"><span className="material-symbols-outlined text-lg">edit</span></button><button onClick={() => archive(promo)} className="w-9 h-9 rounded-lg bg-red-500/10 text-red-300"><span className="material-symbols-outlined text-lg">archive</span></button></div>
+                </article>;
+            })}{!promos.length && <div className="py-20 text-center rounded-2xl bg-[#1A1F2E] border border-dashed border-white/10 text-gray-500">No hay promociones activas o archivadas pendientes.</div>}</div>}
 
-            <div className="space-y-3">
-                {loading ? (
-                    <div className="flex justify-center py-20">
-                        <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin"></div>
-                    </div>
-                ) : promos.length === 0 ? (
-                    <div className="text-center py-20 bg-[#1A1F2E] rounded-2xl border border-dashed border-white/10">
-                        <span className="material-symbols-outlined text-gray-500 text-4xl">local_offer</span>
-                        <p className="text-gray-400 font-medium mt-2">No hay códigos promocionales aún.</p>
-                    </div>
-                ) : promos.map(p => (
-                    <div key={p.id} className="bg-[#1A1F2E] p-4 md:p-5 rounded-[20px] border border-white/5 flex flex-col md:flex-row gap-4 items-center relative overflow-hidden">
-                        <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${!p.active ? 'bg-gray-600' : isExpired(p) ? 'bg-amber-500' : 'bg-emerald-500'}`}></div>
-
-                        <div className="flex-1 pl-3 flex items-center gap-4">
-                            <div className="bg-[#0F1014] border border-violet-500/30 px-4 py-2 rounded-xl">
-                                <p className="font-mono font-black text-violet-400 text-lg tracking-wider">{p.code}</p>
-                            </div>
-                            <div>
-                                <p className="font-bold text-white">{fmtDiscount(p)}</p>
-                                <p className="text-xs text-gray-400">{p.description || '—'}</p>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-4 text-center md:text-left text-xs">
-                            <div>
-                                <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">Usos</p>
-                                <p className="font-mono text-gray-300">
-                                    {p.used_count}{p.max_uses != null ? ` / ${p.max_uses}` : ''}
-                                </p>
-                            </div>
-                            <div>
-                                <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">Por user</p>
-                                <p className="font-mono text-gray-300">{p.max_uses_per_user || 1}</p>
-                            </div>
-                            <div>
-                                <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">Vence</p>
-                                <p className="font-mono text-gray-300">{fmtExpiry(p)}</p>
-                            </div>
-                        </div>
-
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => toggleActive(p)}
-                                className={`px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1 ${p.active
-                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'
-                                    : 'bg-gray-600/10 text-gray-400 border border-gray-600/20 hover:bg-gray-600/20'}`}
-                                title={p.active ? 'Click para desactivar' : 'Click para activar'}
-                            >
-                                <span className="material-symbols-outlined text-[16px]">{p.active ? 'toggle_on' : 'toggle_off'}</span>
-                                {p.active ? 'Activo' : 'Inactivo'}
-                            </button>
-                            <button
-                                onClick={() => openEdit(p)}
-                                className="w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white"
-                                title="Editar"
-                            >
-                                <span className="material-symbols-outlined text-[18px]">edit</span>
-                            </button>
-                            <button
-                                onClick={() => remove(p)}
-                                className="w-9 h-9 rounded-lg bg-red-500/10 hover:bg-red-500/20 flex items-center justify-center text-red-400"
-                                title="Eliminar"
-                            >
-                                <span className="material-symbols-outlined text-[18px]">delete</span>
-                            </button>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {showModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
-                    <div className="bg-[#1A1F2E] w-full max-w-md rounded-[32px] shadow-2xl my-8 border border-white/10">
-                        <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#151925] rounded-t-[32px]">
-                            <h2 className="text-xl font-bold flex items-center gap-2 text-white">
-                                <span className="material-symbols-outlined text-violet-500">{editingId ? 'edit' : 'add_circle'}</span>
-                                {editingId ? 'Editar Código' : 'Nuevo Código'}
-                            </h2>
-                            <button onClick={() => setShowModal(false)} className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white">
-                                <span className="material-symbols-outlined text-sm">close</span>
-                            </button>
-                        </div>
-
-                        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
-                            <div>
-                                <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Código</label>
-                                <input
-                                    className="w-full p-3.5 bg-[#0F1014] border border-white/10 rounded-xl text-white font-mono uppercase tracking-wider outline-none focus:border-violet-500"
-                                    placeholder="HIGUEROTE10"
-                                    value={form.code}
-                                    onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
-                                    disabled={!!editingId}
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Descripción</label>
-                                <input
-                                    className="w-full p-3.5 bg-[#0F1014] border border-white/10 rounded-xl text-white outline-none focus:border-violet-500"
-                                    placeholder="10% off viajes en Higuerote"
-                                    value={form.description}
-                                    onChange={(e) => setForm({ ...form, description: e.target.value })}
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Tipo</label>
-                                    <select
-                                        className="w-full p-3.5 bg-[#0F1014] border border-white/10 rounded-xl text-white outline-none focus:border-violet-500"
-                                        value={form.discount_type}
-                                        onChange={(e) => setForm({ ...form, discount_type: e.target.value })}
-                                    >
-                                        <option value="percent">Porcentaje (%)</option>
-                                        <option value="fixed">Monto fijo ($)</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Valor</label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        min="0"
-                                        className="w-full p-3.5 bg-[#0F1014] border border-white/10 rounded-xl text-white font-mono outline-none focus:border-violet-500"
-                                        value={form.discount_value}
-                                        onChange={(e) => setForm({ ...form, discount_value: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Usos máx totales</label>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        placeholder="∞ ilimitado"
-                                        className="w-full p-3.5 bg-[#0F1014] border border-white/10 rounded-xl text-white font-mono outline-none focus:border-violet-500"
-                                        value={form.max_uses}
-                                        onChange={(e) => setForm({ ...form, max_uses: e.target.value })}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Por usuario</label>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        className="w-full p-3.5 bg-[#0F1014] border border-white/10 rounded-xl text-white font-mono outline-none focus:border-violet-500"
-                                        value={form.max_uses_per_user}
-                                        onChange={(e) => setForm({ ...form, max_uses_per_user: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Monto mín viaje</label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        min="0"
-                                        className="w-full p-3.5 bg-[#0F1014] border border-white/10 rounded-xl text-white font-mono outline-none focus:border-violet-500"
-                                        value={form.min_ride_amount}
-                                        onChange={(e) => setForm({ ...form, min_ride_amount: e.target.value })}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Vence el</label>
-                                    <input
-                                        type="date"
-                                        className="w-full p-3.5 bg-[#0F1014] border border-white/10 rounded-xl text-white font-mono outline-none focus:border-violet-500"
-                                        value={form.expires_at}
-                                        onChange={(e) => setForm({ ...form, expires_at: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-
-                            <label className="flex items-center gap-3 p-3 bg-[#0F1014] rounded-xl border border-white/10 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={form.active}
-                                    onChange={(e) => setForm({ ...form, active: e.target.checked })}
-                                    className="w-5 h-5 accent-violet-500"
-                                />
-                                <span className="text-sm font-medium text-white">Activo (disponible para usar)</span>
-                            </label>
-                        </div>
-
-                        <div className="p-6 border-t border-white/5 bg-[#151925] rounded-b-[32px]">
-                            <button
-                                onClick={save}
-                                className="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-violet-600/20 flex gap-2 justify-center items-center transition-all active:scale-[0.98]"
-                            >
-                                <span className="material-symbols-outlined">{editingId ? 'save' : 'check_circle'}</span>
-                                {editingId ? 'Guardar Cambios' : 'Crear Código'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {showModal && <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"><div className="w-full max-w-2xl bg-[#1A1F2E] border border-white/10 rounded-3xl my-8"><div className="flex justify-between items-center px-6 py-4 border-b border-white/5"><h2 className="font-black text-lg">{editing ? 'Editar promoción' : 'Nueva promoción'}</h2><button onClick={() => setShowModal(false)} className="w-9 h-9 rounded-full bg-white/5"><span className="material-symbols-outlined">close</span></button></div><div className="p-6 grid md:grid-cols-2 gap-4">
+                <Field label="Código"><input disabled={!!editing} value={form.code} onChange={e => setForm({...form, code:e.target.value.toUpperCase()})} className="input" placeholder="HIGUEROTE10" /></Field>
+                <Field label="Descripción"><input value={form.description} onChange={e => setForm({...form, description:e.target.value})} className="input" /></Field>
+                <Field label="Tipo de descuento"><select value={form.discount_type} onChange={e => setForm({...form, discount_type:e.target.value})} className="input"><option value="percent">Porcentaje</option><option value="fixed">Monto fijo</option></select></Field>
+                <Field label="Valor"><input type="number" min="0" step="0.01" value={form.discount_value} onChange={e => setForm({...form, discount_value:e.target.value})} className="input" /></Field>
+                <Field label="Fuente de financiamiento"><select value={form.funding_source} onChange={e => setForm({...form, funding_source:e.target.value})} className="input"><option value="higo">Higo</option><option value="sponsor">Patrocinador</option><option value="driver_campaign">Campaña con drivers</option></select></Field>
+                <Field label="Presupuesto máximo"><input type="number" min="0.01" step="0.01" value={form.budget_amount} onChange={e => setForm({...form, budget_amount:e.target.value})} className="input" /></Field>
+                {form.funding_source === 'sponsor' && <Field label="Patrocinador"><input value={form.sponsor_name} onChange={e => setForm({...form, sponsor_name:e.target.value})} className="input" /></Field>}
+                <Field label="Máximo de usos"><input type="number" min="1" value={form.max_uses} onChange={e => setForm({...form, max_uses:e.target.value})} className="input" placeholder="Sin límite" /></Field>
+                <Field label="Usos por usuario"><input type="number" min="1" value={form.max_uses_per_user} onChange={e => setForm({...form, max_uses_per_user:e.target.value})} className="input" /></Field>
+                <Field label="Monto mínimo del viaje"><input type="number" min="0" step="0.01" value={form.min_ride_amount} onChange={e => setForm({...form, min_ride_amount:e.target.value})} className="input" /></Field>
+                <Field label="Vencimiento"><input type="date" value={form.expires_at} onChange={e => setForm({...form, expires_at:e.target.value})} className="input" /></Field>
+                <label className="flex items-center gap-3 p-3 bg-[#0F1014] border border-white/10 rounded-xl"><input type="checkbox" checked={form.active} onChange={e => setForm({...form, active:e.target.checked})} /> Activar al guardar</label>
+                <div className="md:col-span-2"><button onClick={save} className="w-full py-3 rounded-xl bg-violet-600 font-bold">Guardar promoción financiada</button></div>
+            </div></div></div>}
+            <style>{`.input{width:100%;margin-top:.25rem;padding:.75rem;background:#0F1014;border:1px solid rgba(255,255,255,.1);border-radius:.75rem;outline:none}.input:focus{border-color:#8b5cf6}`}</style>
         </div>
     );
-};
+}
 
-export default AdminPromoCodesPage;
+const Field = ({ label, children }) => <label className="text-xs uppercase font-bold text-gray-500">{label}{children}</label>;
