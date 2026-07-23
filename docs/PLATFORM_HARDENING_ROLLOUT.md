@@ -35,6 +35,7 @@ Aplicar en staging, en este orden:
 9. `20260724105100_ride_offer_acceptance_guard.sql`
 10. `20260724106000_platform_event_analytics.sql`
 11. `20260724106100_platform_funnel_db_facts.sql`
+12. `20260724106200_platform_events_authenticated_only.sql`
 
 No aplicar estas migraciones directamente en producción antes de que el mismo
 SHA haya pasado Quality Gate, Vercel y staging.
