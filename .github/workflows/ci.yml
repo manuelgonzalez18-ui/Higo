@@ -1,22 +1,25 @@
-name: CI
-
-# Corre en cada Pull Request y en pushes a main: instala, buildea y corre
-# los tests. Antes NO existía ningún trigger `pull_request`, así que lint y
-# tests nunca se ejecutaban solos y una regresión podía mergearse a main
-# (evaluación profunda 2026-07-02, hallazgo 3.1).
+name: Quality Gate
 
 on:
   pull_request:
   push:
-    branches: [main]
+    branches:
+      - main
+      - agent/platform-hardening
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   build-test:
-    name: Build & Test
+    name: Build and test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,22 +28,35 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
+          cache: npm
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps --no-audit --no-fund
 
-      # Lint informativo: el repo arrastra ~116 errores pre-existentes de
-      # reglas estrictas de react-compiler. No bloquea el PR todavía; cuando
-      # se limpie el baseline, quitar `continue-on-error` para volverlo gate.
-      - name: Lint (no bloqueante)
+      # The repository still has a historical lint baseline. Keep the global
+      # report visible while making all new platform-hardening modules blocking.
+      - name: Full lint baseline report
         run: npm run lint
         continue-on-error: true
 
-      - name: Tests
+      - name: Strict lint for hardened modules
+        run: >-
+          npx eslint
+          src/config/features.js
+          src/config/features.test.js
+          src/services/membershipApi.js
+          src/services/rideApi.js
+          src/utils/ridePricing.js
+          src/utils/ridePricing.test.js
+          src/main.jsx
+
+      - name: Unit tests
         run: npm run test:run
 
-      # Verifica que el bundle compile. Sin secrets: las env VITE_* faltantes
-      # solo activan fallbacks en runtime, no rompen el build.
-      - name: Build
+      - name: Production build
+        env:
+          VITE_SHOP_ENABLED: 'false'
+          VITE_SERVER_SIDE_RIDE_PRICING: 'false'
+          VITE_SERVER_SIDE_RIDE_STATE: 'false'
+          VITE_UNIFIED_MEMBERSHIP_CHECKOUT: 'false'
         run: npm run build
