@@ -85,3 +85,37 @@ jobs:
           VITE_UNIFIED_MEMBERSHIP_CHECKOUT: 'false'
           VITE_DIRECTED_RIDE_OFFERS: 'false'
         run: npm run build
+
+  database-migrations:
+    name: Replay Supabase migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.101.0
+          github-token: ${{ github.token }}
+
+      - name: Start fresh local database and apply migrations
+        run: supabase db start
+
+      - name: Run post-deploy database assertions
+        env:
+          PGPASSWORD: postgres
+        run: >-
+          psql
+          --host 127.0.0.1
+          --port 54322
+          --username postgres
+          --dbname postgres
+          --set ON_ERROR_STOP=1
+          --file supabase/tests/platform_hardening_postdeploy.sql
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
