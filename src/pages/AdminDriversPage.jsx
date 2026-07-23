@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminNav from '../components/AdminNav';
+import { useAdminContext } from '../components/AdminGuard';
 import { supabase } from '../services/supabase';
 import {
     archiveDriver,
@@ -13,6 +14,20 @@ import {
 import { toast } from '../components/Toast';
 
 const PAGE_SIZE = 50;
+const EMPTY_DRIVER = {
+    full_name: '',
+    email: '',
+    password: '',
+    phone: '',
+    vehicle_type: 'standard',
+    vehicle_brand: '',
+    vehicle_model: '',
+    vehicle_color: '',
+    license_plate: '',
+    avatar_url: '',
+    payment_qr_url: '',
+};
+
 const STATES = [
     ['all', 'Todos'],
     ['active', 'Vigentes'],
@@ -37,6 +52,46 @@ const STATE_META = {
 const fmtDate = (value) => value ? new Date(value).toLocaleDateString('es-VE') : '—';
 const money = (value, currency = 'USD') => `${currency === 'USD' ? '$' : `${currency} `}${Number(value || 0).toFixed(2)}`;
 
+const processGoogleDriveLink = (url) => {
+    if (!url) return '';
+    if (url.includes('drive.google.com') && url.includes('/file/d/')) {
+        const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+        if (match?.[1]) return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+    }
+    return url;
+};
+
+const compressImage = (file, maxSize = 1024, quality = 0.85) => new Promise((resolve, reject) => {
+    if (!file || !file.type.startsWith('image/')) {
+        resolve(file);
+        return;
+    }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+        URL.revokeObjectURL(url);
+        const ratio = Math.min(maxSize / img.width, maxSize / img.height, 1);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.width * ratio));
+        canvas.height = Math.max(1, Math.round(img.height * ratio));
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+            if (!blob) {
+                reject(new Error('compression_failed'));
+                return;
+            }
+            const baseName = (file.name || 'avatar').replace(/\.[^.]+$/, '');
+            resolve(new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' }));
+        }, 'image/jpeg', quality);
+    };
+    img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('image_load_failed'));
+    };
+    img.src = url;
+});
+
 const Modal = ({ title, children, onClose, wide = false }) => (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
         <div className={`w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} bg-[#1A1F2E] border border-white/10 rounded-3xl my-8 overflow-hidden`}>
@@ -51,6 +106,8 @@ const Modal = ({ title, children, onClose, wide = false }) => (
 
 export default function AdminDriversPage() {
     const navigate = useNavigate();
+    const adminContext = useAdminContext();
+    const canCreateDriver = Boolean(adminContext?.permissions?.manage_drivers);
     const [drivers, setDrivers] = useState([]);
     const [plans, setPlans] = useState([]);
     const [query, setQuery] = useState('');
@@ -64,6 +121,9 @@ export default function AdminDriversPage() {
     const [docs, setDocs] = useState([]);
     const [docUrls, setDocUrls] = useState({});
     const [form, setForm] = useState({ planId: '', paymentMethod: 'pago_movil', reference: '', notes: '', amount: '' });
+    const [newDriver, setNewDriver] = useState(EMPTY_DRIVER);
+    const [avatarFile, setAvatarFile] = useState(null);
+    const [avatarPreview, setAvatarPreview] = useState('');
 
     const load = useCallback(async ({ append = false } = {}) => {
         append ? setLoadingMore(true) : setLoading(true);
@@ -71,9 +131,11 @@ export default function AdminDriversPage() {
             const rows = await listDrivers({ query, state, limit: PAGE_SIZE, offset: append ? drivers.length : 0 });
             setDrivers(prev => append ? [...prev, ...(rows || [])] : (rows || []));
             setHasMore((rows || []).length === PAGE_SIZE);
+            return rows || [];
         } catch (err) {
             toast.error(`No se pudieron cargar los drivers: ${err.message}`);
             if (!append) setDrivers([]);
+            return [];
         } finally {
             setLoading(false);
             setLoadingMore(false);
@@ -92,11 +154,15 @@ export default function AdminDriversPage() {
         return () => clearTimeout(timer);
     }, [query, state]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    useEffect(() => () => {
+        if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    }, [avatarPreview]);
+
     const selectedPlan = useMemo(() => plans.find(p => p.id === form.planId), [plans, form.planId]);
 
     const openMembership = (driver) => {
         const vehicle = String(driver.vehicle_type || '').toLowerCase();
-        const plan = plans.find(p => !p.vehicle_type || vehicle.includes(p.vehicle_type) || (p.vehicle_type === 'standard' && ['carro','car'].some(v => vehicle.includes(v)))) || plans[0];
+        const plan = plans.find(p => !p.vehicle_type || vehicle.includes(p.vehicle_type) || (p.vehicle_type === 'standard' && ['carro', 'car', 'standard'].some(v => vehicle.includes(v)))) || plans[0];
         setSelected(driver);
         setForm({ planId: plan?.id || '', paymentMethod: 'pago_movil', reference: '', notes: '', amount: plan?.amount ?? '' });
         setModal('membership');
@@ -119,7 +185,90 @@ export default function AdminDriversPage() {
             await load();
         } catch (err) {
             toast.error(err.message.includes('duplicate') ? 'La referencia de pago ya fue utilizada.' : err.message);
-        } finally { setBusy(false); }
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const registerDriver = async () => {
+        if (!newDriver.full_name.trim() || !newDriver.email.trim()) {
+            toast.error('Nombre y correo son obligatorios.');
+            return;
+        }
+        setBusy(true);
+        try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const accessToken = sessionData?.session?.access_token;
+            if (!accessToken) throw new Error('La sesión expiró. Iniciá sesión nuevamente.');
+
+            const body = new FormData();
+            Object.entries(newDriver).forEach(([key, value]) => {
+                body.append(key, key.endsWith('_url') ? processGoogleDriveLink(value || '') : (value || ''));
+            });
+            if (avatarFile) {
+                let prepared = avatarFile;
+                try {
+                    prepared = await compressImage(avatarFile);
+                } catch {
+                    prepared = avatarFile;
+                }
+                body.append('avatar_file', prepared, prepared.name);
+            }
+
+            const productionHosts = ['higoapp.com', 'www.higoapp.com'];
+            const endpoint = productionHosts.includes(window.location.hostname)
+                ? '/api/welcome-driver.php'
+                : 'https://higoapp.com/api/welcome-driver.php';
+
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${accessToken}` },
+                body,
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result.ok || !result.user_id) {
+                throw new Error(result.detail || result.error || `No se pudo crear el driver (HTTP ${response.status}).`);
+            }
+
+            const createdDriver = {
+                id: result.user_id,
+                full_name: newDriver.full_name.trim(),
+                email: newDriver.email.trim().toLowerCase(),
+                phone: newDriver.phone.trim(),
+                vehicle_type: newDriver.vehicle_type,
+                vehicle_brand: newDriver.vehicle_brand.trim(),
+                vehicle_model: newDriver.vehicle_model.trim(),
+                vehicle_color: newDriver.vehicle_color.trim(),
+                license_plate: newDriver.license_plate.trim(),
+                membership_state: 'no_membership',
+            };
+
+            try {
+                await setDriverException({
+                    driverId: result.user_id,
+                    action: 'suspend',
+                    reason: 'Alta administrativa pendiente de registrar membresía',
+                });
+            } catch (reconcileError) {
+                console.error('[AdminDrivers] initial membership reconciliation failed:', reconcileError);
+                throw new Error(`El conductor fue creado, pero no se pudo dejar pendiente de membresía: ${reconcileError.message}`);
+            }
+
+            toast.success(result.email_sent
+                ? 'Higo Driver creado. Correo de bienvenida enviado.'
+                : 'Higo Driver creado. El correo de bienvenida no pudo enviarse.');
+
+            setNewDriver(EMPTY_DRIVER);
+            setAvatarFile(null);
+            if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+            setAvatarPreview('');
+            await load();
+            openMembership(createdDriver);
+        } catch (err) {
+            toast.error(err.message || 'No se pudo registrar el Higo Driver.');
+        } finally {
+            setBusy(false);
+        }
     };
 
     const suspend = async (driver) => {
@@ -196,7 +345,10 @@ export default function AdminDriversPage() {
     };
 
     const openDocs = async (driver) => {
-        setSelected(driver); setModal('docs'); setDocs([]); setDocUrls({});
+        setSelected(driver);
+        setModal('docs');
+        setDocs([]);
+        setDocUrls({});
         const { data, error } = await supabase.from('driver_documents').select('*').eq('user_id', driver.id).order('submitted_at', { ascending: false });
         if (error) return toast.error(error.message);
         setDocs(data || []);
@@ -223,9 +375,17 @@ export default function AdminDriversPage() {
             <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4 mb-6">
                 <div>
                     <h1 className="text-2xl font-black">Drivers y membresías</h1>
-                    <p className="text-sm text-gray-400 mt-1">La membresía vigente es la fuente de verdad. Las excepciones requieren motivo y quedan auditadas.</p>
+                    <p className="text-sm text-gray-400 mt-1">Creá la cuenta del Higo Driver y registrá su membresía como operaciones separadas y auditables.</p>
                 </div>
-                <div className="text-xs text-gray-500 bg-white/5 rounded-xl px-4 py-3">Los drivers sin membresía no se consideran activos.</div>
+                <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                    {canCreateDriver && (
+                        <button onClick={() => setModal('register')} className="px-5 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 font-bold flex items-center justify-center gap-2">
+                            <span className="material-symbols-outlined">person_add</span>
+                            Registrar Higo Driver
+                        </button>
+                    )}
+                    <div className="text-xs text-gray-500 bg-white/5 rounded-xl px-4 py-3">Sin membresía vigente, el driver no puede operar.</div>
+                </div>
             </div>
 
             <div className="bg-[#1A1F2E] border border-white/5 rounded-2xl p-4 mb-5">
@@ -268,7 +428,7 @@ export default function AdminDriversPage() {
                                     <p className="text-[10px] text-gray-600 truncate">Ref: {driver.payment_reference || '—'}</p>
                                 </div>
                                 <div className="flex flex-wrap gap-2 xl:justify-end">
-                                    <button disabled={busy || driver.membership_state === 'archived'} onClick={() => openMembership(driver)} className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold">Registrar pago</button>
+                                    <button disabled={busy || driver.membership_state === 'archived'} onClick={() => openMembership(driver)} className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold">Registrar membresía</button>
                                     <button onClick={() => openDocs(driver)} className="w-9 h-9 rounded-lg bg-blue-500/10 text-blue-400" title="Documentos"><span className="material-symbols-outlined text-lg">badge</span></button>
                                     <button onClick={() => openSupport(driver)} className="w-9 h-9 rounded-lg bg-fuchsia-500/10 text-fuchsia-400" title="Soporte"><span className="material-symbols-outlined text-lg">chat</span></button>
                                     <details className="relative">
@@ -288,6 +448,31 @@ export default function AdminDriversPage() {
                     {!drivers.length && <div className="py-20 text-center bg-[#1A1F2E] border border-dashed border-white/10 rounded-2xl text-gray-400">No hay drivers para este filtro.</div>}
                     {hasMore && <div className="text-center pt-4"><button disabled={loadingMore} onClick={() => load({ append: true })} className="px-6 py-3 rounded-full bg-[#1A1F2E] border border-white/10 text-sm font-bold">{loadingMore ? 'Cargando…' : 'Cargar más'}</button></div>}
                 </div>
+            )}
+
+            {modal === 'register' && canCreateDriver && (
+                <Modal wide title="Registrar nuevo Higo Driver" onClose={() => setModal(null)}>
+                    <div className="p-6 space-y-5">
+                        <div className="rounded-xl bg-violet-500/10 border border-violet-500/20 p-4 text-sm text-violet-200">
+                            Primero se crea la cuenta. Al finalizar se abrirá el registro de membresía para seleccionar el plan y guardar el pago.
+                        </div>
+                        <div className="grid md:grid-cols-2 gap-4">
+                            <label className="text-xs font-bold text-gray-400">Nombre completo *<input value={newDriver.full_name} onChange={e => setNewDriver(v => ({ ...v, full_name: e.target.value }))} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl text-white" /></label>
+                            <label className="text-xs font-bold text-gray-400">Correo *<input type="email" value={newDriver.email} onChange={e => setNewDriver(v => ({ ...v, email: e.target.value }))} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl text-white" /></label>
+                            <label className="text-xs font-bold text-gray-400">Teléfono<input value={newDriver.phone} onChange={e => setNewDriver(v => ({ ...v, phone: e.target.value }))} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl text-white" /></label>
+                            <label className="text-xs font-bold text-gray-400">Contraseña inicial<input type="password" value={newDriver.password} onChange={e => setNewDriver(v => ({ ...v, password: e.target.value }))} placeholder="Vacía = se genera automáticamente" className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl text-white" /></label>
+                            <label className="text-xs font-bold text-gray-400">Tipo de vehículo<select value={newDriver.vehicle_type} onChange={e => setNewDriver(v => ({ ...v, vehicle_type: e.target.value }))} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl text-white"><option value="moto">Moto</option><option value="standard">Carro</option><option value="van">Camioneta</option></select></label>
+                            <label className="text-xs font-bold text-gray-400">Placa<input value={newDriver.license_plate} onChange={e => setNewDriver(v => ({ ...v, license_plate: e.target.value.toUpperCase() }))} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl text-white" /></label>
+                            <label className="text-xs font-bold text-gray-400">Marca<input value={newDriver.vehicle_brand} onChange={e => setNewDriver(v => ({ ...v, vehicle_brand: e.target.value }))} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl text-white" /></label>
+                            <label className="text-xs font-bold text-gray-400">Modelo<input value={newDriver.vehicle_model} onChange={e => setNewDriver(v => ({ ...v, vehicle_model: e.target.value }))} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl text-white" /></label>
+                            <label className="text-xs font-bold text-gray-400">Color<input value={newDriver.vehicle_color} onChange={e => setNewDriver(v => ({ ...v, vehicle_color: e.target.value }))} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl text-white" /></label>
+                            <label className="text-xs font-bold text-gray-400">Foto del driver<input type="file" accept="image/*" onChange={e => { const file = e.target.files?.[0] || null; if (avatarPreview) URL.revokeObjectURL(avatarPreview); setAvatarFile(file); setAvatarPreview(file ? URL.createObjectURL(file) : ''); }} className="mt-1 block w-full text-xs text-gray-400" /></label>
+                        </div>
+                        {avatarPreview && <img src={avatarPreview} alt="Vista previa" className="w-24 h-24 rounded-2xl object-cover border border-white/10" />}
+                        <p className="text-xs text-gray-500">Los documentos se pueden revisar y aprobar después desde el botón de credencial en la ficha del driver.</p>
+                        <button disabled={busy} onClick={registerDriver} className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 font-bold disabled:opacity-50">{busy ? 'Creando cuenta…' : 'Crear cuenta y continuar con membresía'}</button>
+                    </div>
+                </Modal>
             )}
 
             {modal === 'membership' && selected && <Modal title={`Registrar membresía · ${selected.full_name}`} onClose={() => setModal(null)}>
