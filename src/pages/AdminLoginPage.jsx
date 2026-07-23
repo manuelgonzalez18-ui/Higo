@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase, getUserProfile } from '../services/supabase';
+import { supabase, getUserProfile, withNetworkRetry } from '../services/supabase';
 
 // Login dedicado para el portal administrativo. Reusa supabase.auth pero
 // restringe el acceso a cuentas con role='admin' en la tabla profiles.
@@ -48,17 +48,27 @@ const AdminLoginPage = () => {
                 return;
             }
 
-            // Enforce single session, igual que el AuthPage público.
+            // Enforce single session, igual que el AuthPage público:
+            // escritura TEMPRANA de session_id + ventana de gracia para
+            // evitar el falso logout por la carrera con el watcher de App.jsx
+            // (ver AuthPage.handleAuth para el detalle de la race).
             const newSessionId = self.crypto.randomUUID();
-            const { error: sessionError } = await supabase
-                .from('profiles')
-                .update({ current_session_id: newSessionId })
-                .eq('id', user.id);
-
-            if (sessionError) {
-                console.error('[AdminLoginPage] Error updating session_id in profiles:', sessionError);
-            }
             localStorage.setItem('session_id', newSessionId);
+            localStorage.setItem('login_grace_until', String(Date.now() + 20000));
+
+            try {
+                const { error: sessionError } = await withNetworkRetry(() =>
+                    supabase
+                        .from('profiles')
+                        .update({ current_session_id: newSessionId })
+                        .eq('id', user.id),
+                );
+                if (sessionError) {
+                    console.error('[AdminLoginPage] Error updating session_id in profiles:', sessionError);
+                }
+            } catch (sessErr) {
+                console.warn('[AdminLoginPage] No se pudo persistir session_id ahora:', sessErr);
+            }
 
             navigate('/admin/dashboard', { replace: true });
         } catch (err) {

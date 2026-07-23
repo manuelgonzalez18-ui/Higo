@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { supabase } from '../services/supabase';
+import { supabase, withNetworkRetry } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
 import LegalConsentText from '../components/LegalConsentText';
 import { friendlyError } from '../utils/friendlyError';
@@ -110,42 +110,79 @@ const AuthPage = () => {
                 );
                 if (error) throw error;
 
-
-                // Check Role & Enforce Single Session
-                const { data: profile } = await supabase
-                    .from('profiles')
-                    .select('role')
-                    .eq('id', user.id)
-                    .single();
-
-                // Enforce Single Session for all roles
+                // ── Enforce Single Session — ESCRITURA TEMPRANA ──
+                // Escribimos session_id ANTES de las llamadas secundarias.
+                // Motivo (race del login intermitente, 2026-07-23): apenas
+                // signInWithPassword resuelve, supabase-js emite SIGNED_IN y
+                // App.jsx corre checkSession casi de inmediato. Si todavía no
+                // escribimos session_id, el watcher ve local=null y
+                // db=<sesión de OTRO equipo> y expulsa con "Sesión no
+                // autorizada" — falso logout en el primer login desde un
+                // dispositivo nuevo. Escribir temprano + una ventana de
+                // gracia cierra la carrera.
                 const newSessionId = self.crypto.randomUUID();
-                const { error: sessionError } = await supabase
-                    .from('profiles')
-                    .update({ current_session_id: newSessionId })
-                    .eq('id', user.id);
+                localStorage.setItem('session_id', newSessionId);
+                // Ventana de gracia: durante estos segundos el watcher NO
+                // expulsa aunque la DB aún no refleje el nuevo session_id
+                // (la escritura remota puede tardar/reintentar en redes
+                // lentas). App.jsx lee esta marca.
+                localStorage.setItem('login_grace_until', String(Date.now() + 20000));
 
-                if (sessionError) {
-                    console.error('[AuthPage] Error updating session_id in profiles:', sessionError);
+                // A partir de acá el usuario YA está autenticado. Ninguna
+                // llamada secundaria debe abortar el login: si falla el fetch
+                // de rol, el update de sesión o el referral por un blip de
+                // red, degradamos con defaults y seguimos (antes, un solo
+                // "Failed to fetch" en esta cadena tumbaba TODO el login).
+                let role = 'passenger';
+                try {
+                    const { data: profile } = await withNetworkRetry(() =>
+                        supabase
+                            .from('profiles')
+                            .select('role')
+                            .eq('id', user.id)
+                            .single(),
+                    );
+                    if (profile?.role) role = profile.role;
+                } catch (roleErr) {
+                    console.warn('[AuthPage] No se pudo leer el rol; se usa passenger por defecto:', roleErr);
                 }
 
-                localStorage.setItem('session_id', newSessionId);
+                try {
+                    const { error: sessionError } = await withNetworkRetry(() =>
+                        supabase
+                            .from('profiles')
+                            .update({ current_session_id: newSessionId })
+                            .eq('id', user.id),
+                    );
+                    if (sessionError) {
+                        console.error('[AuthPage] Error updating session_id in profiles:', sessionError);
+                    }
+                } catch (sessErr) {
+                    // La DB no quedó con el session_id nuevo; el watcher lo
+                    // reconciliará (si db estaba null lo setea; si había uno
+                    // viejo, la ventana de gracia da tiempo a un reintento).
+                    console.warn('[AuthPage] No se pudo persistir session_id ahora:', sessErr);
+                }
 
                 // Si quedó un referral pendiente del signup, registrarlo ahora.
                 // El código viene wrapeado con TTL — si pasó más de 24h se
                 // descarta limpio (caso: usuario abandona, vuelve semanas
                 // después por otro motivo, no debería arrastrar un referral
                 // viejo de cuando se anotó).
-                const pendingRef = readPendingReferral();
-                if (pendingRef) {
-                    await supabase.rpc('register_referral', {
-                        p_code: pendingRef,
-                        p_referred_id: user.id
-                    });
-                    localStorage.removeItem('pending_referral_code');
+                try {
+                    const pendingRef = readPendingReferral();
+                    if (pendingRef) {
+                        await supabase.rpc('register_referral', {
+                            p_code: pendingRef,
+                            p_referred_id: user.id
+                        });
+                        localStorage.removeItem('pending_referral_code');
+                    }
+                } catch (refErr) {
+                    console.warn('[AuthPage] register_referral falló (no bloquea el login):', refErr);
                 }
 
-                if (profile?.role === 'driver') {
+                if (role === 'driver') {
                     navigate('/driver');
                 } else {
                     navigate('/'); // Default to passenger
