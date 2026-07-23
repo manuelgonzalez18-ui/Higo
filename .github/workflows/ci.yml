@@ -50,6 +50,8 @@ jobs:
           scripts/check-migrations.mjs
           tests/featureFlags.test.mjs
           tests/ridePricing.test.mjs
+          src/components/AdminGuard.jsx
+          src/components/AdminNav.jsx
           src/config/features.js
           src/config/parseBooleanFlag.js
           src/hooks/useBackgroundLocation.js
@@ -180,17 +182,49 @@ jobs:
           --file supabase/tests/platform_hardening_postdeploy.sql
 
       - name: Run behavioral database assertions
+        id: behavior_tests
         if: steps.migration_start.outputs.exit_code == '0'
+        continue-on-error: true
         env:
           PGPASSWORD: postgres
-        run: >-
-          psql
-          --host 127.0.0.1
-          --port 54322
-          --username postgres
-          --dbname postgres
-          --set ON_ERROR_STOP=1
-          --file supabase/tests/platform_hardening_behavior.sql
+        shell: bash
+        run: |
+          set +e
+          psql \
+            --host 127.0.0.1 \
+            --port 54322 \
+            --username postgres \
+            --dbname postgres \
+            --set ON_ERROR_STOP=1 \
+            --file supabase/tests/platform_hardening_behavior.sql \
+            > /tmp/platform-behavior.log 2>&1
+          status=$?
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          tail -n 100 /tmp/platform-behavior.log
+          exit 0
+
+      - name: Publish behavioral failure on PR
+        if: steps.behavior_tests.outputs.exit_code != '0' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          {
+            echo '<!-- higo-behavior-test-failure -->'
+            echo '### Platform behavior assertions failed'
+            echo
+            echo 'The migration replay succeeded, but an end-to-end database rule did not. Last log lines:'
+            echo
+            echo '```text'
+            tail -n 90 /tmp/platform-behavior.log
+            echo '```'
+          } > /tmp/behavior-comment.md
+          gh pr comment "$PR_NUMBER" --body-file /tmp/behavior-comment.md
+
+      - name: Stop when behavioral assertions failed
+        if: steps.behavior_tests.outputs.exit_code != '0'
+        run: exit 1
 
       - name: Stop local Supabase
         if: always()
