@@ -315,7 +315,9 @@ begin
 end;
 $$;
 
-create or replace function public.admin_business_analytics(p_days integer default 30)
+create or replace function public.admin_business_analytics(
+    p_days integer default 30
+)
 returns jsonb
 language plpgsql
 stable
@@ -324,57 +326,136 @@ set search_path = public
 as $$
 declare
     v_days integer := greatest(7, least(coalesce(p_days, 30), 365));
-    v_since timestamptz := date_trunc('day', now()) - (greatest(7, least(coalesce(p_days,30),365)) - 1) * interval '1 day';
+    v_since timestamptz;
     v_revenue numeric := 0;
-    v_payers integer := 0;
-    v_payments integer := 0;
-    v_renewing integer := 0;
+    v_payers bigint := 0;
+    v_payments bigint := 0;
+    v_renewing bigint := 0;
+    v_membership_daily jsonb := '[]'::jsonb;
+    v_trip_daily jsonb := '[]'::jsonb;
 begin
-    perform public.higo_assert_admin('view_analytics');
-    select coalesce(sum(amount),0), count(*), count(distinct driver_id)
-      into v_revenue, v_payments, v_payers
-      from public.driver_memberships
-     where voided_at is null and paid_at >= v_since;
+    v_since := date_trunc('day', now()) - (v_days - 1) * interval '1 day';
 
-    select count(*) into v_renewing
+    perform public.higo_assert_admin('view_analytics');
+
+    select
+        coalesce(sum(amount), 0),
+        count(*),
+        count(distinct driver_id)
+    into
+        v_revenue,
+        v_payments,
+        v_payers
+    from public.driver_memberships
+    where voided_at is null
+      and paid_at >= v_since;
+
+    select count(*)
+    into v_renewing
     from (
         select driver_id
         from public.driver_memberships
-        where voided_at is null and paid_at >= v_since
+        where voided_at is null
+          and paid_at >= v_since
         group by driver_id
         having count(*) > 1
-    ) x;
+    ) as renewing_drivers;
+
+    select coalesce(
+        jsonb_agg(
+            jsonb_build_object(
+                'day', gs.bucket_day::date,
+                'revenue', coalesce(md.revenue, 0),
+                'payments', coalesce(md.payments, 0)
+            )
+            order by gs.bucket_day
+        ),
+        '[]'::jsonb
+    )
+    into v_membership_daily
+    from generate_series(
+        v_since,
+        date_trunc('day', now()),
+        interval '1 day'
+    ) as gs(bucket_day)
+    left join (
+        select
+            date_trunc('day', paid_at) as bucket_day,
+            sum(amount) as revenue,
+            count(*) as payments
+        from public.driver_memberships
+        where voided_at is null
+          and paid_at >= v_since
+        group by date_trunc('day', paid_at)
+    ) as md
+        on md.bucket_day = gs.bucket_day;
+
+    select coalesce(
+        jsonb_agg(
+            jsonb_build_object(
+                'day', gs.bucket_day::date,
+                'volume', coalesce(td.volume, 0),
+                'rides', coalesce(td.rides, 0)
+            )
+            order by gs.bucket_day
+        ),
+        '[]'::jsonb
+    )
+    into v_trip_daily
+    from generate_series(
+        v_since,
+        date_trunc('day', now()),
+        interval '1 day'
+    ) as gs(bucket_day)
+    left join (
+        select
+            date_trunc('day', created_at) as bucket_day,
+            sum(
+                case
+                    when payment_confirmed_at is not null then price
+                    else 0
+                end
+            ) as volume,
+            count(*) as rides
+        from public.rides
+        where created_at >= v_since
+        group by date_trunc('day', created_at)
+    ) as td
+        on td.bucket_day = gs.bucket_day;
 
     return jsonb_build_object(
         'days', v_days,
         'membershipRevenue', v_revenue,
         'payments', v_payments,
         'payingDrivers', v_payers,
-        'averageRevenuePerDriver', case when v_payers > 0 then round(v_revenue / v_payers, 2) else 0 end,
-        'renewalRate', case when v_payers > 0 then round((v_renewing::numeric / v_payers::numeric) * 100, 1) else 0 end,
-        'activeMemberships', (select count(*) from public.admin_driver_membership_status where membership_state in ('active','expiring_soon','grace_period')),
-        'tripVolume', coalesce((select sum(price) from public.rides where created_at >= v_since and payment_confirmed_at is not null),0),
-        'rides', (select count(*) from public.rides where created_at >= v_since),
-        'membershipDaily', (
-            select coalesce(jsonb_agg(jsonb_build_object('day', d::date, 'revenue', coalesce(x.revenue,0), 'payments', coalesce(x.payments,0)) order by d), '[]'::jsonb)
-            from generate_series(v_since, date_trunc('day',now()), interval '1 day') d
-            left join (
-                select date_trunc('day', paid_at) day, sum(amount) revenue, count(*) payments
-                from public.driver_memberships
-                where voided_at is null and paid_at >= v_since
-                group by 1
-            ) x on x.day = d
-        ),
-        'tripDaily', (
-            select coalesce(jsonb_agg(jsonb_build_object('day', d::date, 'volume', coalesce(x.volume,0), 'rides', coalesce(x.rides,0)) order by d), '[]'::jsonb)
-            from generate_series(v_since, date_trunc('day',now()), interval '1 day') d
-            left join (
-                select date_trunc('day', created_at) day, sum(case when payment_confirmed_at is not null then price else 0 end) volume, count(*) rides
+        'averageRevenuePerDriver',
+            case when v_payers > 0 then round(v_revenue / v_payers, 2) else 0 end,
+        'renewalRate',
+            case when v_payers > 0 then round((v_renewing::numeric / v_payers::numeric) * 100, 1) else 0 end,
+        'activeMemberships',
+            (
+                select count(*)
+                from public.admin_driver_membership_status
+                where membership_state in ('active','expiring_soon','grace_period')
+            ),
+        'tripVolume',
+            coalesce(
+                (
+                    select sum(price)
+                    from public.rides
+                    where created_at >= v_since
+                      and payment_confirmed_at is not null
+                ),
+                0
+            ),
+        'rides',
+            (
+                select count(*)
                 from public.rides
                 where created_at >= v_since
-                group by 1
-            ) x on x.day = d
-        ),
+            ),
+        'membershipDaily', v_membership_daily,
+        'tripDaily', v_trip_daily,
         'generatedAt', now()
     );
 end;
