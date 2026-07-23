@@ -46,8 +46,10 @@ jobs:
         run: >-
           npx eslint
           scripts/check-migrations.mjs
+          tests/featureFlags.test.mjs
+          tests/ridePricing.test.mjs
           src/config/features.js
-          src/config/features.test.js
+          src/config/parseBooleanFlag.js
           src/services/adminApi.js
           src/services/analytics.js
           src/services/banesco.js
@@ -55,7 +57,6 @@ jobs:
           src/services/rideApi.js
           src/utils/apiUrl.js
           src/utils/ridePricing.js
-          src/utils/ridePricing.test.js
           src/main.jsx
           vite.config.js
 
@@ -67,10 +68,10 @@ jobs:
           php -l public/api/banesco-validate-v2.php
 
       - name: Test feature flags
-        run: npx vitest run src/config/features.test.js --reporter=verbose
+        run: node --test tests/featureFlags.test.mjs
 
       - name: Test ride pricing
-        run: npx vitest run src/utils/ridePricing.test.js --reporter=verbose
+        run: node --test tests/ridePricing.test.mjs
 
       - name: Production build
         env:
