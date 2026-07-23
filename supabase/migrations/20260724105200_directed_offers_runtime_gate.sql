@@ -143,8 +143,10 @@ begin
 end;
 $$;
 
--- Older and newer clients are both guarded, but offer ownership is required
--- only after the runtime switch is explicitly enabled.
+-- Older and newer clients are both guarded. Once the runtime switch is on, a
+-- driver may accept only a currently active offer addressed to that driver.
+-- Rides without offers remain visible to passengers/admins for redistribution,
+-- but never fall back to global driver acceptance.
 create or replace function public.higo_guard_ride_transition()
 returns trigger
 language plpgsql
@@ -180,7 +182,6 @@ begin
             and old.driver_id is null
             and (
                 not v_directed
-                or not public.higo_has_active_ride_offers(old.id)
                 or public.higo_driver_has_active_offer(old.id, v_actor)
             );
     elsif old.status in ('requested', 'accepted') and new.status = 'cancelled' then
@@ -218,8 +219,8 @@ end;
 $$;
 
 -- Realtime and direct SELECTs are narrowed only while directed dispatch is on.
--- Drivers without a matching offer cannot see a requested ride; passengers,
--- assigned parties and admins retain their existing visibility.
+-- Drivers see requested rides exclusively through their own active offers;
+-- passengers, assigned parties and admins retain their existing visibility.
 drop policy if exists rides_directed_offers_restrictive on public.rides;
 create policy rides_directed_offers_restrictive
 on public.rides
@@ -233,7 +234,6 @@ using (
         where p.id = auth.uid() and p.role = 'driver'
     )
     or rides.status <> 'requested'
-    or not public.higo_has_active_ride_offers(rides.id)
     or public.higo_driver_has_active_offer(rides.id, auth.uid())
 );
 
