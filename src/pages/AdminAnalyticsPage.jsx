@@ -1,333 +1,75 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase, getUserProfile } from '../services/supabase';
+import React, { useEffect, useMemo, useState } from 'react';
 import AdminNav from '../components/AdminNav';
+import { getAdminAnalytics } from '../services/adminApi';
 
-// Barra simple con porcentaje relativo al máximo del dataset
-const Bar = ({ value, max, color = 'bg-blue-500', label, sub }) => {
-    const pct = max > 0 ? Math.round((value / max) * 100) : 0;
-    return (
-        <div className="flex items-center gap-3">
-            <div className="w-16 text-right shrink-0">
-                <p className="text-[10px] text-gray-500 truncate">{label}</p>
-            </div>
-            <div className="flex-1 bg-[#0F1014] rounded-full h-6 overflow-hidden">
-                <div className={`h-full ${color} rounded-full flex items-center px-2 transition-all duration-500`} style={{ width: `${Math.max(pct, 2)}%` }}>
-                    <span className="text-[10px] font-bold text-white/80 whitespace-nowrap">{sub}</span>
-                </div>
-            </div>
-        </div>
-    );
+const money = (v) => `$${Number(v || 0).toFixed(2)}`;
+const fmtDay = (value) => {
+    const date = new Date(`${value}T00:00:00`);
+    return date.toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit' });
 };
 
-const KpiTile = ({ label, value, icon, accent }) => (
-    <div className="bg-[#1A1F2E] rounded-2xl border border-white/5 p-4 flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${accent}`}>
-            <span className="material-symbols-outlined text-white text-xl">{icon}</span>
-        </div>
-        <div>
-            <p className="text-xs text-gray-400">{label}</p>
-            <p className="text-xl font-black text-white">{value}</p>
-        </div>
+const Card = ({ label, value, note, icon, tone }) => (
+    <div className="bg-[#1A1F2E] border border-white/5 rounded-2xl p-5">
+        <div className="flex items-center gap-3 mb-3"><div className={`w-10 h-10 rounded-xl flex items-center justify-center ${tone}`}><span className="material-symbols-outlined">{icon}</span></div><p className="text-sm text-gray-400">{label}</p></div>
+        <p className="text-2xl font-black">{value}</p>{note && <p className="text-xs text-gray-500 mt-2">{note}</p>}
     </div>
 );
 
-const AdminAnalyticsPage = () => {
-    const navigate = useNavigate();
-    const [authorized, setAuthorized] = useState(false);
-    const [loading, setLoading] = useState(true);
-    const [range, setRange] = useState(30); // días
-    const [dailyRides, setDailyRides] = useState([]);
-    const [weeklyUsers, setWeeklyUsers] = useState([]);
-    const [kpis, setKpis] = useState({ totalRides: 0, totalRevenue: 0, retentionPct: 0, activeDrivers: 0 });
-    const [deliveryStats, setDeliveryStats] = useState(null);
-
-    useEffect(() => {
-        (async () => {
-            const profile = await getUserProfile();
-            if (!profile || profile.role !== 'admin') { navigate('/'); return; }
-            setAuthorized(true);
-        })();
-    }, [navigate]);
-
-    useEffect(() => {
-        if (!authorized) return;
-        loadAnalytics();
-    }, [authorized, range]);
-
-    const loadAnalytics = async () => {
-        setLoading(true);
-        const since = new Date(Date.now() - range * 86400e3).toISOString();
-
-        const [ridesRes, usersRes, activeDriversRes, allRidesForRetention] = await Promise.all([
-            // Todos los viajes del periodo para agrupar por día en JS
-            supabase.from('rides').select('created_at, price, payment_confirmed_at').gte('created_at', since),
-            // Usuarios pasajeros del periodo
-            supabase.from('profiles').select('created_at').eq('role', 'passenger').gte('created_at', since),
-            // Conductores activos
-            supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'driver').eq('subscription_status', 'active'),
-            // Para retención: cuántos pasajeros tienen más de 1 viaje
-            supabase.from('rides').select('user_id'),
-        ]);
-
-        // Agrupar viajes por día
-        const byDay = {};
-        for (const r of ridesRes.data || []) {
-            const day = r.created_at?.slice(0, 10);
-            if (!day) continue;
-            if (!byDay[day]) byDay[day] = { trips: 0, revenue: 0 };
-            byDay[day].trips++;
-            if (r.payment_confirmed_at) byDay[day].revenue += Number(r.price || 0);
-        }
-        // Llenar días vacíos en el rango
-        const daysList = [];
-        for (let i = range - 1; i >= 0; i--) {
-            const d = new Date(Date.now() - i * 86400e3).toISOString().slice(0, 10);
-            daysList.push({ day: d, trips: byDay[d]?.trips || 0, revenue: byDay[d]?.revenue || 0 });
-        }
-        setDailyRides(daysList);
-
-        // Agrupar usuarios nuevos por semana
-        const byWeek = {};
-        for (const u of usersRes.data || []) {
-            const d = new Date(u.created_at);
-            // Lunes de la semana
-            const monday = new Date(d);
-            monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-            const key = monday.toISOString().slice(0, 10);
-            byWeek[key] = (byWeek[key] || 0) + 1;
-        }
-        const weeksList = Object.entries(byWeek)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .slice(-8)
-            .map(([week, count]) => ({ week, count }));
-        setWeeklyUsers(weeksList);
-
-        // KPIs globales
-        const totalRides = (ridesRes.data || []).length;
-        const totalRevenue = (ridesRes.data || []).reduce((s, r) => s + (r.payment_confirmed_at ? Number(r.price || 0) : 0), 0);
-
-        // Retención: % pasajeros con más de 1 viaje
-        const rideCounts = {};
-        for (const r of allRidesForRetention.data || []) {
-            rideCounts[r.user_id] = (rideCounts[r.user_id] || 0) + 1;
-        }
-        const unique = Object.keys(rideCounts).length;
-        const returning = Object.values(rideCounts).filter(c => c > 1).length;
-        const retentionPct = unique > 0 ? Math.round((returning / unique) * 100) : 0;
-
-        setKpis({ totalRides, totalRevenue, retentionPct, activeDrivers: activeDriversRes.count || 0 });
-
-        // E6.2: stats de envíos via RPC delivery_analytics (mig 59)
-        try {
-            const from = new Date(Date.now() - range * 86400e3).toISOString();
-            const to   = new Date().toISOString();
-            const { data: dStats, error: dErr } = await supabase.rpc('delivery_analytics', { p_from: from, p_to: to });
-            if (!dErr && dStats) setDeliveryStats(dStats);
-        } catch (err) {
-            console.warn('delivery_analytics failed:', err);
-        }
-
-        setLoading(false);
-    };
-
-    if (!authorized) return (
-        <div className="min-h-screen bg-[#0F1014] flex items-center justify-center">
-            <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin"></div>
-        </div>
-    );
-
-    const maxTrips = Math.max(...dailyRides.map(d => d.trips), 1);
-    const maxRevenue = Math.max(...dailyRides.map(d => d.revenue), 1);
-    const maxWeek = Math.max(...weeklyUsers.map(w => w.count), 1);
-
-    const fmtDay = (iso) => {
-        const [, m, d] = iso.split('-');
-        return `${d}/${m}`;
-    };
-    const fmtWeek = (iso) => {
-        const [, m, d] = iso.split('-');
-        return `${d}/${m}`;
-    };
-
+const Bars = ({ title, subtitle, rows, valueKey, label, tone = 'bg-violet-500' }) => {
+    const max = Math.max(...rows.map(r => Number(r[valueKey] || 0)), 1);
     return (
-        <div className="min-h-screen bg-[#0F1014] p-4 md:p-8 font-sans text-white">
-            <AdminNav />
-
-            <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-                <div className="flex items-center gap-4">
-                    <div className="bg-gradient-to-br from-blue-600 to-indigo-600 p-3 rounded-2xl shadow-lg shadow-blue-600/20">
-                        <span className="material-symbols-outlined text-white text-2xl">bar_chart</span>
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-black tracking-tight">Analytics</h1>
-                        <p className="text-gray-400 text-sm">Métricas de viajes y retención</p>
-                    </div>
-                </div>
-                {/* Selector de rango */}
-                <div className="flex gap-1 bg-[#1A1F2E] p-1 rounded-xl border border-white/5">
-                    {[[7, '7d'], [30, '30d'], [90, '90d']].map(([days, label]) => (
-                        <button
-                            key={days}
-                            onClick={() => setRange(days)}
-                            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${range === days ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
-                        >
-                            {label}
-                        </button>
-                    ))}
-                </div>
+        <section className="bg-[#1A1F2E] border border-white/5 rounded-2xl p-5">
+            <h2 className="font-bold">{title}</h2><p className="text-xs text-gray-500 mt-1 mb-5">{subtitle}</p>
+            <div className="space-y-2 max-h-[440px] overflow-y-auto pr-1">
+                {rows.map(row => {
+                    const value = Number(row[valueKey] || 0);
+                    const pct = Math.max(value > 0 ? 2 : 0, (value / max) * 100);
+                    return <div key={row.day} className="grid grid-cols-[48px_1fr_82px] gap-3 items-center"><span className="text-[10px] text-gray-500 text-right">{fmtDay(row.day)}</span><div className="h-6 bg-[#0F1014] rounded-full overflow-hidden"><div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} /></div><span className="text-xs text-right font-mono text-gray-300">{label(value, row)}</span></div>;
+                })}
             </div>
-
-            {loading ? (
-                <div className="flex justify-center py-32">
-                    <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                </div>
-            ) : (
-                <div className="space-y-8">
-                    {/* KPI tiles */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <KpiTile label={`Viajes (${range}d)`} value={kpis.totalRides} icon="receipt_long" accent="bg-blue-600" />
-                        <KpiTile label="Ingresos confirmados" value={`$${kpis.totalRevenue.toFixed(2)}`} icon="attach_money" accent="bg-emerald-600" />
-                        <KpiTile label="Retención global" value={`${kpis.retentionPct}%`} icon="repeat" accent="bg-violet-600" />
-                        <KpiTile label="Conductores activos" value={kpis.activeDrivers} icon="directions_car" accent="bg-amber-600" />
-                    </div>
-
-                    {/* Viajes por día */}
-                    <div className="bg-[#1A1F2E] rounded-2xl border border-white/5 p-5">
-                        <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Viajes por día</h2>
-                        <div className="space-y-1.5">
-                            {dailyRides.filter(d => d.trips > 0 || dailyRides.indexOf(d) % Math.ceil(range / 15) === 0).map(d => (
-                                <Bar
-                                    key={d.day}
-                                    value={d.trips}
-                                    max={maxTrips}
-                                    color="bg-blue-500"
-                                    label={fmtDay(d.day)}
-                                    sub={d.trips > 0 ? `${d.trips} viaje${d.trips !== 1 ? 's' : ''}` : '0'}
-                                />
-                            ))}
-                        </div>
-                        {dailyRides.every(d => d.trips === 0) && (
-                            <p className="text-center text-gray-500 text-sm py-6">Sin viajes en este período.</p>
-                        )}
-                    </div>
-
-                    {/* Ingresos por día */}
-                    <div className="bg-[#1A1F2E] rounded-2xl border border-white/5 p-5">
-                        <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Ingresos confirmados por día</h2>
-                        <div className="space-y-1.5">
-                            {dailyRides.filter(d => d.revenue > 0 || dailyRides.indexOf(d) % Math.ceil(range / 15) === 0).map(d => (
-                                <Bar
-                                    key={d.day}
-                                    value={d.revenue}
-                                    max={maxRevenue}
-                                    color="bg-emerald-500"
-                                    label={fmtDay(d.day)}
-                                    sub={d.revenue > 0 ? `$${d.revenue.toFixed(2)}` : '$0'}
-                                />
-                            ))}
-                        </div>
-                        {dailyRides.every(d => d.revenue === 0) && (
-                            <p className="text-center text-gray-500 text-sm py-6">Sin ingresos confirmados en este período.</p>
-                        )}
-                    </div>
-
-                    {/* Higo Envíos — stats (E6.2) */}
-                    {deliveryStats && (
-                        <div className="bg-[#1A1F2E] rounded-2xl border border-orange-500/20 p-5">
-                            <div className="flex items-center gap-2 mb-4">
-                                <span className="material-symbols-outlined text-orange-400 text-xl">inventory_2</span>
-                                <h2 className="text-sm font-bold text-orange-400 uppercase tracking-wider">Higo Envíos · últimos {range} días</h2>
-                            </div>
-
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-                                <div className="bg-[#0F1014] rounded-xl p-3">
-                                    <p className="text-[10px] text-gray-500 uppercase">Total envíos</p>
-                                    <p className="text-2xl font-black text-white">{deliveryStats.total || 0}</p>
-                                </div>
-                                <div className="bg-[#0F1014] rounded-xl p-3">
-                                    <p className="text-[10px] text-gray-500 uppercase">Tasa éxito</p>
-                                    <p className="text-2xl font-black text-emerald-400">
-                                        {Math.round((deliveryStats.success_rate || 0) * 100)}%
-                                    </p>
-                                </div>
-                                <div className="bg-[#0F1014] rounded-xl p-3">
-                                    <p className="text-[10px] text-gray-500 uppercase">Tiempo prom. pickup→deliv</p>
-                                    <p className="text-2xl font-black text-white">
-                                        {deliveryStats.avg_pickup_to_delivery_min || 0} <span className="text-sm text-gray-400">min</span>
-                                    </p>
-                                </div>
-                                <div className="bg-[#0F1014] rounded-xl p-3">
-                                    <p className="text-[10px] text-gray-500 uppercase">Tasa de reclamos</p>
-                                    <p className={`text-2xl font-black ${(deliveryStats.claims_rate || 0) > 0.05 ? 'text-red-400' : 'text-amber-400'}`}>
-                                        {Math.round((deliveryStats.claims_rate || 0) * 100)}%
-                                    </p>
-                                    <p className="text-[10px] text-gray-500">{deliveryStats.claims_total || 0} claims</p>
-                                </div>
-                            </div>
-
-                            {/* Top destinos */}
-                            {Array.isArray(deliveryStats.top_destinations) && deliveryStats.top_destinations.length > 0 && (
-                                <div className="mb-4">
-                                    <p className="text-xs text-gray-400 font-bold uppercase mb-2">Top destinos</p>
-                                    <div className="space-y-1.5">
-                                        {deliveryStats.top_destinations.slice(0, 5).map((d, i) => {
-                                            const maxDest = deliveryStats.top_destinations[0].count;
-                                            return (
-                                                <Bar
-                                                    key={i}
-                                                    value={d.count}
-                                                    max={maxDest}
-                                                    color="bg-orange-500"
-                                                    label={i + 1 + '.'}
-                                                    sub={`${d.count} · ${(d.dropoff || '').slice(0, 30)}`}
-                                                />
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Distribución por vehículo */}
-                            {deliveryStats.by_vehicle && Object.keys(deliveryStats.by_vehicle).length > 0 && (
-                                <div>
-                                    <p className="text-xs text-gray-400 font-bold uppercase mb-2">Por tipo de vehículo</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {Object.entries(deliveryStats.by_vehicle).map(([type, count]) => (
-                                            <span key={type} className="px-3 py-1.5 rounded-full bg-orange-500/10 text-orange-300 text-xs font-bold border border-orange-500/20">
-                                                {type}: {count}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Nuevos usuarios por semana */}
-                    <div className="bg-[#1A1F2E] rounded-2xl border border-white/5 p-5">
-                        <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Nuevos pasajeros por semana</h2>
-                        {weeklyUsers.length === 0 ? (
-                            <p className="text-center text-gray-500 text-sm py-6">Sin registros nuevos en este período.</p>
-                        ) : (
-                            <div className="space-y-1.5">
-                                {weeklyUsers.map(w => (
-                                    <Bar
-                                        key={w.week}
-                                        value={w.count}
-                                        max={maxWeek}
-                                        color="bg-violet-500"
-                                        label={`sem ${fmtWeek(w.week)}`}
-                                        sub={`${w.count} usuario${w.count !== 1 ? 's' : ''}`}
-                                    />
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-        </div>
+        </section>
     );
 };
 
-export default AdminAnalyticsPage;
+export default function AdminAnalyticsPage() {
+    const [range, setRange] = useState(30);
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        let cancelled = false;
+        setLoading(true); setError('');
+        getAdminAnalytics(range).then(result => { if (!cancelled) setData(result); }).catch(err => { if (!cancelled) setError(err.message); }).finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
+    }, [range]);
+
+    const membershipRows = useMemo(() => data?.membershipDaily || [], [data]);
+    const tripRows = useMemo(() => data?.tripDaily || [], [data]);
+
+    return (
+        <div className="min-h-screen bg-[#0F1014] text-white p-4 md:p-8">
+            <AdminNav />
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
+                <div><h1 className="text-2xl font-black">Analítica del negocio</h1><p className="text-sm text-gray-400 mt-1">Ingresos de membresías y volumen de viajes se reportan por separado.</p></div>
+                <div className="flex p-1 bg-[#1A1F2E] rounded-xl border border-white/5">{[7,30,90].map(days => <button key={days} onClick={() => setRange(days)} className={`px-4 py-2 rounded-lg text-sm font-bold ${range === days ? 'bg-violet-600' : 'text-gray-400'}`}>{days}d</button>)}</div>
+            </div>
+            {error && <div className="p-4 mb-5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-300">No se pudieron calcular las métricas: {error}</div>}
+            {loading ? <div className="py-28 flex justify-center"><div className="w-9 h-9 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" /></div> : data && <div className="space-y-7">
+                <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+                    <Card label="Ingresos por membresías" value={money(data.membershipRevenue)} note={`${data.payments || 0} pagos registrados`} icon="payments" tone="bg-emerald-600" />
+                    <Card label="Drivers que pagaron" value={data.payingDrivers || 0} note={`Promedio ${money(data.averageRevenuePerDriver)}`} icon="badge" tone="bg-blue-600" />
+                    <Card label="Tasa de renovación" value={`${Number(data.renewalRate || 0).toFixed(1)}%`} note="Drivers con más de un pago en el período" icon="autorenew" tone="bg-violet-600" />
+                    <Card label="Membresías vigentes" value={data.activeMemberships || 0} note="Incluye por vencer y excepciones temporales" icon="verified" tone="bg-teal-600" />
+                </div>
+                <div className="grid xl:grid-cols-2 gap-5">
+                    <Bars title="Ingreso diario de Higo" subtitle="Solo pagos de membresías de Higo Drivers." rows={membershipRows} valueKey="revenue" label={(v, row) => `${money(v)} · ${row.payments || 0}`} tone="bg-emerald-500" />
+                    <Bars title="Volumen de viajes" subtitle="Dinero pagado entre pasajeros y drivers. No es ingreso de Higo." rows={tripRows} valueKey="volume" label={(v, row) => `${money(v)} · ${row.rides || 0}`} tone="bg-blue-500" />
+                </div>
+                <section className="bg-amber-500/10 border border-amber-500/25 rounded-2xl p-5">
+                    <div className="flex gap-3"><span className="material-symbols-outlined text-amber-400">info</span><div><p className="font-bold text-amber-200">Lectura financiera correcta</p><p className="text-sm text-amber-100/70 mt-1">Higo no cobra comisión por los viajes. El valor mostrado como volumen de viajes pertenece a la relación pasajero–driver. Los ingresos propios del negocio se calculan desde las membresías.</p></div></div>
+                </section>
+            </div>}
+        </div>
+    );
+}
