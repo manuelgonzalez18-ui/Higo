@@ -148,6 +148,41 @@ function createNullSupabase() {
 
 export const supabase = _supabase;
 
+// withNetworkRetry — envuelve una llamada async (típicamente una query de
+// Supabase) con timeout + reintentos ante fallos transitorios de red.
+//
+// Motivo (incidente login intermitente 2026-07-23): en redes móviles/ISP
+// venezolanos las peticiones a la nube de Supabase fallan de a ratos con
+// "Failed to fetch" / cuelgan sin resolver. Una sola llamada fallida en la
+// cadena del login (leer rol, persistir session_id) tumbaba TODO el login.
+// Este helper hace que esas llamadas secundarias sobrevivan a un blip:
+// corta la espera a `timeoutMs` (Promise.race, no toca el fetch) y reintenta
+// hasta `maxRetries` veces con backoff lineal. NO reintenta indefinidamente
+// para no bloquear la UI.
+//
+// Devuelve lo que devuelva `asyncFn`. Si agota los reintentos, relanza el
+// último error para que el caller decida (abortar vs degradar).
+export const withNetworkRetry = async (asyncFn, maxRetries = 2, timeoutMs = 8000) => {
+    let lastErr;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            return await Promise.race([
+                asyncFn(),
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('La conexión tardó demasiado. Probá de nuevo.')), timeoutMs),
+                ),
+            ]);
+        } catch (err) {
+            lastErr = err;
+            const msg = String(err?.message || err?.name || err || '').toLowerCase();
+            const retryable = /failed to fetch|networkerror|network error|retryable|tardó demasiado|load failed|timeout|timed out/.test(msg);
+            if (attempt >= maxRetries || !retryable) throw err;
+            await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+        }
+    }
+    throw lastErr;
+};
+
 export const getUserProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return null

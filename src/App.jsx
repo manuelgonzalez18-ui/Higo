@@ -178,7 +178,27 @@ const App = () => {
           return;
         }
 
-        const { data: { user } } = await supabase.auth.getUser();
+        // Ventana de gracia post-login: AuthPage/AdminLoginPage acaban de
+        // escribir session_id en localStorage pero la escritura remota en la
+        // DB puede llegar desordenada o reintentándose en redes lentas.
+        // Durante esta ventana NO expulsamos: evita el falso "Sesión no
+        // autorizada" / "abierta en otro dispositivo" en el primer login
+        // desde un equipo nuevo (race del login intermitente, 2026-07-23).
+        const graceUntil = Number(localStorage.getItem('login_grace_until') || 0);
+        if (graceUntil && Date.now() < graceUntil) {
+          return;
+        }
+
+        // getSession() lee la sesión del cache LOCAL (sin llamada de red).
+        // Antes usábamos getUser(), que golpea /auth/v1/user en CADA chequeo
+        // (intervalo + visibilitychange + hashchange + resume nativo +
+        // SIGNED_IN). En redes lentas esa avalancha de llamadas saturaba las
+        // conexiones HTTP y competía con el propio login, agravando el
+        // "conexión lenta o inestable". El único chequeo de red que queda es
+        // el select del current_session_id, que es el que realmente
+        // necesitamos para la sesión única.
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
         if (!user) return;
 
         const { data: profile, error } = await supabase
@@ -245,7 +265,8 @@ const App = () => {
 
     const setupSessionWatcher = async () => {
       teardown();
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) return;
 
       // 1. Comprobación estática inicial al arrancar
@@ -262,6 +283,13 @@ const App = () => {
         }, (payload) => {
           const path = window.location.hash.split('?')[0];
           if (path === '#/auth' || path === '#/admin' || path === '#/reset-password') {
+            return;
+          }
+
+          // Misma ventana de gracia que checkSession: durante el login no
+          // expulsamos por un UPDATE en vuelo de la propia secuencia de login.
+          const graceUntil = Number(localStorage.getItem('login_grace_until') || 0);
+          if (graceUntil && Date.now() < graceUntil) {
             return;
           }
 
@@ -305,8 +333,13 @@ const App = () => {
     // 4. Listener para cambios de ruta en HashRouter (navegación activa)
     window.addEventListener('hashchange', checkSession);
 
-    // 5. Comprobación periódica proactiva cada 10 segundos
-    const periodicTimer = setInterval(checkSession, 10000);
+    // 5. Comprobación periódica proactiva cada 30 segundos. Antes eran 10s;
+    // con getUser() eso eran ~6 llamadas de red por minuto solo del watcher,
+    // que en redes lentas competían con el login. Con getSession() (cache
+    // local) el chequeo es barato, y 30s es más que suficiente para detectar
+    // el login en otro dispositivo (además del canal realtime, que es
+    // instantáneo).
+    const periodicTimer = setInterval(checkSession, 30000);
 
     // 6. Listener para reanudación nativa desde segundo plano (Capacitor)
     const setupNativeResume = async () => {
