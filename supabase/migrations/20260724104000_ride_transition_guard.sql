@@ -55,6 +55,9 @@ declare
     v_actor_role text;
     v_is_admin boolean := false;
     v_is_service boolean := coalesce(auth.role(), '') = 'service_role';
+    -- SQL Editor / trusted maintenance sessions do not carry auth.uid().
+    -- session_user remains the original caller even inside SECURITY DEFINER.
+    v_is_privileged_session boolean := session_user in ('postgres', 'supabase_admin');
     v_allowed boolean := false;
 begin
     if new.status is not distinct from old.status then
@@ -68,14 +71,21 @@ begin
         v_is_admin := public.higo_is_admin();
     end if;
 
-    -- Administrative and service-role repair operations are still audited but
-    -- are not constrained by the passenger/driver state graph.
-    if v_is_service or v_is_admin then
+    -- Administrative, service-role and trusted SQL repair operations are still
+    -- audited but are not constrained by the passenger/driver state graph.
+    if v_is_service or v_is_admin or v_is_privileged_session then
         v_allowed := true;
     elsif old.status = 'requested' and new.status = 'accepted' then
         v_allowed := v_actor_role = 'driver'
             and new.driver_id = v_actor
             and old.driver_id is null;
+
+        -- Compatibility protection for older APKs that still update rides
+        -- directly instead of calling driver_accept_ride_v2(). The driver must
+        -- satisfy the same archived/suspended/membership checks as the RPC.
+        if v_allowed then
+            perform public.higo_assert_driver_operational();
+        end if;
     elsif old.status in ('requested', 'accepted') and new.status = 'cancelled' then
         v_allowed := old.user_id = v_actor;
     elsif old.status = 'accepted' and new.status = 'in_progress' then
