@@ -54,6 +54,11 @@ const AuthPage = () => {
     const [referralCode, setReferralCode] = useState('');
     const [isLogin, setIsLogin] = useState(true);
     const [message, setMessage] = useState('');
+    // Detalle técnico crudo del último error (diagnóstico 2026-07-22: el
+    // mensaje friendly ocultaba la causa real en dispositivos donde el
+    // login falla). Se muestra chiquito debajo del mensaje para poder
+    // reportarlo sin depuración USB.
+    const [debugDetail, setDebugDetail] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     // H3.2 — flujo "Olvidé mi clave"
     const [showResetModal, setShowResetModal] = useState(false);
@@ -87,6 +92,7 @@ const AuthPage = () => {
         e.preventDefault();
         setLoading(true);
         setMessage('');
+        setDebugDetail('');
 
         try {
             if (isLogin) {
@@ -216,6 +222,11 @@ const AuthPage = () => {
             // el original. setMessage(error.message) filtraba strings
             // crudas de Supabase (ej. constraint names).
             setMessage(friendlyError(error, 'No se pudo completar la operación. Probá de nuevo.', { source: 'AuthPage.handleAuth', isLogin }));
+            // Detalle crudo visible (nombre + mensaje + status si hay) para
+            // diagnosticar fallas de login en dispositivos sin depuración USB.
+            const parts = [error?.name, error?.status && `HTTP ${error.status}`, error?.message]
+                .filter(Boolean).join(' · ');
+            setDebugDetail(parts || String(error));
         } finally {
             setLoading(false);
         }
@@ -353,6 +364,11 @@ const AuthPage = () => {
                         {message && (
                             <div className={`text-sm ${(message.includes('success') || message.includes('exitoso')) ? 'text-green-600 dark:text-green-400' : 'text-red-600'}`}>
                                 {message}
+                            </div>
+                        )}
+                        {debugDetail && (
+                            <div className="text-[11px] leading-snug text-gray-400 dark:text-gray-500 break-all">
+                                Detalle técnico: {debugDetail}
                             </div>
                         )}
 
