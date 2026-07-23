@@ -4,21 +4,21 @@ import { supabase } from '../services/supabase';
 import { getAdminContext } from '../services/adminApi';
 import { useAdminKeyboardNav } from '../hooks/useAdminKeyboardNav';
 
-const SHOP_ENABLED = import.meta.env.VITE_SHOP_ENABLED !== 'false';
+const SHOP_ENABLED = import.meta.env.VITE_SHOP_ENABLED === 'true';
 
 const ITEMS = [
-    { to: '/admin/dashboard', label: 'Resumen', icon: 'dashboard', group: 'Principal', permission: 'view_dashboard' },
-    { to: '/admin/drivers', label: 'Drivers y membresías', icon: 'badge', group: 'Principal', permission: 'manage_memberships' },
-    { to: '/admin/analytics', label: 'Analítica', icon: 'monitoring', group: 'Principal', permission: 'view_analytics' },
-    { to: '/admin/deliveries', label: 'Envíos', icon: 'inventory_2', group: 'Operación', permission: 'manage_operations' },
-    { to: '/admin/disputes', label: 'Disputas', icon: 'report', group: 'Operación', permission: 'manage_disputes' },
-    { to: '/admin/support', label: 'Soporte', icon: 'support_agent', group: 'Operación', permission: 'manage_support', badge: 'support' },
-    { to: '/admin/fraud', label: 'Alertas', icon: 'crisis_alert', group: 'Operación', permission: 'manage_operations' },
-    { to: '/admin/users', label: 'Usuarios y staff', icon: 'group', group: 'Gestión', permission: 'view_users' },
-    { to: '/admin/promos', label: 'Promociones', icon: 'local_offer', group: 'Gestión', permission: 'manage_promos' },
-    { to: '/admin/pricing', label: 'Tarifas', icon: 'payments', group: 'Configuración', permission: 'manage_pricing' },
-    { to: '/admin/zones', label: 'Zonas', icon: 'place', group: 'Configuración', permission: 'manage_zones' },
-    { to: '/admin/shop', label: 'Higo Shop', icon: 'shopping_bag', group: 'Configuración', permission: 'manage_shop', shop: true },
+    { to: '/admin/dashboard', label: 'Resumen', icon: 'dashboard', group: 'Principal', permissions: ['view_dashboard'] },
+    { to: '/admin/drivers', label: 'Drivers y membresías', icon: 'badge', group: 'Principal', permissions: ['manage_memberships', 'manage_drivers'] },
+    { to: '/admin/analytics', label: 'Analítica', icon: 'monitoring', group: 'Principal', permissions: ['view_analytics'] },
+    { to: '/admin/deliveries', label: 'Envíos', icon: 'inventory_2', group: 'Operación', permissions: ['manage_operations'] },
+    { to: '/admin/disputes', label: 'Disputas', icon: 'report', group: 'Operación', permissions: ['manage_disputes'] },
+    { to: '/admin/support', label: 'Soporte', icon: 'support_agent', group: 'Operación', permissions: ['manage_support'], badge: 'support' },
+    { to: '/admin/fraud', label: 'Alertas', icon: 'crisis_alert', group: 'Operación', permissions: ['manage_operations'] },
+    { to: '/admin/users', label: 'Usuarios y staff', icon: 'group', group: 'Gestión', permissions: ['view_users'] },
+    { to: '/admin/promos', label: 'Promociones', icon: 'local_offer', group: 'Gestión', permissions: ['manage_promos'] },
+    { to: '/admin/pricing', label: 'Tarifas', icon: 'payments', group: 'Configuración', permissions: ['manage_pricing'] },
+    { to: '/admin/zones', label: 'Zonas', icon: 'place', group: 'Configuración', permissions: ['manage_zones'] },
+    { to: '/admin/shop', label: 'Higo Shop', icon: 'shopping_bag', group: 'Configuración', permissions: ['manage_shop'], shop: true },
 ];
 
 export default function AdminNav() {
@@ -54,7 +54,7 @@ export default function AdminNav() {
         const visible = ITEMS.filter(item => {
             if (item.shop && !SHOP_ENABLED) return false;
             if (!context) return item.to === '/admin/dashboard';
-            return !!context.permissions?.[item.permission];
+            return item.permissions.some(permission => context.permissions?.[permission]);
         });
         return visible.reduce((acc, item) => {
             (acc[item.group] ||= []).push(item);
