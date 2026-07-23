@@ -38,8 +38,6 @@ jobs:
       - name: Validate migrations
         run: npm run check:migrations
 
-      # The repository still has a historical lint baseline. Keep the global
-      # report visible while making all new platform-hardening modules blocking.
       - name: Full lint baseline report
         run: npm run lint
         continue-on-error: true
@@ -221,6 +219,15 @@ jobs:
             echo '```'
           } > /tmp/behavior-comment.md
           gh pr comment "$PR_NUMBER" --body-file /tmp/behavior-comment.md
+
+      - name: Upload behavioral failure log
+        if: steps.behavior_tests.outputs.exit_code != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: platform-behavior-log
+          path: /tmp/platform-behavior.log
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Stop when behavioral assertions failed
         if: steps.behavior_tests.outputs.exit_code != '0'
