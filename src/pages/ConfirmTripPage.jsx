@@ -110,6 +110,7 @@ export default function ConfirmTripPage() {
                     routeDistanceKm: roadDistance ? Number(roadDistance) / 1000 : null,
                     stopsCount: Array.isArray(stops) ? stops.length : 0,
                     promoCode: code,
+                    clientSubtotalFloor: Number(price || 0),
                 });
                 if (!quote?.promoValid) {
                     throw new Error(PROMO_ERRORS[quote?.promoError] || 'El código no se puede aplicar.');
@@ -242,7 +243,7 @@ export default function ConfirmTripPage() {
                         payer: deliveryData?.payer || (isDelivery ? 'sender' : null),
                         codAmount: deliveryData?.cod_amount || null,
                         termsVersion: deliveryData?.terms_version || null,
-                        clientPriceFloor: finalPrice,
+                        clientSubtotalFloor: Number(price || 0),
                     }),
                     timeoutAfter(20000),
                 ])
