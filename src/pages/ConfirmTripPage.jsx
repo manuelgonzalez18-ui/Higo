@@ -1,428 +1,319 @@
-import React, { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import React, { useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import InteractiveMap from '../components/InteractiveMap';
-
 import { supabase } from '../services/supabase';
+import { createClientRequestId, createRideRequest, quoteRide } from '../services/rideApi';
+import { FEATURES } from '../config/features';
 import { toast } from '../components/Toast';
 import { friendlyError } from '../utils/friendlyError';
 import { logger } from '../utils/logger';
 
+const VEHICLE_INFO = Object.freeze({
+    moto: { title: 'Higo Moto', icon: 'two_wheeler', seats: '1 asiento' },
+    standard: { title: 'Higo Carro', icon: 'local_taxi', seats: '4 asientos' },
+    van: { title: 'Higo Camioneta', icon: 'airport_shuttle', seats: '6+ asientos' },
+});
 
+const PROMO_ERRORS = Object.freeze({
+    inactive: 'El código está inactivo.',
+    expired: 'El código ha expirado.',
+    minimum_not_met: 'El viaje no alcanza el monto mínimo de la promoción.',
+    usage_limit_reached: 'La promoción alcanzó su límite de usos.',
+    user_limit_reached: 'Ya utilizaste este código el máximo permitido.',
+    budget_exhausted: 'El presupuesto de esta promoción se agotó.',
+});
 
-const ConfirmTripPage = () => {
+const timeoutAfter = (milliseconds) => new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('La conexión tardó demasiado. Revisá tu internet e intentá nuevamente.')), milliseconds);
+});
+
+const money = (value) => `$${Number(value || 0).toFixed(2)}`;
+
+export default function ConfirmTripPage() {
     const navigate = useNavigate();
     const location = useLocation();
+    const clientRequestIdRef = useRef(createClientRequestId());
 
-    const VEHICLE_INFO = {
-        moto: {
-            title: 'Higo Moto',
-            icon: 'two_wheeler',
-            seats: '1 asiento'
-        },
-        standard: {
-            title: 'Higo Carro',
-            icon: 'local_taxi',
-            seats: '4 asientos'
-        },
-        van: {
-            title: 'Higo Camioneta',
-            icon: 'airport_shuttle',
-            seats: '6+ asientos'
-        }
-    };
-    // Safe destructure with defaults
     const {
-        pickup, dropoff, price, selectedRide,
-        pickupCoords, dropoffCoords, serviceType, deliveryData
+        pickup,
+        dropoff,
+        price,
+        selectedRide = 'standard',
+        pickupCoords,
+        dropoffCoords,
+        serviceType = 'ride',
+        deliveryData = null,
+        stops = [],
+        roadDistance = null,
     } = location.state || {};
-
-    // Fallback if accessed directly (should guard ideally)
-    if (!pickup) return <div className="p-10 text-white">No trip data found. Go back.</div>;
 
     const [loading, setLoading] = useState(false);
     const [passengerPhone, setPassengerPhone] = useState('');
-    const [paymentMethod, setPaymentMethod] = useState('cash');
-    // Códigos promocionales: el descuento se aplica vía RPC tras crear el ride.
     const [promoCode, setPromoCode] = useState('');
-    const [appliedPromo, setAppliedPromo] = useState(null); // { code, discount, finalPrice }
-    const finalPrice = appliedPromo ? appliedPromo.finalPrice : price;
+    const [appliedPromo, setAppliedPromo] = useState(null);
+    const [validatingPromo, setValidatingPromo] = useState(false);
 
-    // Dynamic Vehicle Info with Weight Limits for Delivery
-    const getVehicleInfo = () => {
-        const base = VEHICLE_INFO[selectedRide] || VEHICLE_INFO['standard'];
-        if (serviceType === 'delivery') {
-            return {
-                ...base,
-                seats: selectedRide === 'moto' ? 'Max 4kg' : selectedRide === 'standard' ? 'Max 40kg' : 'Max 100kg',
-                // icon: 'action_key' // Removing override to keep vehicle icon
-            };
-        }
-        return base;
-    };
+    const isDelivery = serviceType === 'delivery';
+    const vehicle = VEHICLE_INFO[selectedRide] || VEHICLE_INFO.standard;
+    const vehicleDetails = useMemo(() => ({
+        ...vehicle,
+        seats: isDelivery
+            ? selectedRide === 'moto' ? 'Máx. 4 kg' : selectedRide === 'van' ? 'Máx. 100 kg' : 'Máx. 40 kg'
+            : vehicle.seats,
+    }), [vehicle, isDelivery, selectedRide]);
+    const finalPrice = appliedPromo?.finalPrice ?? Number(price || 0);
 
-    const currentVehicle = getVehicleInfo();
+    if (!pickup || !dropoff || !pickupCoords || !dropoffCoords) {
+        return (
+            <div className="min-h-screen bg-[#10141F] text-white flex items-center justify-center p-6 text-center">
+                <div>
+                    <p className="font-bold">Faltan datos de la ruta.</p>
+                    <button onClick={() => navigate('/')} className="mt-4 px-5 py-3 rounded-xl bg-blue-600">Volver al inicio</button>
+                </div>
+            </div>
+        );
+    }
 
-    // Validar código promo localmente (lee promo_codes con RLS — sin escribir).
-    // El descuento real se aplica vía RPC apply_promo_code después de crear el ride.
-    const validatePromo = async () => {
-        const code = promoCode.trim().toUpperCase();
-        if (!code) return;
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-            toast.error('Debes iniciar sesión para usar códigos promocionales.');
-            return;
-        }
+    const validatePromoLegacy = async (code) => {
         const { data: promo, error } = await supabase
             .from('promo_codes')
-            .select('code, discount_type, discount_value, min_ride_amount, expires_at, max_uses, used_count')
+            .select('id, code, discount_type, discount_value, min_ride_amount, expires_at, max_uses, used_count')
             .eq('code', code)
             .eq('active', true)
             .maybeSingle();
-        if (error || !promo) {
-            setAppliedPromo(null);
-            toast.error('Código inválido o inactivo.');
-            return;
-        }
-        if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
-            setAppliedPromo(null);
-            toast.error('El código ha expirado.');
-            return;
-        }
-        if (promo.max_uses != null && promo.used_count >= promo.max_uses) {
-            setAppliedPromo(null);
-            toast.error('El código alcanzó su límite de usos.');
-            return;
-        }
-        if (price < (promo.min_ride_amount || 0)) {
-            setAppliedPromo(null);
-            toast.error(`El viaje debe ser de al menos $${promo.min_ride_amount}.`);
-            return;
-        }
+        if (error || !promo) throw new Error('Código inválido o inactivo.');
+        if (promo.expires_at && new Date(promo.expires_at) < new Date()) throw new Error('El código ha expirado.');
+        if (promo.max_uses != null && promo.used_count >= promo.max_uses) throw new Error('El código alcanzó su límite de usos.');
+        if (Number(price || 0) < Number(promo.min_ride_amount || 0)) throw new Error(`El viaje debe ser de al menos ${money(promo.min_ride_amount)}.`);
         const discount = promo.discount_type === 'percent'
-            ? Math.round(price * promo.discount_value) / 100
-            : Math.min(promo.discount_value, price);
-        setAppliedPromo({
+            ? Number(price || 0) * Number(promo.discount_value || 0) / 100
+            : Math.min(Number(promo.discount_value || 0), Number(price || 0));
+        return {
+            id: promo.id,
             code: promo.code,
-            discount: parseFloat(discount.toFixed(2)),
-            finalPrice: parseFloat(Math.max(price - discount, 0).toFixed(2))
-        });
+            discount: Number(discount.toFixed(2)),
+            finalPrice: Number(Math.max(Number(price || 0) - discount, 0).toFixed(2)),
+        };
     };
 
-    const removePromo = () => {
-        setAppliedPromo(null);
-        setPromoCode('');
+    const validatePromo = async () => {
+        const code = promoCode.trim().toUpperCase();
+        if (!code || validatingPromo) return;
+        setValidatingPromo(true);
+        try {
+            if (FEATURES.serverSideRidePricing) {
+                const quote = await quoteRide({
+                    pickupCoords,
+                    dropoffCoords,
+                    vehicleType: selectedRide,
+                    serviceType,
+                    routeDistanceKm: roadDistance ? Number(roadDistance) / 1000 : null,
+                    stopsCount: Array.isArray(stops) ? stops.length : 0,
+                    promoCode: code,
+                });
+                if (!quote?.promoValid) {
+                    throw new Error(PROMO_ERRORS[quote?.promoError] || 'El código no se puede aplicar.');
+                }
+                setAppliedPromo({
+                    id: quote.promoId,
+                    code: quote.promoCode,
+                    discount: Number(quote.discount || 0),
+                    finalPrice: Number(quote.finalPrice || 0),
+                    serverQuote: quote,
+                });
+            } else {
+                setAppliedPromo(await validatePromoLegacy(code));
+            }
+            toast.success('Promoción aplicada.');
+        } catch (error) {
+            setAppliedPromo(null);
+            toast.error(error?.message || 'No se pudo validar el código.');
+        } finally {
+            setValidatingPromo(false);
+        }
+    };
+
+    const saveRecipientContact = async (session, rideId) => {
+        if (!isDelivery || !deliveryData?.save_contact || !deliveryData?.receiverName || !deliveryData?.receiverPhone) return;
+        try {
+            const { data: existing } = await supabase
+                .from('recipient_contacts')
+                .select('id')
+                .eq('user_id', session.user.id)
+                .eq('phone', deliveryData.receiverPhone)
+                .maybeSingle();
+            const contact = {
+                name: deliveryData.receiverName,
+                address_label: deliveryData.contact_label || null,
+                address: dropoff,
+                lat: dropoffCoords.lat,
+                lng: dropoffCoords.lng,
+                instructions: deliveryData.destInstructions || null,
+                last_used_at: new Date().toISOString(),
+            };
+            if (existing?.id) {
+                await supabase.from('recipient_contacts').update(contact).eq('id', existing.id);
+            } else {
+                await supabase.from('recipient_contacts').insert({
+                    user_id: session.user.id,
+                    phone: deliveryData.receiverPhone,
+                    ...contact,
+                });
+            }
+            logger.debug('[ConfirmTrip] recipient saved for ride', rideId);
+        } catch (error) {
+            logger.warn('[ConfirmTrip] recipient save failed', error);
+        }
+    };
+
+    const createLegacyRide = async (session) => {
+        const payload = {
+            user_id: session.user.id,
+            pickup,
+            dropoff,
+            price: finalPrice,
+            ride_type: selectedRide,
+            status: 'requested',
+            payment_method: 'direct',
+            passenger_phone: passengerPhone || null,
+            pickup_lat: pickupCoords.lat,
+            pickup_lng: pickupCoords.lng,
+            dropoff_lat: dropoffCoords.lat,
+            dropoff_lng: dropoffCoords.lng,
+            service_type: serviceType,
+            delivery_info: deliveryData,
+            payer: deliveryData?.payer || (isDelivery ? 'sender' : null),
+            cod_amount: isDelivery && deliveryData?.cod_amount ? Number(deliveryData.cod_amount) : null,
+            cod_currency: isDelivery && deliveryData?.cod_amount ? 'USD' : null,
+        };
+        const { data, error } = await supabase.from('rides').insert([payload]).select().single();
+        if (error) throw error;
+
+        if (isDelivery && deliveryData?.terms_version) {
+            await supabase.from('terms_acceptances').insert({
+                user_id: session.user.id,
+                terms_kind: 'delivery',
+                terms_version: deliveryData.terms_version,
+                accepted_at: deliveryData.terms_accepted_at || new Date().toISOString(),
+                ride_id: data.id,
+            });
+        }
+        if (appliedPromo) {
+            const { error: promoError } = await supabase.rpc('apply_promo_code', {
+                p_code: appliedPromo.code,
+                p_ride_id: data.id,
+                p_user_id: session.user.id,
+                p_ride_amount: Number(price || 0),
+            });
+            if (promoError) {
+                // Legacy compatibility: restore the undiscounted price if promo
+                // redemption fails, avoiding a free client-side discount.
+                await supabase.from('rides').update({ price: Number(price || 0) }).eq('id', data.id);
+                throw new Error('La promoción cambió mientras confirmabas. Volvé a intentarlo.');
+            }
+        }
+        return { rideId: data.id, price: data.price, status: data.status };
     };
 
     const handleConfirm = async () => {
+        if (loading) return;
         setLoading(true);
-        logger.debug("[handleConfirm] Iniciando confirmación de solicitud...");
-        const { data: { session } } = await supabase.auth.getSession();
-
-        if (!session) {
-            console.error("[handleConfirm] Sesión no encontrada.");
-            toast.error("Por favor inicia sesión para confirmar tu viaje.");
-            navigate('/auth');
-            return;
-        }
-
-        // Definimos un límite de tiempo para evitar que se quede colgado indefinidamente (ej. por bloqueos de base de datos)
-        const TIMEOUT_MS = 15000;
-        const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => {
-                reject(new Error("Tiempo de espera agotado al conectar con el servidor. Por favor, verifica que las políticas RLS en Supabase no tengan recursión (Migración 65) o reintenta."));
-            }, TIMEOUT_MS)
-        );
-
         try {
-            const isDelivery = serviceType === 'delivery';
-            const codAmount = isDelivery && deliveryData?.cod_amount ? Number(deliveryData.cod_amount) : null;
-
-            logger.debug("[handleConfirm] Preparando datos del viaje. Tipo de servicio:", serviceType);
-            toast.info("Enviando solicitud a la plataforma...");
-
-            const insertPromise = supabase
-                .from('rides')
-                .insert([{
-                    user_id: session.user.id,
-                    pickup: pickup,
-                    dropoff: dropoff,
-                    price: finalPrice,  // ya con descuento aplicado si hay promo
-                    ride_type: selectedRide,
-                    status: 'requested',
-                    payment_method: 'direct',
-                    passenger_phone: passengerPhone || null,
-                    pickup_lat: pickupCoords?.lat || null,
-                    pickup_lng: pickupCoords?.lng || null,
-                    dropoff_lat: dropoffCoords?.lat || null,
-                    dropoff_lng: dropoffCoords?.lng || null,
-                    service_type: serviceType || 'ride',
-                    delivery_info: deliveryData || null,
-                    payer: deliveryData?.payer || (isDelivery ? 'sender' : null),
-                    cod_amount: codAmount,
-                    cod_currency: codAmount ? 'USD' : null,
-                }])
-                .select();
-
-            logger.debug("[handleConfirm] Insertando registro en tabla 'rides' (con select de retorno)...");
-            const { data, error } = await Promise.race([insertPromise, timeoutPromise]);
-
-            if (error) {
-                console.error("[handleConfirm] Error al insertar en rides:", error);
-                throw error;
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                navigate('/auth');
+                return;
             }
 
-            logger.debug("[handleConfirm] Inserción exitosa de ride. Datos devueltos:", data);
+            toast.info('Enviando solicitud a Higo…');
+            const creation = FEATURES.serverSideRidePricing
+                ? await Promise.race([
+                    createRideRequest({
+                        clientRequestId: clientRequestIdRef.current,
+                        pickup,
+                        dropoff,
+                        pickupCoords,
+                        dropoffCoords,
+                        vehicleType: selectedRide,
+                        serviceType,
+                        routeDistanceKm: roadDistance ? Number(roadDistance) / 1000 : null,
+                        stops,
+                        promoCode: appliedPromo?.code || null,
+                        passengerPhone,
+                        deliveryInfo: deliveryData,
+                        payer: deliveryData?.payer || (isDelivery ? 'sender' : null),
+                        codAmount: deliveryData?.cod_amount || null,
+                        termsVersion: deliveryData?.terms_version || null,
+                    }),
+                    timeoutAfter(20000),
+                ])
+                : await Promise.race([createLegacyRide(session), timeoutAfter(20000)]);
 
-            // Audit de aceptación de T&C de envíos (mig 63)
-            if (data && data[0] && isDelivery && deliveryData?.terms_version) {
-                logger.debug("[handleConfirm] Registrando aceptación de términos y condiciones de envío...");
-                toast.info("Registrando aceptación de términos...");
-                const { error: termsError } = await supabase.from('terms_acceptances').insert({
-                    user_id: session.user.id,
-                    terms_kind: 'delivery',
-                    terms_version: deliveryData.terms_version,
-                    accepted_at: deliveryData.terms_accepted_at || new Date().toISOString(),
-                    ride_id: data[0].id,
-                });
-                if (termsError) {
-                    console.error("[handleConfirm] Error al registrar términos:", termsError);
-                }
-            }
-
-            // Guardar destinatario en address book si el remitente lo pidió (mig 60)
-            if (data && data[0] && isDelivery && deliveryData?.save_contact && deliveryData?.receiverName && deliveryData?.receiverPhone) {
-                try {
-                    logger.debug("[handleConfirm] Guardando destinatario en libreta de direcciones...");
-                    // Upsert por (user_id, phone): si ya existe, actualizamos last_used_at
-                    const { data: existing } = await supabase
-                        .from('recipient_contacts')
-                        .select('id')
-                        .eq('user_id', session.user.id)
-                        .eq('phone', deliveryData.receiverPhone)
-                        .maybeSingle();
-                    if (existing?.id) {
-                        logger.debug("[handleConfirm] Destinatario existente. Actualizando datos...");
-                        await supabase.from('recipient_contacts').update({
-                            name: deliveryData.receiverName,
-                            address_label: deliveryData.contact_label || null,
-                            address: dropoff,
-                            lat: dropoffCoords?.lat || null,
-                            lng: dropoffCoords?.lng || null,
-                            instructions: deliveryData.destInstructions || null,
-                            last_used_at: new Date().toISOString(),
-                        }).eq('id', existing.id);
-                    } else {
-                        logger.debug("[handleConfirm] Destinatario nuevo. Insertando en libreta...");
-                        await supabase.from('recipient_contacts').insert({
-                            user_id: session.user.id,
-                            name: deliveryData.receiverName,
-                            phone: deliveryData.receiverPhone,
-                            address_label: deliveryData.contact_label || null,
-                            address: dropoff,
-                            lat: dropoffCoords?.lat || null,
-                            lng: dropoffCoords?.lng || null,
-                            instructions: deliveryData.destInstructions || null,
-                            last_used_at: new Date().toISOString(),
-                        });
-                    }
-                } catch (err) {
-                    console.warn('No se pudo guardar el destinatario:', err);
-                    // No bloquear el ride por esto
-                }
-            }
-
-            // Si hay código promo, registrarlo contra el ride recién creado.
-            if (data && data[0] && appliedPromo) {
-                logger.debug("[handleConfirm] Aplicando código promocional:", appliedPromo.code);
-                toast.info("Aplicando descuento promocional...");
-                await supabase.rpc('apply_promo_code', {
-                    p_code: appliedPromo.code,
-                    p_ride_id: data[0].id,
-                    p_user_id: session.user.id,
-                    p_ride_amount: price
-                });
-            }
-
-            if (data && data[0]) {
-                logger.debug("[handleConfirm] Solicitud completada con éxito. Redirigiendo a /ride/" + data[0].id);
-                toast.success("¡Solicitud enviada! Conectando con conductores...");
-                navigate(`/ride/${data[0].id}`);
-            } else {
-                console.warn("[handleConfirm] Inserción exitosa pero no se retornó información del ride.");
-                toast.success("¡Viaje Confirmado! Un conductor va en camino.");
-                navigate('/');
-            }
+            const rideId = creation?.rideId || creation?.id;
+            if (!rideId) throw new Error('El servidor no devolvió el identificador del viaje.');
+            await saveRecipientContact(session, rideId);
+            toast.success(creation?.idempotentReplay ? 'Solicitud recuperada correctamente.' : 'Solicitud enviada. Buscando conductores…');
+            navigate(`/ride/${rideId}`, { replace: true });
         } catch (error) {
-            // H5.3 — friendlyError mapea codes Postgres/Supabase a
-            // mensajes en español + reporta a public.client_errors con
-            // el original para diagnostico interno.
-            logger.error("[handleConfirm] Error capturado en el flujo:", error);
-            toast.error(friendlyError(error, 'No se pudo solicitar el viaje. Probá de nuevo.', { source: 'ConfirmTripPage.handleConfirm' }));
+            logger.error('[ConfirmTrip] create ride failed', error);
+            toast.error(friendlyError(error, 'No se pudo solicitar el viaje. Probá de nuevo.', {
+                source: 'ConfirmTripPage.handleConfirm',
+                clientRequestId: clientRequestIdRef.current,
+            }));
         } finally {
             setLoading(false);
         }
     };
 
-
-
     return (
-        <div className="bg-[#10141F] min-h-screen text-white font-sans overflow-hidden flex flex-col">
-            {/* Top Half - Map / Header */}
-            <div className="relative w-full h-[45vh] bg-[#2C2F3E] rounded-b-[40px] overflow-hidden shadow-2xl z-10 mx-auto max-w-md md:max-w-full">
-                {/* Simulated Map Image */}
-                {/* Real Google Map */}
-                <InteractiveMap
-                    className="w-full h-full"
-                    center={pickupCoords}
-                    origin={pickupCoords}
-                    destination={dropoffCoords}
-                />
-
-                {/* Header Overlay */}
+        <div className="bg-[#10141F] min-h-screen text-white flex flex-col">
+            <div className="relative w-full h-[42vh] bg-[#2C2F3E] rounded-b-[40px] overflow-hidden shadow-2xl">
+                <InteractiveMap className="w-full h-full" center={pickupCoords} origin={pickupCoords} destination={dropoffCoords} markersProp={stops} />
                 <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent">
-                    <button onClick={() => navigate(-1)} className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white/20 transition-all">
-                        <span className="material-symbols-outlined text-white">arrow_back</span>
+                    <button onClick={() => navigate(-1)} className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center" aria-label="Volver">
+                        <span className="material-symbols-outlined">arrow_back</span>
                     </button>
-                    <h1 className="text-lg font-bold">{serviceType === 'delivery' ? 'Confirmar Envío' : 'Confirmar Viaje'}</h1>
-                    <div className="w-10"></div>
-                </div>
-
-                {/* Route Visualizer on Map */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-xs md:max-w-md px-6">
-                    {/* Simulated Route Line not easily drawn in CSS only, but markers can be placed */}
+                    <h1 className="text-lg font-bold">{isDelivery ? 'Confirmar envío' : 'Confirmar viaje'}</h1>
+                    <div className="w-10" />
                 </div>
             </div>
 
-            {/* Bottom Half - Details */}
-            <div className="flex-1 -mt-6 pt-10 px-6 pb-6 w-full max-w-md mx-auto flex flex-col gap-6">
-
-                {/* Route Points */}
-                <div className="flex flex-col gap-6 relative pl-3">
-                    {/* Dashed Line */}
-                    <div className="absolute left-[19px] top-3 bottom-8 w-0.5 bg-gray-700 border-l border-dashed border-gray-500"></div>
-
-                    {/* Pickup */}
-                    <div className="flex items-start gap-4 z-10">
-                        <div className="mt-1 w-4 h-4 rounded-full border-2 border-blue-500 shadow-lg"></div>
-                        <div>
-                            <p className="text-xs text-gray-400 font-bold tracking-wider mb-1">RECOGIDA</p>
-                            <h3 className="text-lg font-bold text-white leading-tight">{pickup}</h3>
+            <main className="flex-1 -mt-5 pt-10 px-5 pb-8 w-full max-w-md mx-auto space-y-5">
+                <section className="bg-[#1A1F2E] rounded-3xl p-5 border border-white/5">
+                    <div className="flex gap-4">
+                        <div className="flex flex-col items-center pt-1"><span className="w-3 h-3 rounded-full bg-blue-500" /><span className="h-12 border-l border-dashed border-gray-600" /><span className="w-3 h-3 rounded-full bg-violet-500" /></div>
+                        <div className="flex-1 min-w-0 space-y-5">
+                            <div><p className="text-[10px] uppercase text-gray-500">Origen</p><p className="text-sm font-bold truncate">{pickup}</p></div>
+                            <div><p className="text-[10px] uppercase text-gray-500">Destino</p><p className="text-sm font-bold truncate">{dropoff}</p></div>
                         </div>
                     </div>
+                </section>
 
-                    {/* Dropoff */}
-                    <div className="flex items-start gap-4 z-10">
-                        <div className="mt-1 w-4 h-4 rounded-full bg-[#EF4444] shadow-[0_0_10px_#EF4444] border-2 border-white/10"></div>
-                        <div>
-                            <p className="text-xs text-gray-400 font-bold tracking-wider mb-1">DESTINO</p>
-                            <h3 className="text-lg font-bold text-white leading-tight">{dropoff}</h3>
-                        </div>
+                <section className="bg-[#1A1F2E] rounded-3xl p-5 border border-white/5 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-500/15 text-blue-300 flex items-center justify-center"><span className="material-symbols-outlined text-2xl">{vehicleDetails.icon}</span></div>
+                    <div className="flex-1"><p className="font-black">{vehicleDetails.title}</p><p className="text-xs text-gray-500">{vehicleDetails.seats}{Array.isArray(stops) && stops.length ? ` · ${stops.length} parada(s)` : ''}</p></div>
+                    <p className="text-2xl font-black">{money(finalPrice)}</p>
+                </section>
+
+                <section className="bg-[#1A1F2E] rounded-3xl p-5 border border-white/5 space-y-3">
+                    <label className="text-xs font-bold text-gray-400">Teléfono de contacto (opcional)</label>
+                    <input value={passengerPhone} onChange={(event) => setPassengerPhone(event.target.value.replace(/[^0-9+]/g, '').slice(0, 16))} placeholder="04121234567" inputMode="tel" className="w-full bg-[#0F1014] border border-white/10 rounded-xl px-4 py-3 text-sm" />
+                </section>
+
+                <section className="bg-[#1A1F2E] rounded-3xl p-5 border border-white/5 space-y-3">
+                    <div className="flex gap-2">
+                        <input value={promoCode} onChange={(event) => { setPromoCode(event.target.value.toUpperCase()); setAppliedPromo(null); }} placeholder="Código promocional" className="flex-1 min-w-0 bg-[#0F1014] border border-white/10 rounded-xl px-4 py-3 text-sm font-mono uppercase" />
+                        <button type="button" onClick={validatePromo} disabled={validatingPromo || !promoCode.trim()} className="px-4 rounded-xl bg-violet-600 font-bold text-sm disabled:opacity-50">{validatingPromo ? '…' : 'Aplicar'}</button>
                     </div>
-                </div>
+                    {appliedPromo && <div className="flex justify-between text-sm text-emerald-300"><span>{appliedPromo.code}</span><span>-{money(appliedPromo.discount)}</span></div>}
+                </section>
 
-                {/* Car Selection Card */}
-                <div className="bg-[#1A1F2E] p-4 rounded-3xl border border-white/5 flex items-center justify-between shadow-lg">
-                    <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 flex items-center justify-center">
-                            <div className="w-full h-full rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-600/20">
-                                <span className="material-symbols-outlined text-3xl text-white">
-                                    {currentVehicle.icon}
-                                </span>
-                            </div>
-                        </div>
-                        <div>
-                            <p className="text-blue-500 text-xs font-bold uppercase mb-0.5">Mejor Precio</p>
-                            <h3 className="font-bold text-lg">{currentVehicle.title}</h3>
-                            <p className="text-xs text-gray-400 flex items-center gap-1">
-                                <span className="material-symbols-outlined text-[10px]">{serviceType === 'delivery' ? 'weight' : 'person'}</span> {currentVehicle.seats} • 5 min lejos
-                            </p>
-                        </div>
-                    </div>
-                    <div className="text-right">
-                        {appliedPromo ? (
-                            <>
-                                <p className="text-gray-500 text-sm line-through">${price.toFixed(2)}</p>
-                                <p className="text-emerald-400 font-black text-3xl">${finalPrice.toFixed(2)}</p>
-                            </>
-                        ) : (
-                            <p className="text-white font-black text-3xl">${price.toFixed(2)}</p>
-                        )}
-                        {serviceType === 'delivery' && (
-                            <p className="text-[10px] text-gray-500 mt-1">
-                                {deliveryData?.payer === 'receiver' ? 'Paga Destinatario' : 'Paga Remitente'}
-                            </p>
-                        )}
-                    </div>
-                </div>
+                {FEATURES.serverSideRidePricing && <p className="text-[10px] text-center text-gray-600">La tarifa y la promoción se verifican nuevamente en el servidor al confirmar.</p>}
 
-                {/* Payment Method - Removed Visa, default cash logic implied or simplified */}
-                {/* Simplified to just show total price clearly or nothing specific for now if cash is default */}
-
-                {/* Promo Code */}
-                <div>
-                    <label className="text-xs font-bold text-gray-400 mb-2 block">Código Promocional <span className="text-gray-600 font-normal">(Opcional)</span></label>
-                    {appliedPromo ? (
-                        <div className="bg-emerald-500/10 border border-emerald-500/40 rounded-2xl px-4 py-3 flex items-center justify-between">
-                            <div>
-                                <p className="text-emerald-300 font-bold text-sm">{appliedPromo.code}</p>
-                                <p className="text-emerald-200/70 text-xs">−${appliedPromo.discount.toFixed(2)} de descuento</p>
-                            </div>
-                            <button onClick={removePromo} className="text-gray-400 hover:text-white p-2">
-                                <span className="material-symbols-outlined text-base">close</span>
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="bg-[#1A1F2E] rounded-2xl flex items-center px-2 border border-white/5 focus-within:border-blue-500 transition-colors">
-                            <input
-                                type="text"
-                                placeholder="Ej: HIGUEROTE"
-                                className="bg-transparent w-full py-3 px-2 text-white placeholder-gray-600 outline-none uppercase"
-                                value={promoCode}
-                                onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-                                onKeyDown={(e) => e.key === 'Enter' && validatePromo()}
-                            />
-                            <button
-                                onClick={validatePromo}
-                                disabled={!promoCode.trim()}
-                                className="px-3 py-2 text-sm font-bold text-blue-400 hover:text-blue-300 disabled:text-gray-600"
-                            >
-                                Aplicar
-                            </button>
-                        </div>
-                    )}
-                </div>
-
-                {/* Phone Input */}
-                <div>
-                    <label className="text-xs font-bold text-gray-400 mb-2 block">Número de Teléfono <span className="text-gray-600 font-normal">(Opcional)</span></label>
-                    <div className="bg-[#1A1F2E] rounded-2xl flex items-center px-4 border border-white/5 focus-within:border-blue-500 transition-colors">
-                        <input
-                            type="tel"
-                            placeholder="Ej: 0412-0330315"
-                            className="bg-transparent w-full py-4 text-white placeholder-gray-600 outline-none"
-                            value={passengerPhone}
-                            onChange={(e) => setPassengerPhone(e.target.value)}
-                        />
-                        <span className="material-symbols-outlined text-gray-500">phone</span>
-                    </div>
-                </div>
-
-                <button
-                    onClick={handleConfirm}
-                    disabled={loading}
-                    className="mt-auto w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-[20px] font-bold text-lg shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-all active:scale-95"
-                >
-                    {loading ? 'Confirmando...' : (
-                        <>
-                            <span>Confirmar Solicitud</span>
-                            <span className="material-symbols-outlined">arrow_forward</span>
-                        </>
-                    )}
+                <button onClick={handleConfirm} disabled={loading} className="w-full py-4 rounded-2xl bg-blue-600 hover:bg-blue-500 font-black text-lg shadow-lg shadow-blue-600/20 disabled:opacity-50">
+                    {loading ? 'Confirmando…' : `Confirmar por ${money(finalPrice)}`}
                 </button>
-
-            </div>
+            </main>
         </div>
     );
-};
-
-export default ConfirmTripPage;
+}
