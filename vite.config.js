@@ -13,14 +13,12 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), tailwindcss()],
     base: './',
-    // Explicit build-time defaults keep Vercel, Hostinger and Capacitor aligned.
-    // New financial/state-machine paths remain disabled until staging validates
-    // the corresponding SQL and PHP deployments.
     define: {
       'import.meta.env.VITE_SHOP_ENABLED': JSON.stringify(booleanFlag(env.VITE_SHOP_ENABLED)),
       'import.meta.env.VITE_SERVER_SIDE_RIDE_PRICING': JSON.stringify(booleanFlag(env.VITE_SERVER_SIDE_RIDE_PRICING)),
       'import.meta.env.VITE_SERVER_SIDE_RIDE_STATE': JSON.stringify(booleanFlag(env.VITE_SERVER_SIDE_RIDE_STATE)),
       'import.meta.env.VITE_UNIFIED_MEMBERSHIP_CHECKOUT': JSON.stringify(booleanFlag(env.VITE_UNIFIED_MEMBERSHIP_CHECKOUT)),
+      'import.meta.env.VITE_DIRECTED_RIDE_OFFERS': JSON.stringify(booleanFlag(env.VITE_DIRECTED_RIDE_OFFERS)),
       'import.meta.env.VITE_ADMIN_MFA_UI': JSON.stringify(booleanFlag(env.VITE_ADMIN_MFA_UI, 'true')),
     },
     build: {
@@ -28,7 +26,6 @@ export default defineConfig(({ mode }) => {
       sourcemap: false,
       rollupOptions: {
         output: {
-          // index.js remains stable while lazy chunks are content-hashed.
           entryFileNames: 'assets/[name].js',
           chunkFileNames: 'assets/[name]-[hash].js',
           assetFileNames: (info) => {
