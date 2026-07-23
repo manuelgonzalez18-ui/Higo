@@ -28,18 +28,23 @@ Aplicar en staging, en este orden:
 2. `20260724101000_driver_onboarding_membership_reconciliation.sql`
 3. `20260724102000_ride_creation_price_floor.sql`
 4. `20260724102100_ride_quote_subtotal_floor.sql`
-5. `20260724103000_membership_payment_suspension_guard.sql`
-6. `20260724103100_membership_payment_guard_binding.sql`
-7. `20260724104000_ride_transition_guard.sql`
-8. `20260724105000_directed_ride_offers.sql`
-9. `20260724105100_ride_offer_acceptance_guard.sql`
-10. `20260724105200_directed_offers_runtime_gate.sql`
-11. `20260724106000_platform_event_analytics.sql`
-12. `20260724106100_platform_funnel_db_facts.sql`
-13. `20260724106200_platform_events_authenticated_only.sql`
+5. `20260724102300_ride_coverage_guard.sql`
+6. `20260724103000_membership_payment_suspension_guard.sql`
+7. `20260724103100_membership_payment_guard_binding.sql`
+8. `20260724104000_ride_transition_guard.sql`
+9. `20260724105000_directed_ride_offers.sql`
+10. `20260724105100_ride_offer_acceptance_guard.sql`
+11. `20260724105200_directed_offers_runtime_gate.sql`
+12. `20260724106000_platform_event_analytics.sql`
+13. `20260724106100_platform_funnel_db_facts.sql`
+14. `20260724106200_platform_events_authenticated_only.sql`
 
 No aplicar estas migraciones directamente en producción antes de que el mismo
 SHA haya pasado Quality Gate, Vercel y staging.
+
+Las migraciones administrativas ejecutadas previamente desde SQL Editor deben
+reconciliarse antes con el procedimiento de
+[`SUPABASE_MIGRATION_HISTORY.md`](./SUPABASE_MIGRATION_HISTORY.md).
 
 ## Preflight
 
@@ -53,6 +58,7 @@ select
   to_regclass('public.driver_membership_plans') as membership_plans,
   to_regclass('public.payment_reports') as payment_reports,
   to_regclass('public.promo_codes') as promo_codes,
+  to_regprocedure('public.is_within_coverage(double precision,double precision)') as coverage_check,
   to_regprocedure('public.admin_get_context()') as admin_context,
   to_regprocedure('public.higo_is_admin()') as is_admin;
 ```
@@ -97,7 +103,7 @@ Validar con un driver de cada tipo:
 - Un pago no elimina una suspensión disciplinaria.
 - El admin puede registrar una membresía manual y queda auditada.
 
-### C. Precio y promociones server-side
+### C. Precio, cobertura y promociones server-side
 
 Activar además:
 
@@ -115,6 +121,8 @@ Validar:
 - Doble toque o timeout crea un solo viaje (`client_request_id`).
 - El subtotal almacenado nunca es menor que el mostrado al pasajero.
 - El descuento se recalcula sobre ese subtotal y actualiza presupuesto/uso en la misma transacción.
+- Un origen fuera de cobertura es rechazado también al insertar directamente en `rides`.
+- Si la comprobación de cobertura no está disponible, la solicitud falla de forma segura; nunca continúa en modo permisivo.
 
 ### D. Máquina de estados
 
@@ -127,7 +135,7 @@ VITE_SERVER_SIDE_RIDE_STATE=true
 Validar:
 
 - Dos drivers intentan aceptar el mismo viaje; solo uno gana.
-- Driver suspendido o sin membresía no acepta viajes.
+- Driver suspendido o sin membresía no acepta viajes, incluso desde un APK anterior.
 - No se puede completar antes de iniciar.
 - Llegada y espera sobreviven al reinicio de la app.
 - Envíos requieren POD y confirmación COD cuando aplique.
@@ -194,6 +202,7 @@ Alertas manuales durante el rollout:
 
 - `ACTIVATION_FAILED` en Banesco.
 - `invalid_ride_transition`.
+- `pickup_outside_coverage`, `coverage_service_unavailable` o `coverage_check_failed`.
 - `payment_reference_already_used` fuera de duplicados reales.
 - aumento de `client_errors` por ruta.
 - viajes `requested` por más de 10 minutos.
