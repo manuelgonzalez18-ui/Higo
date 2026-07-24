@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { createSingleFlight } from '../utils/singleFlight'
+import { deferAuthCallback } from '../utils/deferAuthCallback'
 
 const FALLBACK_URL = 'https://yfgomicdcwifgeumqsvv.supabase.co';
 const FALLBACK_KEY = 'sb_publishable_d0f_4LR1PqQBc87ThKaxqQ_wm9CGAI1';
@@ -74,6 +75,16 @@ if (!supabaseUrl || !supabaseKey) {
     _supabase = createClient(supabaseUrl, supabaseKey, {
         auth: { lock: passThroughLock },
     });
+
+    // Supabase advises against awaiting or starting more client calls directly
+    // inside onAuthStateChange. Those callbacks can run while the auth client
+    // still holds its internal lock, leaving signInWithPassword pending even
+    // after /auth/v1/token has returned 200. Defer every application callback
+    // centrally so existing and future listeners cannot recreate the deadlock.
+    const nativeOnAuthStateChange = _supabase.auth.onAuthStateChange.bind(_supabase.auth);
+    _supabase.auth.onAuthStateChange = (callback) => nativeOnAuthStateChange(
+        deferAuthCallback(callback),
+    );
 }
 
 // Supabase Auth puede seguir ejecutando el fetch aunque el timeout de UI deje de
@@ -157,7 +168,10 @@ export const withNetworkRetry = async (asyncFn, maxRetries = 2, timeoutMs = 8000
         } catch (err) {
             lastErr = err;
             const msg = String(err?.message || err?.name || err || '').toLowerCase();
-            const retryable = /failed to fetch|networkerror|network error|retryable|tardó demasiado|load failed|timeout|timed out/.test(msg);
+            // Un timeout local no cancela la operación subyacente. Reintentar en
+            // ese caso duplicaría consultas todavía activas; solo reintentamos
+            // errores de red que ya rechazaron realmente.
+            const retryable = /failed to fetch|networkerror|network error|retryable|load failed/.test(msg);
             if (attempt >= maxRetries || !retryable) throw err;
             await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
         }
