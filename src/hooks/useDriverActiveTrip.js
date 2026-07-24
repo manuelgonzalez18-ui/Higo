@@ -361,7 +361,9 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
             setActiveRide((current) => ({ ...current, ...updated }));
             if (delivery) sendDeliveryMilestone({ rideId: ride.id, status: 'completed' });
             if (ride.user_id) {
-                supabase.rpc('credit_pending_referral', { p_user_id: ride.user_id }).catch(() => {});
+                void Promise.resolve(
+                    supabase.rpc('credit_pending_referral', { p_user_id: ride.user_id })
+                ).catch(() => {});
             }
 
             const senderPays = delivery && (ride.delivery_info?.payer === 'sender' || ride.payer === 'sender');
