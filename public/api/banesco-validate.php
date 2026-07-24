@@ -239,14 +239,19 @@ function bv_already_validated(array $cfg, string $token, string $bank, string $r
 // ═══ Mapping respuestas Banesco ═══════════════════════════════════════
 
 function bv_friendly_error(string $code): string {
-    return match ($code) {
-        '70001'  => 'Banesco no encontró esta transacción. Verificá referencia, fecha y banco.',
-        'VRN04', 'CRT503' => 'Banesco está en mantenimiento (típico 02:00–06:00). Reintentá más tarde.',
-        '400'    => 'Datos inválidos enviados a Banesco.',
-        default  => str_starts_with($code, 'VDE')
-                    ? 'Error de validación del payload (' . $code . ').'
-                    : 'Banesco respondió con código ' . $code . '.',
-    };
+    switch ($code) {
+        case '70001':
+            return 'Banesco no encontró esta transacción. Verificá referencia, fecha y banco.';
+        case 'VRN04':
+        case 'CRT503':
+            return 'Banesco está en mantenimiento (típico 02:00–06:00). Reintentá más tarde.';
+        case '400':
+            return 'Datos inválidos enviados a Banesco.';
+        default:
+            return strpos($code, 'VDE') === 0
+                ? 'Error de validación del payload (' . $code . ').'
+                : 'Banesco respondió con código ' . $code . '.';
+    }
 }
 
 // ═══ Main ═════════════════════════════════════════════════════════════
