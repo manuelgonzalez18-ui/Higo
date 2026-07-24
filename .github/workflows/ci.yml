@@ -54,6 +54,7 @@ jobs:
           src/config/parseBooleanFlag.js
           src/hooks/useBackgroundLocation.js
           src/hooks/useDriverActiveTrip.js
+          src/pages/AdminDriverApplicationsPage.jsx
           src/pages/ConfirmTripPage.jsx
           src/pages/HigoPayPage.jsx
           src/services/adminApi.js
@@ -69,9 +70,15 @@ jobs:
       - name: PHP syntax validation
         run: |
           php -l public/api/_cors.php
+          php -l public/api/_driver_applications.php
           php -l public/api/welcome-driver.php
           php -l public/api/welcome-driver-v2.php
           php -l public/api/banesco-validate-v2.php
+          php -l public/api/driver-applications-ingest.php
+          php -l public/api/driver-application-status.php
+          php -l public/api/driver-application-documents.php
+          php -l public/api/driver-application-admin.php
+          php -l public/api/convert-driver-application.php
 
       - name: Test feature flags
         run: node --test tests/featureFlags.test.mjs
