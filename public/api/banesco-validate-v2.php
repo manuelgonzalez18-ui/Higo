@@ -159,12 +159,19 @@ function bv2_bcv_rate(array $cfg): array {
 }
 
 function bv2_friendly_banesco_error(string $code): string {
-    return match ($code) {
-        '70001' => 'Banesco no encontró esta transacción. Verificá referencia, fecha y banco.',
-        'VRN04', 'CRT503' => 'Banesco está en mantenimiento. Reintentá más tarde.',
-        '400' => 'Los datos enviados a Banesco no son válidos.',
-        default => $code !== '' ? 'Banesco respondió con código ' . $code . '.' : 'Banesco no reportó un abono.',
-    };
+    switch ($code) {
+        case '70001':
+            return 'Banesco no encontró esta transacción. Verificá referencia, fecha y banco.';
+        case 'VRN04':
+        case 'CRT503':
+            return 'Banesco está en mantenimiento. Reintentá más tarde.';
+        case '400':
+            return 'Los datos enviados a Banesco no son válidos.';
+        default:
+            return $code !== ''
+                ? 'Banesco respondió con código ' . $code . '.'
+                : 'Banesco no reportó un abono.';
+    }
 }
 
 try {
