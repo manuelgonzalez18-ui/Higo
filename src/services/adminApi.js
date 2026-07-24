@@ -111,6 +111,25 @@ const adminApiEndpoint = (path) => {
         : `https://higoapp.com/api/${path}`;
 };
 
+const DRIVER_APPLICATION_ERRORS = {
+    required_documents_not_approved: 'Debes aprobar la cédula, licencia, circulación, RCV y fotografía del vehículo antes de aprobar la solicitud.',
+    status_reason_required: 'Indica una observación o motivo para realizar este cambio.',
+    conversion_in_progress: 'Otro proceso ya está registrando este driver. Espera unos minutos y actualiza la solicitud.',
+    conversion_claim_failed: 'No se pudo reservar la solicitud para crear la cuenta. Actualiza e intenta nuevamente.',
+    application_not_approved: 'La solicitud debe estar aprobada antes de registrar al driver.',
+    auth_create_failed: 'No se pudo crear la cuenta. Comprueba si el correo ya está registrado en Higo.',
+    profile_insert_failed: 'La cuenta no pudo completar el perfil de driver; el alta fue revertida.',
+    conversion_finalize_failed: 'No se pudo finalizar el registro de forma segura; el alta fue revertida.',
+    admin_mfa_required: 'Esta acción requiere autenticación multifactor administrativa.',
+};
+
+const friendlyAdminError = (result, status) => {
+    const raw = String(result.detail || result.error || '');
+    const matched = Object.entries(DRIVER_APPLICATION_ERRORS)
+        .find(([code]) => raw.includes(code) || result.error === code);
+    return matched?.[1] || raw || `Solicitud administrativa fallida (HTTP ${status}).`;
+};
+
 const postAdminApi = async (path, payload) => {
     const { data } = await supabase.auth.getSession();
     const token = data?.session?.access_token;
@@ -125,7 +144,7 @@ const postAdminApi = async (path, payload) => {
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok || !result.ok) {
-        throw new Error(result.detail || result.error || `Solicitud administrativa fallida (HTTP ${response.status}).`);
+        throw new Error(friendlyAdminError(result, response.status));
     }
     return result;
 };
