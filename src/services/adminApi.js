@@ -90,3 +90,73 @@ export const archivePromo = async (id, reason) => unwrap(await supabase.rpc('adm
     p_id: id,
     p_reason: reason,
 }));
+
+export const listDriverApplications = async ({ query = '', status = 'all', limit = 50, offset = 0 } = {}) =>
+    unwrap(await supabase.rpc('admin_list_driver_applications', {
+        p_query: query || null,
+        p_status: status,
+        p_limit: limit,
+        p_offset: offset,
+    }));
+
+export const getDriverApplication = async (applicationCode) =>
+    unwrap(await supabase.rpc('admin_get_driver_application', {
+        p_application_code: applicationCode,
+    }));
+
+const adminApiEndpoint = (path) => {
+    const productionHosts = ['higoapp.com', 'www.higoapp.com'];
+    return productionHosts.includes(window.location.hostname)
+        ? `/api/${path}`
+        : `https://higoapp.com/api/${path}`;
+};
+
+const postAdminApi = async (path, payload) => {
+    const { data } = await supabase.auth.getSession();
+    const token = data?.session?.access_token;
+    if (!token) throw new Error('La sesión administrativa expiró. Inicia sesión nuevamente.');
+    const response = await fetch(adminApiEndpoint(path), {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) {
+        throw new Error(result.detail || result.error || `Solicitud administrativa fallida (HTTP ${response.status}).`);
+    }
+    return result;
+};
+
+export const setDriverApplicationStatus = async ({ applicationCode, status, reason = '' }) =>
+    postAdminApi('driver-application-admin.php', {
+        action: 'set_status',
+        application_code: applicationCode,
+        status,
+        reason,
+    });
+
+export const requestDriverApplicationDocuments = async ({ applicationCode, reason = '' }) =>
+    postAdminApi('driver-application-admin.php', {
+        action: 'request_documents',
+        application_code: applicationCode,
+        reason,
+    });
+
+export const reviewDriverApplicationDocument = async ({ applicationCode, documentId, reviewStatus, notes = '' }) =>
+    postAdminApi('driver-application-admin.php', {
+        action: 'review_document',
+        application_code: applicationCode,
+        document_id: documentId,
+        review_status: reviewStatus,
+        notes,
+    });
+
+export const convertDriverApplication = async ({ applicationCode, avatarUrl = '', paymentQrUrl = '' }) =>
+    postAdminApi('convert-driver-application.php', {
+        application_code: applicationCode,
+        avatar_url: avatarUrl,
+        payment_qr_url: paymentQrUrl,
+    });
