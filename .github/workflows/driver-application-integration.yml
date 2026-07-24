@@ -1,0 +1,58 @@
+name: Driver Application Integration
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**driver_application**'
+      - 'supabase/tests/driver_application_behavior.sql'
+      - 'public/api/*driver-application*'
+      - 'src/pages/AdminDriverApplicationsPage.jsx'
+      - 'src/services/adminApi.js'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**driver_application**'
+      - 'supabase/tests/driver_application_behavior.sql'
+
+permissions:
+  contents: read
+
+jobs:
+  database-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.101.0
+          github-token: ${{ github.token }}
+
+      - name: Replay migrations and verify driver onboarding
+        env:
+          PGPASSWORD: postgres
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/higo-migrations
+          mkdir -p /tmp/higo-migrations
+          find supabase/migrations -maxdepth 1 -type f -name '*.sql' -print0 \
+            | sort -z \
+            | xargs -0 -r -I{} mv "{}" /tmp/higo-migrations/
+
+          supabase db start
+          trap 'supabase stop --no-backup' EXIT
+
+          psql --host 127.0.0.1 --port 54322 --username postgres --dbname postgres \
+            --set ON_ERROR_STOP=1 --file supabase/tests/platform_base_fixture.sql
+
+          for migration in /tmp/higo-migrations/*.sql; do
+            echo "--- Applying $(basename "$migration")"
+            psql --host 127.0.0.1 --port 54322 --username postgres --dbname postgres \
+              --set ON_ERROR_STOP=1 --file "$migration"
+          done
+
+          psql --host 127.0.0.1 --port 54322 --username postgres --dbname postgres \
+            --set ON_ERROR_STOP=1 --file supabase/tests/driver_application_behavior.sql

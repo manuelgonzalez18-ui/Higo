@@ -22,6 +22,7 @@ const DriverStatsPage         = lazy(() => import('./pages/DriverStatsPage'));
 const DriverOnboardingPage    = lazy(() => import('./pages/DriverOnboardingPage'));
 const RideStatusPage          = lazy(() => import('./pages/RideStatusPage'));
 const AdminDriversPage        = lazy(() => import('./pages/AdminDriversPage'));
+const AdminDriverApplicationsPage = lazy(() => import('./pages/AdminDriverApplicationsPage'));
 const AdminUsersPage          = lazy(() => import('./pages/AdminUsersPage'));
 const AdminPricingPage        = lazy(() => import('./pages/AdminPricingPage'));
 const AdminPromoCodesPage     = lazy(() => import('./pages/AdminPromoCodesPage'));
@@ -490,6 +491,7 @@ const App = () => {
         <Route path="/ride/:id" element={<RideStatusPage />} />
         <Route path="/admin" element={<AdminLoginPage />} />
         <Route path="/admin/dashboard" element={<AdminGuard><AdminDashboardPage /></AdminGuard>} />
+        <Route path="/admin/driver-applications" element={<AdminGuard><AdminDriverApplicationsPage /></AdminGuard>} />
         <Route path="/admin/drivers" element={<AdminGuard><AdminDriversPage /></AdminGuard>} />
         <Route path="/admin/users" element={<AdminGuard><AdminUsersPage /></AdminGuard>} />
         <Route path="/admin/pricing" element={<AdminGuard><AdminPricingPage /></AdminGuard>} />
