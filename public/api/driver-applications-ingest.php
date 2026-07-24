@@ -22,7 +22,7 @@ if ($providedSecret === '' || !hash_equals($expectedSecret, $providedSecret)) {
 
 $input = da_json_input();
 $code = strtoupper(trim((string) ($input['application_code'] ?? '')));
-$status = trim((string) ($input['status'] ?? 'pending_delivery'));
+$incomingStatus = trim((string) ($input['status'] ?? 'pending_delivery'));
 $email = strtolower(trim((string) ($input['email'] ?? '')));
 $cedula = strtoupper(trim((string) ($input['cedula'] ?? '')));
 $phone = trim((string) ($input['phone'] ?? ''));
@@ -33,7 +33,7 @@ $yearRaw = $input['vehicle_year'] ?? null;
 $year = ($yearRaw === '' || $yearRaw === null) ? null : (int) $yearRaw;
 
 if (!preg_match('/^HD-\d{8}-[A-F0-9]{8}$/', $code)) da_send(422, ['ok' => false, 'error' => 'invalid_application_code']);
-if (!in_array($status, ['pending_delivery','received','delivery_failed'], true)) da_send(422, ['ok' => false, 'error' => 'invalid_status']);
+if (!in_array($incomingStatus, ['pending_delivery','received','delivery_failed'], true)) da_send(422, ['ok' => false, 'error' => 'invalid_status']);
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) da_send(422, ['ok' => false, 'error' => 'invalid_email']);
 if (!preg_match('/^[VEJPG]-?\d{5,12}$/', $cedula)) da_send(422, ['ok' => false, 'error' => 'invalid_cedula']);
 if (strlen($phoneDigits) < 10 || strlen($phoneDigits) > 15) da_send(422, ['ok' => false, 'error' => 'invalid_phone']);
@@ -48,9 +48,8 @@ foreach ($requiredText as $key) {
     if (trim((string) ($input[$key] ?? '')) === '') da_send(422, ['ok' => false, 'error' => 'missing_field', 'detail' => $key]);
 }
 
-$payload = [
-    'application_code' => $code,
-    'idempotency_hash' => strtolower(trim((string) $input['idempotency_hash'])),
+$idempotencyHash = strtolower(trim((string) $input['idempotency_hash']));
+$commonPayload = [
     'full_name' => trim((string) $input['full_name']),
     'cedula' => $cedula,
     'phone' => $phone,
@@ -65,7 +64,6 @@ $payload = [
     'vehicle_color' => trim((string) $input['vehicle_color']),
     'license_plate' => $plate,
     'license_plate_hash' => strtolower(trim((string) $input['license_plate_hash'])),
-    'status' => $status,
     'terms_version' => trim((string) $input['terms_version']),
     'privacy_version' => trim((string) $input['privacy_version']),
     'accept_terms' => (bool) ($input['accept_terms'] ?? false),
@@ -74,18 +72,67 @@ $payload = [
     'source' => substr(trim((string) ($input['source'] ?? 'higodriver.com')), 0, 80),
     'submitted_ip_hash' => substr(trim((string) ($input['submitted_ip_hash'] ?? '')), 0, 128) ?: null,
     'confirmation_email_sent' => (bool) ($input['confirmation_email_sent'] ?? false),
-    'last_status_changed_at' => gmdate('c'),
 ];
 
-$body = json_encode([$payload], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-[$upsertStatus, $upsertBody] = bl_http_post(
-    $cfg['_supabase_url'] . '/rest/v1/driver_applications?on_conflict=application_code',
-    (string) $body,
-    da_service_headers($cfg, ['Prefer: resolution=merge-duplicates,return=representation'])
-);
-$rows = json_decode($upsertBody, true);
-if ($upsertStatus < 200 || $upsertStatus >= 300 || !is_array($rows) || empty($rows[0]['id'])) {
-    error_log('[driver-applications-ingest] upsert failed HTTP ' . $upsertStatus . ': ' . substr($upsertBody, 0, 400));
+try {
+    $existing = da_fetch_application($cfg, $code);
+} catch (Throwable $e) {
+    error_log('[driver-applications-ingest] lookup failed: ' . $e->getMessage());
+    da_send(502, ['ok' => false, 'error' => 'application_lookup_failed']);
+}
+
+$created = $existing === null;
+$effectiveStatus = $incomingStatus;
+
+if ($existing !== null) {
+    if (!hash_equals((string) ($existing['idempotency_hash'] ?? ''), $idempotencyHash)) {
+        da_send(409, ['ok' => false, 'error' => 'application_code_conflict']);
+    }
+
+    $currentStatus = (string) ($existing['status'] ?? 'pending_delivery');
+    $advancedStatuses = [
+        'under_review', 'documents_requested', 'documents_submitted', 'correction_requested',
+        'approved', 'converted', 'waitlist', 'rejected'
+    ];
+
+    if (in_array($currentStatus, $advancedStatuses, true)) {
+        $effectiveStatus = $currentStatus;
+    } elseif ($currentStatus === 'received') {
+        $effectiveStatus = 'received';
+    } elseif ($currentStatus === 'delivery_failed') {
+        $effectiveStatus = $incomingStatus === 'received' ? 'received' : 'delivery_failed';
+    } elseif ($currentStatus === 'pending_delivery') {
+        $effectiveStatus = $incomingStatus;
+    } else {
+        $effectiveStatus = $currentStatus;
+    }
+
+    $patchPayload = $commonPayload + [
+        'status' => $effectiveStatus,
+        'last_status_changed_at' => $effectiveStatus !== $currentStatus ? gmdate('c') : (string) ($existing['last_status_changed_at'] ?? gmdate('c')),
+    ];
+    [$writeStatus, $writeBody] = bl_http_patch(
+        $cfg['_supabase_url'] . '/rest/v1/driver_applications?id=eq.' . rawurlencode((string) $existing['id']),
+        (string) json_encode($patchPayload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+        da_service_headers($cfg, ['Prefer: return=representation'])
+    );
+} else {
+    $insertPayload = $commonPayload + [
+        'application_code' => $code,
+        'idempotency_hash' => $idempotencyHash,
+        'status' => $effectiveStatus,
+        'last_status_changed_at' => gmdate('c'),
+    ];
+    [$writeStatus, $writeBody] = bl_http_post(
+        $cfg['_supabase_url'] . '/rest/v1/driver_applications',
+        (string) json_encode([$insertPayload], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+        da_service_headers($cfg, ['Prefer: return=representation'])
+    );
+}
+
+$rows = json_decode($writeBody, true);
+if ($writeStatus < 200 || $writeStatus >= 300 || !is_array($rows) || empty($rows[0]['id'])) {
+    error_log('[driver-applications-ingest] write failed HTTP ' . $writeStatus . ': ' . substr($writeBody, 0, 400));
     da_send(502, ['ok' => false, 'error' => 'application_sync_failed']);
 }
 
@@ -93,8 +140,13 @@ $event = json_encode([[
     'application_id' => (string) $rows[0]['id'],
     'actor_type' => 'system',
     'event_type' => 'portal_sync',
-    'to_status' => $status,
-    'metadata' => ['source' => 'higodriver.com'],
+    'to_status' => $effectiveStatus,
+    'metadata' => [
+        'source' => 'higodriver.com',
+        'incoming_status' => $incomingStatus,
+        'effective_status' => $effectiveStatus,
+        'created' => $created,
+    ],
 ]], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 try {
     bl_http_post(
@@ -109,5 +161,6 @@ try {
 da_send(200, [
     'ok' => true,
     'application_id' => $code,
-    'status' => $status,
+    'status' => $effectiveStatus,
+    'created' => $created,
 ]);
