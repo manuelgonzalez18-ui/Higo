@@ -29,6 +29,7 @@ $allowedFields = [
     'payment_details' => 'payment_details',
     'other' => 'other',
 ];
+$requiredTypes = ['identity', 'driver_license', 'vehicle_registration', 'rcv', 'vehicle_photo'];
 $allowedMime = [
     'image/jpeg' => 'jpg',
     'image/png' => 'png',
@@ -37,6 +38,7 @@ $allowedMime = [
 ];
 $totalSize = 0;
 $prepared = [];
+$presentTypes = [];
 $finfo = new finfo(FILEINFO_MIME_TYPE);
 
 foreach ($allowedFields as $field => $documentType) {
@@ -55,8 +57,12 @@ foreach ($allowedFields as $field => $documentType) {
     if (!isset($allowedMime[$mime])) {
         da_send(422, ['ok' => false, 'error' => 'invalid_file_type', 'detail' => $field]);
     }
+    if ($field === 'vehicle_photo' && $mime === 'application/pdf') {
+        da_send(422, ['ok' => false, 'error' => 'invalid_file_type', 'detail' => $field]);
+    }
     $totalSize += $size;
     if ($totalSize > 31457280) da_send(422, ['ok' => false, 'error' => 'total_upload_too_large']);
+    $presentTypes[$documentType] = true;
     $prepared[] = [
         'field' => $field,
         'document_type' => $documentType,
@@ -69,6 +75,11 @@ foreach ($allowedFields as $field => $documentType) {
 }
 
 if (!$prepared) da_send(422, ['ok' => false, 'error' => 'no_documents']);
+foreach ($requiredTypes as $requiredType) {
+    if (empty($presentTypes[$requiredType])) {
+        da_send(422, ['ok' => false, 'error' => 'missing_required_document', 'detail' => $requiredType]);
+    }
+}
 
 [$claimStatus, $claimBody] = bl_http_post(
     $cfg['_supabase_url'] . '/rest/v1/rpc/higo_claim_driver_application_upload_token',
@@ -131,7 +142,6 @@ try {
         $uploaded[] = [
             'id' => (string) $documentRows[0]['id'],
             'storage_path' => $objectPath,
-            'record' => $documentRows[0],
         ];
     }
 
