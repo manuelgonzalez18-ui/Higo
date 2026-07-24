@@ -7,6 +7,7 @@ import { FEATURES } from '../config/features';
 
 const ITEMS = [
     { to: '/admin/dashboard', label: 'Resumen', icon: 'dashboard', group: 'Principal', permissions: ['view_dashboard'] },
+    { to: '/admin/driver-applications', label: 'Solicitudes drivers', icon: 'assignment_ind', group: 'Principal', permissions: ['manage_drivers'] },
     { to: '/admin/drivers', label: 'Drivers y membresías', icon: 'badge', group: 'Principal', permissions: ['manage_memberships', 'manage_drivers'] },
     { to: '/admin/analytics', label: 'Analítica', icon: 'monitoring', group: 'Principal', permissions: ['view_analytics'] },
     { to: '/admin/deliveries', label: 'Envíos', icon: 'inventory_2', group: 'Operación', permissions: ['manage_operations'] },
