@@ -1,1097 +1,497 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase, getUserProfile } from '../services/supabase';
 import AdminNav from '../components/AdminNav';
+import { useAdminContext } from '../components/AdminGuard';
+import { supabase } from '../services/supabase';
+import {
+    archiveDriver,
+    listDrivers,
+    listMembershipPlans,
+    recordMembership,
+    setDriverException,
+    voidMembership,
+} from '../services/adminApi';
 import { toast } from '../components/Toast';
 
-// Helper to format date
-const formatDate = (dateString) => {
-    if (!dateString) return '--';
-    return new Date(dateString).toISOString().split('T')[0];
+const PAGE_SIZE = 50;
+const EMPTY_DRIVER = {
+    full_name: '',
+    email: '',
+    password: '',
+    phone: '',
+    vehicle_type: 'standard',
+    vehicle_brand: '',
+    vehicle_model: '',
+    vehicle_color: '',
+    license_plate: '',
+    avatar_url: '',
+    payment_qr_url: '',
 };
 
-const AdminDriversPage = () => {
-    const navigate = useNavigate();
-    const [authorized, setAuthorized] = useState(false);
-    const [drivers, setDrivers] = useState([]);
-    const [loading, setLoading] = useState(true);
-    // H4.3 — cursor pagination
-    const [loadingMore, setLoadingMore] = useState(false);
-    const [hasMore, setHasMore] = useState(true);
-    const PAGE_SIZE = 50;
-    const [searchTerm, setSearchTerm] = useState('');
-    const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'active', 'suspended'
+const STATES = [
+    ['all', 'Todos'],
+    ['active', 'Vigentes'],
+    ['expiring_soon', 'Por vencer'],
+    ['expired', 'Vencidos'],
+    ['no_membership', 'Sin membresía'],
+    ['grace_period', 'Excepción'],
+    ['suspended', 'Suspendidos'],
+    ['archived', 'Archivados'],
+];
 
-    // Modal States
-    const [showObjModal, setShowObjModal] = useState(false); // Action Modal
-    const [showDocsModal, setShowDocsModal] = useState(false); // Docs Review Modal (D.C1)
-    const [docsList, setDocsList] = useState([]);     // driver_documents del selectedDriver
-    const [docsUrls, setDocsUrls] = useState({});     // type → signed URL
-    const [docsLoading, setDocsLoading] = useState(false);
-    const [selectedDriver, setSelectedDriver] = useState(null);
-    const [actionType, setActionType] = useState('pago'); // 'pago', 'pago_activar', 'activar', 'desactivar', 'eliminar'
-    const [membershipPeriod, setMembershipPeriod] = useState('monthly');
+const STATE_META = {
+    active: ['Vigente', 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'],
+    expiring_soon: ['Por vencer', 'bg-amber-500/15 text-amber-300 border-amber-500/30'],
+    expired: ['Vencida', 'bg-red-500/15 text-red-300 border-red-500/30'],
+    no_membership: ['Sin membresía', 'bg-gray-500/15 text-gray-300 border-gray-500/30'],
+    grace_period: ['Excepción temporal', 'bg-blue-500/15 text-blue-300 border-blue-500/30'],
+    suspended: ['Suspendido', 'bg-rose-500/15 text-rose-300 border-rose-500/30'],
+    archived: ['Archivado', 'bg-gray-700/40 text-gray-400 border-gray-600/30'],
+};
 
-    const [showRegisterModal, setShowRegisterModal] = useState(false);
-    const [newDriver, setNewDriver] = useState({
-        full_name: '',
-        phone: '',
-        vehicle_type: 'Carro',
-        vehicle_brand: '',
-        vehicle_model: '',
-        vehicle_color: '',
-        license_plate: '',
-        email: '',
-        password: '',
-        avatar_url: '',
-        payment_qr_url: ''
-    });
+const fmtDate = (value) => value ? new Date(value).toLocaleDateString('es-VE') : '—';
+const money = (value, currency = 'USD') => `${currency === 'USD' ? '$' : `${currency} `}${Number(value || 0).toFixed(2)}`;
 
-    const [message, setMessage] = useState(null);
-    const [avatarFile, setAvatarFile] = useState(null);
-    // Docs del chofer subidos por el admin al registrar (opcional).
-    // Tipos: cedula, licencia, rcv, vehicle_photo. Tras crear el user
-    // via welcome-driver.php se uploadean al bucket driver-docs y se
-    // insertan en driver_documents con status='approved'.
-    const [newDriverDocs, setNewDriverDocs] = useState({
-        cedula: null, licencia: null, rcv: null,
-        circulacion: null, cert_salud: null, vehicle_photo: null,
-    });
-    const [avatarPreview, setAvatarPreview] = useState(null);
+const processGoogleDriveLink = (url) => {
+    if (!url) return '';
+    if (url.includes('drive.google.com') && url.includes('/file/d/')) {
+        const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+        if (match?.[1]) return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+    }
+    return url;
+};
 
-    const handleAvatarChange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        setAvatarFile(file);
-        setAvatarPreview(URL.createObjectURL(file));
+const compressImage = (file, maxSize = 1024, quality = 0.85) => new Promise((resolve, reject) => {
+    if (!file || !file.type.startsWith('image/')) {
+        resolve(file);
+        return;
+    }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+        URL.revokeObjectURL(url);
+        const ratio = Math.min(maxSize / img.width, maxSize / img.height, 1);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.width * ratio));
+        canvas.height = Math.max(1, Math.round(img.height * ratio));
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+            if (!blob) {
+                reject(new Error('compression_failed'));
+                return;
+            }
+            const baseName = (file.name || 'avatar').replace(/\.[^.]+$/, '');
+            resolve(new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' }));
+        }, 'image/jpeg', quality);
     };
+    img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('image_load_failed'));
+    };
+    img.src = url;
+});
 
-    // Comprime la imagen del avatar para no exceder upload_max_filesize de
-    // Hostinger (típicamente 2-8 MB). Redimensiona a máx 1024px y reencode
-    // a JPEG ~85%. Una foto de móvil de 6 MB queda en ~200-400 KB.
-    const compressImage = (file, maxSize = 1024, quality = 0.85) => new Promise((resolve, reject) => {
-        if (!file || !file.type.startsWith('image/')) { resolve(file); return; }
-        const url = URL.createObjectURL(file);
-        const img = new Image();
-        img.onload = () => {
-            URL.revokeObjectURL(url);
-            const ratio = Math.min(maxSize / img.width, maxSize / img.height, 1);
-            const w = Math.max(1, Math.round(img.width * ratio));
-            const h = Math.max(1, Math.round(img.height * ratio));
-            const canvas = document.createElement('canvas');
-            canvas.width = w; canvas.height = h;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, w, h);
-            canvas.toBlob((blob) => {
-                if (!blob) { reject(new Error('compression_failed')); return; }
-                const baseName = (file.name || 'avatar').replace(/\.[^.]+$/, '');
-                resolve(new File([blob], baseName + '.jpg', { type: 'image/jpeg' }));
-            }, 'image/jpeg', quality);
-        };
-        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image_load_failed')); };
-        img.src = url;
-    });
+const Modal = ({ title, children, onClose, wide = false }) => (
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+        <div className={`w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} bg-[#1A1F2E] border border-white/10 rounded-3xl my-8 overflow-hidden`}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
+                <h2 className="font-black text-lg">{title}</h2>
+                <button onClick={onClose} className="w-9 h-9 rounded-full bg-white/5"><span className="material-symbols-outlined">close</span></button>
+            </div>
+            {children}
+        </div>
+    </div>
+);
 
-    // Fetch Drivers — H4.3: cursor pagination con limit PAGE_SIZE.
-    // reset=true (default cuando se invoca sin args): empieza de cero.
-    // reset=false: pagina con el created_at del último driver local.
-    const fetchDrivers = async (reset = true) => {
-        if (reset) setLoading(true);
-        else setLoadingMore(true);
+export default function AdminDriversPage() {
+    const navigate = useNavigate();
+    const adminContext = useAdminContext();
+    const canCreateDriver = Boolean(adminContext?.permissions?.manage_drivers);
+    const [drivers, setDrivers] = useState([]);
+    const [plans, setPlans] = useState([]);
+    const [query, setQuery] = useState('');
+    const [state, setState] = useState('all');
+    const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(false);
+    const [selected, setSelected] = useState(null);
+    const [modal, setModal] = useState(null);
+    const [busy, setBusy] = useState(false);
+    const [docs, setDocs] = useState([]);
+    const [docUrls, setDocUrls] = useState({});
+    const [form, setForm] = useState({ planId: '', paymentMethod: 'pago_movil', reference: '', notes: '', amount: '' });
+    const [newDriver, setNewDriver] = useState(EMPTY_DRIVER);
+    const [avatarFile, setAvatarFile] = useState(null);
+    const [avatarPreview, setAvatarPreview] = useState('');
+
+    const load = useCallback(async ({ append = false } = {}) => {
+        append ? setLoadingMore(true) : setLoading(true);
         try {
-            const cursor = reset ? null : drivers[drivers.length - 1]?.created_at;
-            let q = supabase
-                .from('profiles')
-                .select('*')
-                .eq('role', 'driver')
-                .order('created_at', { ascending: false })
-                .limit(PAGE_SIZE);
-            if (cursor) q = q.lt('created_at', cursor);
-
-            const { data, error } = await q;
-            if (error) throw error;
-            const rows = data || [];
-            setDrivers(reset ? rows : [...drivers, ...rows]);
-            setHasMore(rows.length === PAGE_SIZE);
-        } catch (error) {
-            console.error('Error fetching drivers:', error);
-            setMessage({ type: 'error', text: 'Failed to load drivers.' });
+            const rows = await listDrivers({ query, state, limit: PAGE_SIZE, offset: append ? drivers.length : 0 });
+            setDrivers(prev => append ? [...prev, ...(rows || [])] : (rows || []));
+            setHasMore((rows || []).length === PAGE_SIZE);
+            return rows || [];
+        } catch (err) {
+            toast.error(`No se pudieron cargar los drivers: ${err.message}`);
+            if (!append) setDrivers([]);
+            return [];
         } finally {
             setLoading(false);
             setLoadingMore(false);
         }
-    };
-
-    const loadMoreDrivers = async () => {
-        if (loadingMore || !hasMore) return;
-        await fetchDrivers(false);
-    };
+    }, [query, state, drivers.length]);
 
     useEffect(() => {
-        const checkAuth = async () => {
-            const profile = await getUserProfile();
-            if (!profile || profile.role !== 'admin') {
-                navigate('/');
-                return;
-            }
-            setAuthorized(true);
-            fetchDrivers();
-        };
-        checkAuth();
-    }, [navigate]);
+        listMembershipPlans().then(rows => {
+            setPlans(rows || []);
+            if (rows?.[0]) setForm(f => ({ ...f, planId: f.planId || rows[0].id }));
+        }).catch(err => toast.error(`No se pudieron cargar los planes: ${err.message}`));
+    }, []);
 
-    // Reset Fleet - Reset all drivers to offline
-    const handleResetFleet = async () => {
-        if (!confirm('¿Estás seguro de desconectar a TODOS los conductores? Esto limpiará el mapa de usuarios fantasmas.')) return;
-        setLoading(true);
+    useEffect(() => {
+        const timer = setTimeout(() => load(), 300);
+        return () => clearTimeout(timer);
+    }, [query, state]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => () => {
+        if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    }, [avatarPreview]);
+
+    const selectedPlan = useMemo(() => plans.find(p => p.id === form.planId), [plans, form.planId]);
+
+    const openMembership = (driver) => {
+        const vehicle = String(driver.vehicle_type || '').toLowerCase();
+        const plan = plans.find(p => !p.vehicle_type || vehicle.includes(p.vehicle_type) || (p.vehicle_type === 'standard' && ['carro', 'car', 'standard'].some(v => vehicle.includes(v)))) || plans[0];
+        setSelected(driver);
+        setForm({ planId: plan?.id || '', paymentMethod: 'pago_movil', reference: '', notes: '', amount: plan?.amount ?? '' });
+        setModal('membership');
+    };
+
+    const submitMembership = async () => {
+        if (!selected || !form.planId || !form.paymentMethod.trim()) return;
+        setBusy(true);
         try {
-            const { error } = await supabase
-                .from('profiles')
-                .update({ status: 'offline' })
-                .eq('role', 'driver');
-
-            if (error) throw error;
-
-            setMessage({ type: 'success', text: 'Se ha reiniciado el estatus de la flota.' });
-            fetchDrivers();
-        } catch (error) {
-            console.error('Error resetting fleet:', error);
-            setMessage({ type: 'error', text: 'Error al reiniciar flota: ' + error.message });
+            await recordMembership({
+                driverId: selected.id,
+                planId: form.planId,
+                paymentMethod: form.paymentMethod,
+                paymentReference: form.reference,
+                notes: form.notes,
+                amount: form.amount,
+            });
+            toast.success('Membresía registrada y estado del driver reconciliado.');
+            setModal(null);
+            await load();
+        } catch (err) {
+            toast.error(err.message.includes('duplicate') ? 'La referencia de pago ya fue utilizada.' : err.message);
         } finally {
-            setLoading(false);
+            setBusy(false);
         }
     };
 
-    // Filter Logic
-    const filteredDrivers = drivers.filter(driver => {
-        const matchesSearch = driver.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            driver.license_plate?.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesStatus = filterStatus === 'all'
-            ? true
-            : filterStatus === 'active'
-                ? (driver.subscription_status === 'active' || !driver.subscription_status)
-                : driver.subscription_status === 'suspended';
-
-        return matchesSearch && matchesStatus;
-    });
-
-    // Plan de membresía inferido del tipo de vehículo.
-    const MEMBERSHIP_PLANS = {
-        moto:      { plan: 'moto',     monthly: 10, weekly: 3 },
-        standard:  { plan: 'standard', monthly: 20, weekly: 5 },
-        carro:     { plan: 'standard', monthly: 20, weekly: 5 },
-        van:       { plan: 'van',      monthly: 25, weekly: 7 },
-        camioneta: { plan: 'van',      monthly: 25, weekly: 7 },
-    };
-
-    // ─── Docs review (D.C1 · 4/4) ──────────────────────────────────
-    // Cuando se abre el docs modal, fetcheamos driver_documents del
-    // chofer + resolvemos signed URLs en paralelo para los previews.
-    React.useEffect(() => {
-        if (!showDocsModal || !selectedDriver?.id) {
-            setDocsList([]);
-            setDocsUrls({});
+    const registerDriver = async () => {
+        if (!newDriver.full_name.trim() || !newDriver.email.trim()) {
+            toast.error('Nombre y correo son obligatorios.');
             return;
         }
-        let cancelled = false;
-        setDocsLoading(true);
-        (async () => {
-            const { data, error } = await supabase
-                .from('driver_documents')
-                .select('*')
-                .eq('user_id', selectedDriver.id)
-                .order('submitted_at', { ascending: false });
-            if (cancelled) return;
-            if (error) {
-                console.error('docs fetch failed:', error);
-                setDocsList([]);
-                setDocsLoading(false);
-                return;
-            }
-            setDocsList(data || []);
-            const urls = {};
-            await Promise.all((data || []).map(async (d) => {
-                const { data: signed } = await supabase
-                    .storage
-                    .from('driver-docs')
-                    .createSignedUrl(d.file_path, 300);
-                if (signed?.signedUrl) urls[d.document_type] = signed.signedUrl;
-            }));
-            if (!cancelled) {
-                setDocsUrls(urls);
-                setDocsLoading(false);
-            }
-        })();
-        return () => { cancelled = true; };
-    }, [showDocsModal, selectedDriver?.id]);
-
-    const approveDoc = async (doc) => {
-        const { data: { user } } = await supabase.auth.getUser();
-        const { error } = await supabase
-            .from('driver_documents')
-            .update({
-                status: 'approved',
-                reviewed_at: new Date().toISOString(),
-                reviewed_by: user?.id || null,
-                rejection_reason: null,
-            })
-            .eq('id', doc.id);
-        if (error) {
-            toast.error(`Error aprobando: ${error.message}`);
-            return;
-        }
-        // Refetch.
-        setDocsList(prev => prev.map(d => d.id === doc.id
-            ? { ...d, status: 'approved', reviewed_at: new Date().toISOString() }
-            : d
-        ));
-    };
-
-    const rejectDoc = async (doc) => {
-        const reason = prompt('Motivo del rechazo (el chofer lo va a ver):', '');
-        if (!reason || !reason.trim()) return;
-        const { data: { user } } = await supabase.auth.getUser();
-        const { error } = await supabase
-            .from('driver_documents')
-            .update({
-                status: 'rejected',
-                reviewed_at: new Date().toISOString(),
-                reviewed_by: user?.id || null,
-                rejection_reason: reason.trim(),
-            })
-            .eq('id', doc.id);
-        if (error) {
-            toast.error(`Error rechazando: ${error.message}`);
-            return;
-        }
-        setDocsList(prev => prev.map(d => d.id === doc.id
-            ? { ...d, status: 'rejected', rejection_reason: reason.trim() }
-            : d
-        ));
-    };
-
-    const openSupportChat = async (driver) => {
-        // Admin abre chat de soporte con un chofer → role_context='driver'.
-        // Si el chofer también es pasajero en otra parte de la app, tiene
-        // 2 threads (UNIQUE (user_id, role_context) de mig 33); este flow
-        // siempre apunta al thread de driver.
-        const { data: existing } = await supabase
-            .from('support_threads')
-            .select('id')
-            .eq('user_id', driver.id)
-            .eq('role_context', 'driver')
-            .maybeSingle();
-
-        let threadId = existing?.id;
-        if (!threadId) {
-            // Upsert defensivo en lugar de INSERT crudo: si por race
-            // condition el thread se creó entre el SELECT y el INSERT
-            // (ej. el chofer abrió el widget en paralelo), upsert con
-            // onConflict no rompe — devuelve la fila existente.
-            const { data: created, error } = await supabase
-                .from('support_threads')
-                .upsert(
-                    { user_id: driver.id, role_context: 'driver' },
-                    { onConflict: 'user_id,role_context' }
-                )
-                .select('id')
-                .single();
-            if (error) { setMessage({ type: 'error', text: error.message }); return; }
-            threadId = created.id;
-        }
-        navigate(`/admin/support?thread=${threadId}`);
-    };
-
-    const registerMembership = async (driver, period = 'monthly') => {
-        const vType = (driver.vehicle_type || 'standard').toLowerCase();
-        const planInfo = MEMBERSHIP_PLANS[vType] || MEMBERSHIP_PLANS.standard;
-        const amount = period === 'weekly' ? planInfo.weekly : planInfo.monthly;
-        const now = new Date();
-        const expires = new Date(now);
-        if (period === 'weekly') expires.setDate(expires.getDate() + 7);
-        else if (period === 'yearly') expires.setFullYear(expires.getFullYear() + 1);
-        else expires.setMonth(expires.getMonth() + 1);
-
-        const { error } = await supabase.from('driver_memberships').insert({
-            driver_id: driver.id,
-            plan: planInfo.plan,
-            amount,
-            period,
-            paid_at: now.toISOString(),
-            expires_at: expires.toISOString(),
-            status: 'active'
-        });
-        return error;
-    };
-
-    // Helper Action
-    const executeAction = async () => {
-        if (!selectedDriver) return;
-        setLoading(true);
-        setMessage(null);
-
-        try {
-            if (actionType === 'pago' || actionType === 'pago_activar') {
-                // El trigger sync_driver_subscription_status actualiza
-                // profiles.subscription_status y last_payment_date automáticamente.
-                const err = await registerMembership(selectedDriver, membershipPeriod);
-                if (err) throw err;
-                setMessage({ type: 'success', text: 'Membresía registrada. Conductor activo por 30 días.' });
-            } else if (actionType === 'activar') {
-                const { error } = await supabase.from('profiles')
-                    .update({ subscription_status: 'active' }).eq('id', selectedDriver.id);
-                if (error) throw error;
-                setMessage({ type: 'success', text: 'Conductor activado.' });
-            } else if (actionType === 'desactivar') {
-                const { error } = await supabase.from('profiles')
-                    .update({ subscription_status: 'suspended' }).eq('id', selectedDriver.id);
-                if (error) throw error;
-                setMessage({ type: 'success', text: 'Conductor suspendido.' });
-            } else if (actionType === 'eliminar') {
-                const { error } = await supabase.from('profiles').delete().eq('id', selectedDriver.id);
-                if (error) throw error;
-                setMessage({ type: 'success', text: 'Conductor eliminado.' });
-            }
-
-            setShowObjModal(false);
-            fetchDrivers();
-        } catch (error) {
-            setMessage({ type: 'error', text: error.message });
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // Handle Registration: crea auth user + profile + sube foto + envía email
-    // de bienvenida. Todo lo hace public/api/welcome-driver.php con service_role.
-    // Se usa multipart/form-data (no JSON con base64) para que el WAF de
-    // Hostinger no bloquee el request con 403 por payloads grandes.
-    const handleRegister = async () => {
-        if (!newDriver.full_name || !newDriver.email) {
-            setMessage({ type: 'error', text: 'Nombre y correo son obligatorios.' });
-            return;
-        }
-        // La contraseña es opcional: si se deja vacía, welcome-driver.php
-        // genera una fuerte server-side y se la envía al conductor por correo.
-        setLoading(true);
+        setBusy(true);
         try {
             const { data: sessionData } = await supabase.auth.getSession();
             const accessToken = sessionData?.session?.access_token;
-            if (!accessToken) throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
+            if (!accessToken) throw new Error('La sesión expiró. Iniciá sesión nuevamente.');
 
-            const fd = new FormData();
-            fd.append('full_name', newDriver.full_name);
-            fd.append('email', newDriver.email);
-            fd.append('password', newDriver.password);
-            fd.append('phone', newDriver.phone || '');
-            fd.append('vehicle_type', newDriver.vehicle_type || '');
-            fd.append('vehicle_brand', newDriver.vehicle_brand || '');
-            fd.append('vehicle_model', newDriver.vehicle_model || '');
-            fd.append('vehicle_color', newDriver.vehicle_color || '');
-            fd.append('license_plate', newDriver.license_plate || '');
-            fd.append('avatar_url', newDriver.avatar_url ? processGoogleDriveLink(newDriver.avatar_url) : '');
-            fd.append('payment_qr_url', processGoogleDriveLink(newDriver.payment_qr_url || ''));
+            const body = new FormData();
+            Object.entries(newDriver).forEach(([key, value]) => {
+                body.append(key, key.endsWith('_url') ? processGoogleDriveLink(value || '') : (value || ''));
+            });
             if (avatarFile) {
-                let toSend = avatarFile;
-                try { toSend = await compressImage(avatarFile, 1024, 0.85); } catch (_) { toSend = avatarFile; }
-                fd.append('avatar_file', toSend, toSend.name);
-            }
-
-            const res = await fetch('/api/welcome-driver.php', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${accessToken}` },
-                body: fd,
-            });
-            const result = await res.json().catch(() => ({}));
-            if (!res.ok || !result.ok) {
-                const detail = result.detail || result.error || `HTTP ${res.status}`;
-                throw new Error(`No se pudo registrar al conductor: ${detail}`);
-            }
-
-            const emailNote = result.email_sent
-                ? 'Correo de bienvenida enviado.'
-                : 'Conductor creado, pero falló el envío del correo de bienvenida.';
-            const avatarNote = avatarFile
-                ? (result.avatar_uploaded
-                    ? 'Foto cargada.'
-                    : `Foto NO cargada (${result.avatar_detail || 'desconocido'}).`)
-                : '';
-
-            // Si el admin cargó docs en el modal: subir al bucket driver-docs
-            // y crear filas en driver_documents con status='approved'. Las
-            // policies de mig 47 permiten que el admin escriba en el folder
-            // del chofer e inserte filas approved en su nombre. Best-effort:
-            // si alguno falla no rompemos el registro entero, solo loggeamos.
-            const newUserId = result.user_id;
-            const docsToUpload = Object.entries(newDriverDocs).filter(([, f]) => f);
-            let docsOk = 0;
-            let docsFail = 0;
-            if (newUserId && docsToUpload.length) {
-                const { data: { user: adminUser } } = await supabase.auth.getUser();
-                const adminId = adminUser?.id || null;
-                const nowIso = new Date().toISOString();
-                for (const [docType, file] of docsToUpload) {
-                    try {
-                        const ext = (file.type === 'application/pdf') ? 'pdf'
-                                  : (file.type?.startsWith('image/') ? (file.type.split('/')[1] === 'jpeg' ? 'jpg' : file.type.split('/')[1]) : 'bin');
-                        const path = `${newUserId}/${docType}-${Date.now()}.${ext}`;
-                        const { error: upErr } = await supabase.storage
-                            .from('driver-docs')
-                            .upload(path, file, {
-                                contentType: file.type || 'application/octet-stream',
-                                upsert: false,
-                            });
-                        if (upErr) throw upErr;
-                        const { error: insErr } = await supabase
-                            .from('driver_documents')
-                            .insert({
-                                user_id: newUserId,
-                                document_type: docType,
-                                file_path: path,
-                                file_mime: file.type,
-                                file_size: file.size,
-                                status: 'approved',
-                                reviewed_at: nowIso,
-                                reviewed_by: adminId,
-                            });
-                        if (insErr) throw insErr;
-                        docsOk++;
-                    } catch (e) {
-                        console.error(`doc ${docType} upload failed:`, e);
-                        docsFail++;
-                    }
+                let prepared = avatarFile;
+                try {
+                    prepared = await compressImage(avatarFile);
+                } catch {
+                    prepared = avatarFile;
                 }
+                body.append('avatar_file', prepared, prepared.name);
             }
-            const docsNote = docsToUpload.length
-                ? ` Docs: ${docsOk}/${docsToUpload.length} cargados${docsFail ? ` (${docsFail} fallaron, revisar consola)` : ''}.`
-                : '';
 
-            setMessage({ type: 'success', text: `Conductor registrado. ${emailNote} ${avatarNote}${docsNote}`.trim() });
-            setShowRegisterModal(false);
+            const productionHosts = ['higoapp.com', 'www.higoapp.com'];
+            const endpoint = productionHosts.includes(window.location.hostname)
+                ? '/api/welcome-driver.php'
+                : 'https://higoapp.com/api/welcome-driver.php';
+
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${accessToken}` },
+                body,
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result.ok || !result.user_id) {
+                throw new Error(result.detail || result.error || `No se pudo crear el driver (HTTP ${response.status}).`);
+            }
+
+            const createdDriver = {
+                id: result.user_id,
+                full_name: newDriver.full_name.trim(),
+                email: newDriver.email.trim().toLowerCase(),
+                phone: newDriver.phone.trim(),
+                vehicle_type: newDriver.vehicle_type,
+                vehicle_brand: newDriver.vehicle_brand.trim(),
+                vehicle_model: newDriver.vehicle_model.trim(),
+                vehicle_color: newDriver.vehicle_color.trim(),
+                license_plate: newDriver.license_plate.trim(),
+                membership_state: 'no_membership',
+            };
+
+            try {
+                await setDriverException({
+                    driverId: result.user_id,
+                    action: 'suspend',
+                    reason: 'Alta administrativa pendiente de registrar membresía',
+                });
+            } catch (reconcileError) {
+                console.error('[AdminDrivers] initial membership reconciliation failed:', reconcileError);
+                throw new Error(`El conductor fue creado, pero no se pudo dejar pendiente de membresía: ${reconcileError.message}`);
+            }
+
+            toast.success(result.email_sent
+                ? 'Higo Driver creado. Correo de bienvenida enviado.'
+                : 'Higo Driver creado. El correo de bienvenida no pudo enviarse.');
+
+            setNewDriver(EMPTY_DRIVER);
             setAvatarFile(null);
-            setAvatarPreview(null);
-            setNewDriverDocs({
-                cedula: null, licencia: null, rcv: null,
-                circulacion: null, cert_salud: null, vehicle_photo: null,
-            });
-            setNewDriver({
-                full_name: '', phone: '', vehicle_type: 'Carro',
-                vehicle_brand: '', vehicle_model: '', vehicle_color: '', license_plate: '',
-                email: '', password: '', avatar_url: '', payment_qr_url: ''
-            });
-            fetchDrivers();
-        } catch (error) {
-            setMessage({ type: 'error', text: error.message });
+            if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+            setAvatarPreview('');
+            await load();
+            openMembership(createdDriver);
+        } catch (err) {
+            toast.error(err.message || 'No se pudo registrar el Higo Driver.');
         } finally {
-            setLoading(false);
+            setBusy(false);
         }
     };
 
-    const processGoogleDriveLink = (url) => {
-        if (!url) return '';
-        if (url.includes('drive.google.com') && url.includes('/file/d/')) {
-            const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-            if (match && match[1]) return `https://drive.google.com/uc?export=view&id=${match[1]}`;
-        }
-        return url;
+    const suspend = async (driver) => {
+        const reason = prompt('Motivo obligatorio de la suspensión:', '');
+        if (!reason?.trim()) return;
+        setBusy(true);
+        try {
+            await setDriverException({ driverId: driver.id, action: 'suspend', reason });
+            toast.success('Driver suspendido con registro de auditoría.');
+            await load();
+        } catch (err) { toast.error(err.message); } finally { setBusy(false); }
     };
 
-    if (!authorized) {
-        return (
-            <div className="min-h-screen bg-[#0F1014] flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-        );
-    }
+    const grantGrace = async (driver) => {
+        const daysRaw = prompt('Días de excepción temporal:', '3');
+        const days = Number(daysRaw);
+        if (!Number.isFinite(days) || days <= 0 || days > 30) return toast.error('Ingresá entre 1 y 30 días.');
+        const reason = prompt('Motivo obligatorio de la excepción:', '');
+        if (!reason?.trim()) return;
+        const until = new Date(Date.now() + days * 86400e3).toISOString();
+        setBusy(true);
+        try {
+            await setDriverException({ driverId: driver.id, action: 'grace', reason, until });
+            toast.success(`Excepción concedida por ${days} días.`);
+            await load();
+        } catch (err) { toast.error(err.message); } finally { setBusy(false); }
+    };
+
+    const clearException = async (driver) => {
+        const reason = prompt('Motivo para quitar la excepción o suspensión:', 'Estado regularizado');
+        if (!reason?.trim()) return;
+        setBusy(true);
+        try {
+            await setDriverException({ driverId: driver.id, action: 'clear', reason });
+            toast.success('Estado reconciliado con la membresía real.');
+            await load();
+        } catch (err) { toast.error(err.message); } finally { setBusy(false); }
+    };
+
+    const archive = async (driver) => {
+        const reason = prompt(`Archivar a ${driver.full_name || 'este driver'} sin borrar su historial. Motivo obligatorio:`, '');
+        if (!reason?.trim()) return;
+        if (!confirm('El driver dejará de operar, pero sus datos e historial se conservarán. ¿Continuar?')) return;
+        setBusy(true);
+        try {
+            await archiveDriver(driver.id, reason);
+            toast.success('Driver archivado.');
+            await load();
+        } catch (err) { toast.error(err.message); } finally { setBusy(false); }
+    };
+
+    const undoMembership = async (driver) => {
+        if (!driver.membership_id) return;
+        const reason = prompt('Motivo obligatorio para anular esta membresía:', '');
+        if (!reason?.trim()) return;
+        if (!confirm('La membresía quedará anulada, no eliminada. ¿Continuar?')) return;
+        setBusy(true);
+        try {
+            await voidMembership(driver.membership_id, reason);
+            toast.success('Membresía anulada y estado recalculado.');
+            await load();
+        } catch (err) { toast.error(err.message); } finally { setBusy(false); }
+    };
+
+    const openSupport = async (driver) => {
+        const { data: existing } = await supabase.from('support_threads').select('id').eq('user_id', driver.id).eq('role_context', 'driver').maybeSingle();
+        let id = existing?.id;
+        if (!id) {
+            const { data, error } = await supabase.from('support_threads').upsert({ user_id: driver.id, role_context: 'driver' }, { onConflict: 'user_id,role_context' }).select('id').single();
+            if (error) return toast.error(error.message);
+            id = data.id;
+        }
+        navigate(`/admin/support?thread=${id}`);
+    };
+
+    const openDocs = async (driver) => {
+        setSelected(driver);
+        setModal('docs');
+        setDocs([]);
+        setDocUrls({});
+        const { data, error } = await supabase.from('driver_documents').select('*').eq('user_id', driver.id).order('submitted_at', { ascending: false });
+        if (error) return toast.error(error.message);
+        setDocs(data || []);
+        const urls = {};
+        await Promise.all((data || []).map(async doc => {
+            const { data: signed } = await supabase.storage.from('driver-docs').createSignedUrl(doc.file_path, 300);
+            if (signed?.signedUrl) urls[doc.id] = signed.signedUrl;
+        }));
+        setDocUrls(urls);
+    };
+
+    const reviewDoc = async (doc, status) => {
+        const reason = status === 'rejected' ? prompt('Motivo de rechazo visible para el driver:', '') : null;
+        if (status === 'rejected' && !reason?.trim()) return;
+        const { data: { user } } = await supabase.auth.getUser();
+        const { error } = await supabase.from('driver_documents').update({ status, reviewed_at: new Date().toISOString(), reviewed_by: user?.id, rejection_reason: reason?.trim() || null }).eq('id', doc.id);
+        if (error) return toast.error(error.message);
+        setDocs(prev => prev.map(d => d.id === doc.id ? { ...d, status, rejection_reason: reason?.trim() || null } : d));
+    };
 
     return (
-        <div className="min-h-screen bg-[#0F1014] p-4 md:p-8 font-sans text-white">
+        <div className="min-h-screen bg-[#0F1014] text-white p-4 md:p-8">
             <AdminNav />
-            {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-                <div className="flex items-center gap-4">
-                    <div className="bg-gradient-to-br from-violet-600 to-fuchsia-600 p-3 rounded-2xl shadow-lg shadow-violet-600/20">
-                        <span className="material-symbols-outlined text-white text-2xl">admin_panel_settings</span>
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-black tracking-tight text-white">Administración Higo</h1>
-                        <p className="text-gray-400 text-sm font-medium">Gestión de Flota</p>
-                    </div>
+            <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4 mb-6">
+                <div>
+                    <h1 className="text-2xl font-black">Drivers y membresías</h1>
+                    <p className="text-sm text-gray-400 mt-1">Creá la cuenta del Higo Driver y registrá su membresía como operaciones separadas y auditables.</p>
                 </div>
-                <div className="flex gap-3">
-                    <button
-                        onClick={handleResetFleet}
-                        className="bg-red-600/20 hover:bg-red-600/30 text-red-500 border border-red-600/50 px-4 py-3 rounded-xl font-bold flex items-center gap-2 transition-all"
-                        title="Desconectar a todos los conductores (Reset)"
-                    >
-                        <span className="material-symbols-outlined">power_settings_new</span>
-                    </button>
-                    <button
-                        onClick={() => setShowRegisterModal(true)}
-                        className="bg-violet-600 hover:bg-violet-700 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:shadow-violet-600/30 transition-all active:scale-95"
-                    >
-                        <span className="material-symbols-outlined">add</span>
-                        Registrar Nuevo Higo Driver
-                    </button>
-                </div>
-            </div>
-
-            {/* Alert / Warning */}
-            <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 mb-8 flex items-center gap-3 text-orange-400">
-                <span className="material-symbols-outlined">warning</span>
-                <span className="font-bold">Corte Automático Activo</span>
-            </div>
-
-            {/* Filters + Action Bar */}
-            <div className="bg-[#1A1F2E] p-6 rounded-[24px] shadow-2xl border border-white/5 mb-6">
-                <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
-                    <div className="relative w-full md:w-96 group">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-violet-500 transition-colors material-symbols-outlined">search</span>
-                        <input
-                            type="text"
-                            placeholder="Buscar por nombre o placa..."
-                            className="w-full pl-12 pr-4 py-3 bg-[#0F1014] border border-white/10 rounded-xl outline-none focus:border-violet-500/50 focus:ring-4 focus:ring-violet-500/10 text-white placeholder:text-gray-600 transition-all"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </div>
-                    <div className="flex gap-2 bg-[#0F1014] p-1.5 rounded-xl border border-white/5">
-                        {['all', 'active', 'suspended'].map(status => (
-                            <button
-                                key={status}
-                                onClick={() => setFilterStatus(status)}
-                                className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${filterStatus === status
-                                    ? 'bg-[#2C3345] text-white shadow-lg'
-                                    : 'text-gray-500 hover:text-white hover:bg-white/5'
-                                    }`}
-                            >
-                                {status === 'all' ? 'Todos' : status === 'active' ? 'Activos' : 'Suspendidos'}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
-            {/* Message Toast */}
-            {message && (
-                <div className={`mb-6 p-4 rounded-xl flex items-center gap-3 animate-in slide-in-from-top-4 ${message.type === 'success' ? 'bg-green-500/10 border border-green-500/20 text-green-400' : 'bg-red-500/10 border border-red-500/20 text-red-400'}`}>
-                    <span className="material-symbols-outlined">{message.type === 'success' ? 'check_circle' : 'error'}</span>
-                    <span className="font-medium">{message.text}</span>
-                </div>
-            )}
-
-            {/* Drivers List */}
-            <div className="space-y-4">
-                {loading ? (
-                    <div className="flex justify-center py-20">
-                        <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin"></div>
-                    </div>
-                ) : filteredDrivers.map(driver => (
-                    <div key={driver.id} className="bg-[#1A1F2E] p-4 md:p-6 rounded-[24px] shadow-sm border border-white/5 flex flex-col md:flex-row items-center gap-6 group hover:border-violet-500/30 transition-all relative overflow-hidden">
-
-                        {/* Status Stripe */}
-                        <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${driver.subscription_status === 'suspended' ? 'bg-red-500' : 'bg-emerald-500'}`}></div>
-
-                        {/* Driver Info */}
-                        <div className="flex items-center gap-4 flex-1 pl-4">
-                            <div className="w-14 h-14 rounded-full p-[2px] bg-gradient-to-br from-violet-500 to-fuchsia-600">
-                                <div
-                                    className="w-full h-full rounded-full bg-[#1A1F2E] bg-center bg-cover border-2 border-[#1A1F2E]"
-                                    style={{ backgroundImage: `url('${driver.avatar_url || "https://picsum.photos/200"}')` }}
-                                ></div>
-                            </div>
-                            <div>
-                                <h3 className="font-bold text-white text-lg">{driver.full_name}</h3>
-                                <div className="text-sm text-gray-400 space-y-0.5 flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-[14px]">phone</span>
-                                    {driver.phone}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Vehicle */}
-                        <div className="w-full md:w-48 bg-[#0F1014] p-3 rounded-xl border border-white/5">
-                            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">Vehículo ({driver.vehicle_color || '?'})</p>
-                            <div className="flex items-center gap-2">
-                                <span className="font-bold text-white">{driver.vehicle_brand || driver.vehicle_type}</span>
-                                <span className="bg-[#1A1F2E] px-2 py-0.5 rounded text-xs font-mono text-violet-400 border border-violet-500/20">{driver.license_plate}</span>
-                            </div>
-                        </div>
-
-                        {/* Status */}
-                        <div className="w-full md:w-32 text-center md:text-left">
-                            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">Estado</p>
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${driver.subscription_status === 'suspended'
-                                ? 'bg-red-500/10 text-red-500 border border-red-500/20'
-                                : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                                }`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${driver.subscription_status === 'suspended' ? 'bg-red-500' : 'bg-emerald-500'}`}></span>
-                                {driver.subscription_status === 'suspended' ? 'Suspendido' : 'Activo'}
-                            </span>
-                        </div>
-
-                        {/* Last Payment */}
-                        <div className="w-full md:w-32  text-center md:text-left">
-                            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">Ult. Pago</p>
-                            <p className="font-mono text-sm text-gray-300">{formatDate(driver.last_payment_date)}</p>
-                        </div>
-
-                        {/* Actions Button */}
-                        <div className="w-full md:w-auto flex justify-end items-center gap-1">
-                            <button
-                                onClick={() => openSupportChat(driver)}
-                                className="w-10 h-10 flex items-center justify-center hover:bg-fuchsia-600/20 rounded-full transition-colors text-gray-400 hover:text-fuchsia-400"
-                                title="Chat de soporte"
-                            >
-                                <span className="material-symbols-outlined">chat</span>
-                            </button>
-                            <button
-                                onClick={() => { setSelectedDriver(driver); setShowDocsModal(true); }}
-                                className="w-10 h-10 flex items-center justify-center hover:bg-blue-600/20 rounded-full transition-colors text-gray-400 hover:text-blue-400"
-                                title="Revisar documentos"
-                            >
-                                <span className="material-symbols-outlined">badge</span>
-                            </button>
-                            <button
-                                onClick={() => { setSelectedDriver(driver); setShowObjModal(true); }}
-                                className="w-10 h-10 flex items-center justify-center hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white"
-                            >
-                                <span className="material-symbols-outlined">more_vert</span>
-                            </button>
-                        </div>
-                    </div>
-                ))}
-
-                {filteredDrivers.length === 0 && !loading && (
-                    <div className="text-center py-20 bg-[#1A1F2E] rounded-2xl border border-dashed border-white/10">
-                        <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <span className="material-symbols-outlined text-gray-500 text-3xl">search_off</span>
-                        </div>
-                        <p className="text-gray-400 font-medium">No se encontraron conductores.</p>
-                    </div>
-                )}
-
-                {/* H4.3 — paginación cursor: botón "Cargar más" */}
-                {!loading && drivers.length > 0 && hasMore && (
-                    <div className="flex justify-center pt-6">
-                        <button
-                            onClick={loadMoreDrivers}
-                            disabled={loadingMore}
-                            className="px-6 py-3 rounded-full bg-[#1A1F2E] text-gray-300 text-sm font-bold hover:bg-[#252A3A] disabled:opacity-50 border border-white/10"
-                        >
-                            {loadingMore ? 'Cargando…' : `Cargar más conductores (de a ${PAGE_SIZE})`}
+                <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                    {canCreateDriver && (
+                        <button onClick={() => setModal('register')} className="px-5 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 font-bold flex items-center justify-center gap-2">
+                            <span className="material-symbols-outlined">person_add</span>
+                            Registrar Higo Driver
                         </button>
-                    </div>
-                )}
-                {!loading && drivers.length > 0 && !hasMore && (
-                    <p className="text-center text-xs text-gray-500 pt-6">
-                        — fin de la lista ({drivers.length} conductores) —
-                    </p>
-                )}
-                {searchTerm && hasMore && (
-                    <p className="text-xs text-amber-400 mt-3 text-center">
-                        La búsqueda solo cubre los conductores cargados. Si no encontrás a quien buscás, cargá más.
-                    </p>
-                )}
+                    )}
+                    <div className="text-xs text-gray-500 bg-white/5 rounded-xl px-4 py-3">Sin membresía vigente, el driver no puede operar.</div>
+                </div>
             </div>
 
-            {/* ACTION MODAL - DARK */}
-            {showObjModal && selectedDriver && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-                    <div className="bg-[#1A1F2E] w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 border border-white/10 ring-1 ring-white/5">
-                        <div className="p-6 bg-gradient-to-br from-violet-600 to-fuchsia-600 relative">
-                            <button
-                                onClick={() => setShowObjModal(false)}
-                                className="absolute top-4 right-4 w-8 h-8 bg-black/20 hover:bg-black/30 rounded-full flex items-center justify-center text-white transition-colors"
-                            >
-                                <span className="material-symbols-outlined text-sm">close</span>
-                            </button>
-                            <h3 className="font-bold text-white text-lg">Acciones</h3>
-                            <p className="text-violet-100 text-sm opacity-90">{selectedDriver.full_name}</p>
-                        </div>
-
-                        <div className="p-4 space-y-2">
-                            {[
-                                { id: 'pago', label: 'Solo Pago', icon: 'payments', desc: 'Registrar pago de flota' },
-                                { id: 'pago_activar', label: 'Pago + Activar', icon: 'bolt', desc: 'Registrar pago y reactivar' },
-                                { id: 'activar', label: 'Activar', icon: 'check_circle', desc: 'Activar manualmente' },
-                                { id: 'desactivar', label: 'Desactivar', icon: 'block', desc: 'Suspender manualmente' },
-                                { id: 'eliminar', label: 'Eliminar', icon: 'delete', desc: 'Borrar permanentemente' }
-                            ].map((opt) => (
-                                <button
-                                    key={opt.id}
-                                    onClick={() => setActionType(opt.id)}
-                                    className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all border ${actionType === opt.id
-                                        ? 'bg-violet-600/10 border-violet-500/50'
-                                        : 'bg-[#0F1014] border-transparent hover:bg-white/5'
-                                        }`}
-                                >
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${opt.id === 'eliminar' ? 'bg-red-500/20 text-red-500' :
-                                        actionType === opt.id ? 'bg-violet-600 text-white' : 'bg-[#1A1F2E] text-gray-400 border border-white/5'
-                                        }`}>
-                                        <span className="material-symbols-outlined text-[20px]">{opt.icon}</span>
-                                    </div>
-                                    <div className="text-left flex-1">
-                                        <p className={`font-bold text-sm ${actionType === opt.id ? 'text-violet-400' : 'text-gray-200'}`}>{opt.label}</p>
-                                        <p className="text-xs text-gray-500">{opt.desc}</p>
-                                    </div>
-                                    {actionType === opt.id && (
-                                        <span className="material-symbols-outlined text-violet-500 text-sm">radio_button_checked</span>
-                                    )}
-                                </button>
-                            ))}
-                        </div>
-                        {/* Selector de periodo — solo visible para acciones de pago */}
-                        {(actionType === 'pago' || actionType === 'pago_activar') && (() => {
-                            const vType = (selectedDriver.vehicle_type || 'standard').toLowerCase();
-                            const plan = MEMBERSHIP_PLANS[vType] || MEMBERSHIP_PLANS.standard;
-                            return (
-                                <div className="px-4 pb-2">
-                                    <p className="text-xs text-gray-500 uppercase font-bold mb-2">Periodo de membresía</p>
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => setMembershipPeriod('weekly')}
-                                            className={`flex-1 py-2.5 rounded-xl text-sm font-bold border transition-all ${membershipPeriod === 'weekly' ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-[#0F1014] border-white/10 text-gray-400 hover:text-white'}`}
-                                        >
-                                            Semanal · ${plan.weekly}
-                                        </button>
-                                        <button
-                                            onClick={() => setMembershipPeriod('monthly')}
-                                            className={`flex-1 py-2.5 rounded-xl text-sm font-bold border transition-all ${membershipPeriod === 'monthly' ? 'bg-violet-600 border-violet-500 text-white' : 'bg-[#0F1014] border-white/10 text-gray-400 hover:text-white'}`}
-                                        >
-                                            Mensual · ${plan.monthly}
-                                        </button>
-                                    </div>
-                                </div>
-                            );
-                        })()}
-                        <div className="p-4 border-t border-white/5 bg-[#151925]">
-                            <button
-                                onClick={executeAction}
-                                className="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-violet-600/20 flex gap-2 justify-center items-center transition-all active:scale-[0.98]"
-                            >
-                                <span className="material-symbols-outlined">play_arrow</span>
-                                Ejecutar Acción
-                            </button>
-                        </div>
+            <div className="bg-[#1A1F2E] border border-white/5 rounded-2xl p-4 mb-5">
+                <div className="flex flex-col lg:flex-row gap-3">
+                    <div className="relative flex-1">
+                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">search</span>
+                        <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar en todos los drivers por nombre, teléfono, placa o referencia…" className="w-full bg-[#0F1014] border border-white/10 rounded-xl py-3 pl-11 pr-4 outline-none focus:border-violet-500" />
                     </div>
+                    <select value={state} onChange={e => setState(e.target.value)} className="bg-[#0F1014] border border-white/10 rounded-xl px-4 py-3 outline-none">
+                        {STATES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+                    </select>
+                    <button onClick={() => load()} className="px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10"><span className="material-symbols-outlined">refresh</span></button>
                 </div>
-            )}
+            </div>
 
-            {/* REGISTER MODAL - DARK */}
-            {showRegisterModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
-                    <div className="bg-[#1A1F2E] w-full max-w-md rounded-[32px] shadow-2xl my-8 animate-in slide-in-from-bottom-4 border border-white/10">
-                        <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#151925] rounded-t-[32px]">
-                            <h2 className="text-xl font-bold flex items-center gap-2 text-white">
-                                <span className="material-symbols-outlined text-violet-500">person_add</span>
-                                Nuevo Conductor
-                            </h2>
-                            <button onClick={() => { setShowRegisterModal(false); setAvatarFile(null); setAvatarPreview(null); }} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all">
-                                <span className="material-symbols-outlined text-sm">close</span>
-                            </button>
-                        </div>
-
-                        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
-                            {/* Avatar picker */}
-                            <div className="flex flex-col items-center gap-3 mb-2">
-                                <div className="relative">
-                                    <div className="w-24 h-24 rounded-full bg-[#0F1014] border-2 border-white/10 overflow-hidden flex items-center justify-center">
-                                        {avatarPreview
-                                            ? <img src={avatarPreview} className="w-full h-full object-cover" alt="preview" />
-                                            : <span className="material-symbols-outlined text-4xl text-gray-500">person</span>
-                                        }
+            {loading ? <div className="py-28 flex justify-center"><div className="w-9 h-9 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" /></div> : (
+                <div className="space-y-3">
+                    {drivers.map(driver => {
+                        const [label, cls] = STATE_META[driver.membership_state] || [driver.membership_state, STATE_META.no_membership[1]];
+                        return (
+                            <article key={driver.id} className="bg-[#1A1F2E] border border-white/5 rounded-2xl p-4 grid xl:grid-cols-[1.4fr_1fr_1fr_auto] gap-4 items-center">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-12 h-12 rounded-full bg-[#0F1014] bg-cover bg-center shrink-0" style={{ backgroundImage: driver.avatar_url ? `url(${driver.avatar_url})` : undefined }}>
+                                        {!driver.avatar_url && <span className="material-symbols-outlined w-full h-full flex items-center justify-center text-gray-600">person</span>}
                                     </div>
-                                    <label className="absolute -bottom-1 -right-1 w-8 h-8 bg-violet-600 rounded-full flex items-center justify-center cursor-pointer hover:bg-violet-500 transition-colors border-2 border-[#1A1F2E]">
-                                        <span className="material-symbols-outlined text-white text-sm">photo_camera</span>
-                                        <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
-                                    </label>
-                                </div>
-                                <p className="text-xs text-gray-500">Foto del conductor (opcional)</p>
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Nombre Completo</label>
-                                <input
-                                    className="w-full p-3.5 bg-[#0F1014] border border-white/10 rounded-xl text-white outline-none focus:border-violet-500 transition-colors"
-                                    placeholder="Ej. Pedro Pérez"
-                                    value={newDriver.full_name}
-                                    onChange={(e) => setNewDriver({ ...newDriver, full_name: e.target.value })}
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Teléfono</label>
-                                    <input
-                                        className="w-full p-3.5 bg-[#0F1014] border border-white/10 rounded-xl text-white outline-none focus:border-violet-500 transition-colors"
-                                        placeholder="0412-..."
-                                        value={newDriver.phone}
-                                        onChange={(e) => setNewDriver({ ...newDriver, phone: e.target.value })}
-                                    />
+                                    <div className="min-w-0">
+                                        <p className="font-bold truncate">{driver.full_name || 'Sin nombre'}</p>
+                                        <p className="text-xs text-gray-400 truncate">{driver.phone || 'Sin teléfono'} · {driver.license_plate || 'Sin placa'}</p>
+                                        <p className="text-[10px] text-gray-600 mt-1">{driver.vehicle_brand || driver.vehicle_type || 'Vehículo sin registrar'} {driver.vehicle_model || ''}</p>
+                                    </div>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Vehículo</label>
-                                    <div className="relative">
-                                        <select
-                                            className="w-full p-3.5 bg-[#0F1014] border border-white/10 rounded-xl text-white outline-none focus:border-violet-500 transition-colors appearance-none"
-                                            value={newDriver.vehicle_type}
-                                            onChange={(e) => setNewDriver({ ...newDriver, vehicle_type: e.target.value })}
-                                        >
-                                            <option value="Moto">Moto</option>
-                                            <option value="Carro">Carro</option>
-                                            <option value="Camioneta">Camioneta</option>
-                                        </select>
-                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-500 pointer-events-none">expand_more</span>
-                                    </div>
+                                    <span className={`inline-flex border rounded-full px-2.5 py-1 text-xs font-bold ${cls}`}>{label}</span>
+                                    <p className="text-xs text-gray-400 mt-2">{driver.membership_plan || 'Sin plan'}</p>
+                                    <p className="text-[10px] text-gray-600">Vence: {fmtDate(driver.expires_at)}</p>
                                 </div>
-                            </div>
-
-                            {/* Vehicle Details */}
-                            <div className="p-4 rounded-xl bg-[#0F1014] border border-white/5 space-y-4">
-                                <p className="text-xs font-bold text-violet-400 uppercase tracking-wider mb-2">Detalles del Vehículo</p>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-[10px] font-bold mb-1 text-gray-500 uppercase">Marca</label>
-                                        <input
-                                            className="w-full p-3 bg-[#1A1F2E] border border-white/10 rounded-lg text-white text-sm outline-none focus:border-violet-500"
-                                            placeholder="Toyota"
-                                            value={newDriver.vehicle_brand}
-                                            onChange={(e) => setNewDriver({ ...newDriver, vehicle_brand: e.target.value })}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold mb-1 text-gray-500 uppercase">Modelo</label>
-                                        <input
-                                            className="w-full p-3 bg-[#1A1F2E] border border-white/10 rounded-lg text-white text-sm outline-none focus:border-violet-500"
-                                            placeholder="Corolla"
-                                            value={newDriver.vehicle_model}
-                                            onChange={(e) => setNewDriver({ ...newDriver, vehicle_model: e.target.value })}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold mb-1 text-gray-500 uppercase">Color</label>
-                                        <input
-                                            className="w-full p-3 bg-[#1A1F2E] border border-white/10 rounded-lg text-white text-sm outline-none focus:border-violet-500"
-                                            placeholder="Gris"
-                                            value={newDriver.vehicle_color}
-                                            onChange={(e) => setNewDriver({ ...newDriver, vehicle_color: e.target.value })}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold mb-1 text-gray-500 uppercase">Placa</label>
-                                        <input
-                                            className="w-full p-3 bg-[#1A1F2E] border border-white/10 rounded-lg text-white text-sm outline-none focus:border-violet-500"
-                                            placeholder="AA000AA"
-                                            value={newDriver.license_plate}
-                                            onChange={(e) => setNewDriver({ ...newDriver, license_plate: e.target.value })}
-                                        />
-                                    </div>
+                                <div className="text-sm">
+                                    <p className="font-mono text-white">{driver.membership_amount != null ? money(driver.membership_amount, driver.currency) : '—'}</p>
+                                    <p className="text-xs text-gray-500">Pago: {fmtDate(driver.paid_at)}</p>
+                                    <p className="text-[10px] text-gray-600 truncate">Ref: {driver.payment_reference || '—'}</p>
                                 </div>
-                            </div>
-
-                            <div className="border-t border-dashed border-white/10 my-4"></div>
-
-                            {/* Documentos del chofer (opcional al alta).
-                                Si el admin los sube acá, se guardan con
-                                status='approved' y el chofer puede ponerse
-                                en línea sin pasar por /driver/onboarding.
-                                Si los deja vacíos, el chofer los sube
-                                después y un admin los revisa. */}
-                            <div>
-                                <p className="text-xs font-bold text-violet-400 uppercase tracking-wider mb-2">
-                                    Documentos del chofer <span className="text-gray-500 font-normal normal-case">(opcional, si los cargás se aprueban auto)</span>
-                                </p>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {[
-                                        { type: 'cedula',        label: 'Cédula',           icon: 'badge' },
-                                        { type: 'licencia',      label: 'Licencia',         icon: 'card_membership' },
-                                        { type: 'rcv',           label: 'RCV',              icon: 'verified_user' },
-                                        { type: 'circulacion',   label: 'Circulación',      icon: 'description' },
-                                        { type: 'cert_salud',    label: 'Cert. salud',      icon: 'medical_information' },
-                                        { type: 'vehicle_photo', label: 'Foto carro',       icon: 'directions_car' },
-                                    ].map(d => {
-                                        const file = newDriverDocs[d.type];
-                                        return (
-                                            <label
-                                                key={d.type}
-                                                className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors ${
-                                                    file
-                                                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                                                        : 'bg-[#1A1F2E] border-white/10 text-gray-400 hover:border-white/20'
-                                                }`}
-                                            >
-                                                <span className="material-symbols-outlined text-[18px]">
-                                                    {file ? 'check_circle' : d.icon}
-                                                </span>
-                                                <span className="text-xs flex-1 truncate">
-                                                    {file ? file.name : d.label}
-                                                </span>
-                                                <input
-                                                    type="file"
-                                                    accept={d.type === 'vehicle_photo' ? 'image/*' : 'image/*,application/pdf'}
-                                                    className="hidden"
-                                                    onChange={(e) => {
-                                                        const f = e.target.files?.[0] || null;
-                                                        setNewDriverDocs(prev => ({ ...prev, [d.type]: f }));
-                                                    }}
-                                                />
-                                            </label>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            <div className="border-t border-dashed border-white/10 my-4"></div>
-
-                            {/* Credentials */}
-                            <div>
-                                <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Correo (Login)</label>
-                                <div className="relative">
-                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-500">mail</span>
-                                    <input
-                                        className="w-full pl-10 pr-3 py-3 bg-[#0F1014] border border-white/10 rounded-xl text-white outline-none focus:border-violet-500 transition-colors"
-                                        placeholder="usuario@higo.com"
-                                        value={newDriver.email}
-                                        onChange={(e) => setNewDriver({ ...newDriver, email: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Contraseña <span className="text-gray-500 normal-case font-normal">(opcional)</span></label>
-                                <div className="relative">
-                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-500">key</span>
-                                    <input
-                                        type="password"
-                                        className="w-full pl-10 pr-3 py-3 bg-[#0F1014] border border-white/10 rounded-xl text-white outline-none focus:border-violet-500 transition-colors"
-                                        placeholder="Dejar vacío para generar automática"
-                                        value={newDriver.password}
-                                        onChange={(e) => setNewDriver({ ...newDriver, password: e.target.value })}
-                                    />
-                                </div>
-                                <small className="block mt-1.5 text-[11px] text-gray-500 leading-tight">
-                                    Si la dejás vacía, el sistema genera una contraseña segura y se la envía al conductor por correo.
-                                </small>
-                            </div>
-
-                        </div>
-
-                        <div className="p-6 border-t border-white/5 bg-[#151925] rounded-b-[32px]">
-                            <button
-                                onClick={handleRegister}
-                                className="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-violet-600/20 flex gap-2 justify-center items-center transition-all active:scale-[0.98]"
-                            >
-                                <span className="material-symbols-outlined">check_circle</span>
-                                Crear Higo Driver
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Docs Review Modal (D.C1 · 4/4) */}
-            {showDocsModal && selectedDriver && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-                    <div className="bg-[#1A1F2E] w-full max-w-2xl rounded-[24px] shadow-2xl overflow-hidden animate-in zoom-in-95 border border-white/10 max-h-[90vh] flex flex-col">
-                        <div className="p-5 bg-blue-600 relative flex items-start gap-3">
-                            <span className="material-symbols-outlined text-white text-[28px]">badge</span>
-                            <div className="flex-1 min-w-0">
-                                <h3 className="font-bold text-white text-lg">Documentos del conductor</h3>
-                                <p className="text-blue-100 text-sm opacity-90 truncate">{selectedDriver.full_name || selectedDriver.email}</p>
-                            </div>
-                            <button
-                                onClick={() => setShowDocsModal(false)}
-                                className="w-8 h-8 bg-black/20 hover:bg-black/30 rounded-full flex items-center justify-center text-white"
-                            >
-                                <span className="material-symbols-outlined text-sm">close</span>
-                            </button>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto p-5 space-y-3">
-                            {docsLoading ? (
-                                <div className="flex justify-center py-12">
-                                    <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                                </div>
-                            ) : docsList.length === 0 ? (
-                                <p className="text-center text-gray-500 text-sm py-12">
-                                    Este chofer todavía no subió ningún documento.
-                                </p>
-                            ) : ['cedula', 'licencia', 'rcv', 'circulacion', 'cert_salud', 'vehicle_photo'].map(type => {
-                                const doc = docsList.find(d => d.document_type === type);
-                                const url = docsUrls[type];
-                                const labels = {
-                                    cedula:        'Cédula de identidad',
-                                    licencia:      'Licencia de conducir',
-                                    rcv:           'Póliza RCV',
-                                    circulacion:   'Certificado de circulación',
-                                    cert_salud:    'Certificado de salud',
-                                    vehicle_photo: 'Foto del vehículo',
-                                };
-                                const chipCls = doc?.status === 'approved' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                                              : doc?.status === 'rejected' ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                                              : doc                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                                              :                              'bg-gray-500/10 text-gray-400 border-gray-500/30';
-                                const chipLbl = doc?.status === 'approved' ? 'Aprobado'
-                                              : doc?.status === 'rejected' ? 'Rechazado'
-                                              : doc                        ? 'En revisión'
-                                              :                              'No subido';
-                                const isImage = doc?.file_mime?.startsWith('image/');
-                                const isPdf   = doc?.file_mime === 'application/pdf';
-                                return (
-                                    <div key={type} className="bg-[#0F1014] border border-white/5 rounded-2xl p-4">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <p className="font-bold text-sm">{labels[type]}</p>
-                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${chipCls}`}>{chipLbl}</span>
+                                <div className="flex flex-wrap gap-2 xl:justify-end">
+                                    <button disabled={busy || driver.membership_state === 'archived'} onClick={() => openMembership(driver)} className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold">Registrar membresía</button>
+                                    <button onClick={() => openDocs(driver)} className="w-9 h-9 rounded-lg bg-blue-500/10 text-blue-400" title="Documentos"><span className="material-symbols-outlined text-lg">badge</span></button>
+                                    <button onClick={() => openSupport(driver)} className="w-9 h-9 rounded-lg bg-fuchsia-500/10 text-fuchsia-400" title="Soporte"><span className="material-symbols-outlined text-lg">chat</span></button>
+                                    <details className="relative">
+                                        <summary className="list-none w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center cursor-pointer"><span className="material-symbols-outlined">more_vert</span></summary>
+                                        <div className="absolute right-0 top-11 z-20 min-w-52 bg-[#252A3A] border border-white/10 rounded-xl p-2 shadow-2xl space-y-1">
+                                            <button onClick={() => grantGrace(driver)} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-xs">Excepción temporal</button>
+                                            <button onClick={() => suspend(driver)} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-xs text-amber-300">Suspender</button>
+                                            <button onClick={() => clearException(driver)} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-xs">Reconciliar estado</button>
+                                            {driver.membership_id && <button onClick={() => undoMembership(driver)} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-xs text-orange-300">Anular última membresía</button>}
+                                            {driver.membership_state !== 'archived' && <button onClick={() => archive(driver)} className="w-full text-left px-3 py-2 rounded-lg hover:bg-red-500/10 text-xs text-red-300">Archivar driver</button>}
                                         </div>
-                                        {doc?.rejection_reason && (
-                                            <div className="mb-3 p-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200">
-                                                <strong>Motivo previo:</strong> {doc.rejection_reason}
-                                            </div>
-                                        )}
-                                        {url ? (
-                                            <div className="rounded-lg overflow-hidden border border-white/10 bg-black/40 mb-3">
-                                                {isImage ? (
-                                                    <a href={url} target="_blank" rel="noopener noreferrer">
-                                                        <img src={url} alt="" className="w-full max-h-64 object-contain bg-black" />
-                                                    </a>
-                                                ) : isPdf ? (
-                                                    <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-3 hover:bg-white/5">
-                                                        <span className="material-symbols-outlined text-red-400">picture_as_pdf</span>
-                                                        <span className="text-xs flex-1">Abrir PDF</span>
-                                                        <span className="material-symbols-outlined text-gray-400 text-[16px]">open_in_new</span>
-                                                    </a>
-                                                ) : (
-                                                    <p className="text-xs text-gray-500 p-3">Archivo cargado</p>
-                                                )}
-                                            </div>
-                                        ) : (
-                                            <p className="text-xs text-gray-500 italic mb-3">Sin archivo subido.</p>
-                                        )}
-                                        {doc && doc.status !== 'approved' && (
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => approveDoc(doc)}
-                                                    className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold"
-                                                >
-                                                    Aprobar
-                                                </button>
-                                                <button
-                                                    onClick={() => rejectDoc(doc)}
-                                                    className="flex-1 py-2 rounded-lg bg-rose-600/20 border border-rose-500/40 hover:bg-rose-600/30 text-rose-300 text-sm font-bold"
-                                                >
-                                                    Rechazar
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
+                                    </details>
+                                </div>
+                            </article>
+                        );
+                    })}
+                    {!drivers.length && <div className="py-20 text-center bg-[#1A1F2E] border border-dashed border-white/10 rounded-2xl text-gray-400">No hay drivers para este filtro.</div>}
+                    {hasMore && <div className="text-center pt-4"><button disabled={loadingMore} onClick={() => load({ append: true })} className="px-6 py-3 rounded-full bg-[#1A1F2E] border border-white/10 text-sm font-bold">{loadingMore ? 'Cargando…' : 'Cargar más'}</button></div>}
                 </div>
             )}
+
+            {modal === 'register' && canCreateDriver && (
+                <Modal wide title="Registrar nuevo Higo Driver" onClose={() => setModal(null)}>
+                    <div className="p-6 space-y-5">
+                        <div className="rounded-xl bg-violet-500/10 border border-violet-500/20 p-4 text-sm text-violet-200">
+                            Primero se crea la cuenta. Al finalizar se abrirá el registro de membresía para seleccionar el plan y guardar el pago.
+                        </div>
+                        <div className="grid md:grid-cols-2 gap-4">
+                            <label className="text-xs font-bold text-gray-400">Nombre completo *<input value={newDriver.full_name} onChange={e => setNewDriver(v => ({ ...v, full_name: e.target.value }))} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl text-white" /></label>
+                            <label className="text-xs font-bold text-gray-400">Correo *<input type="email" value={newDriver.email} onChange={e => setNewDriver(v => ({ ...v, email: e.target.value }))} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl text-white" /></label>
+                            <label className="text-xs font-bold text-gray-400">Teléfono<input value={newDriver.phone} onChange={e => setNewDriver(v => ({ ...v, phone: e.target.value }))} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl text-white" /></label>
+                            <label className="text-xs font-bold text-gray-400">Contraseña inicial<input type="password" value={newDriver.password} onChange={e => setNewDriver(v => ({ ...v, password: e.target.value }))} placeholder="Vacía = se genera automáticamente" className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl text-white" /></label>
+                            <label className="text-xs font-bold text-gray-400">Tipo de vehículo<select value={newDriver.vehicle_type} onChange={e => setNewDriver(v => ({ ...v, vehicle_type: e.target.value }))} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl text-white"><option value="moto">Moto</option><option value="standard">Carro</option><option value="van">Camioneta</option></select></label>
+                            <label className="text-xs font-bold text-gray-400">Placa<input value={newDriver.license_plate} onChange={e => setNewDriver(v => ({ ...v, license_plate: e.target.value.toUpperCase() }))} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl text-white" /></label>
+                            <label className="text-xs font-bold text-gray-400">Marca<input value={newDriver.vehicle_brand} onChange={e => setNewDriver(v => ({ ...v, vehicle_brand: e.target.value }))} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl text-white" /></label>
+                            <label className="text-xs font-bold text-gray-400">Modelo<input value={newDriver.vehicle_model} onChange={e => setNewDriver(v => ({ ...v, vehicle_model: e.target.value }))} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl text-white" /></label>
+                            <label className="text-xs font-bold text-gray-400">Color<input value={newDriver.vehicle_color} onChange={e => setNewDriver(v => ({ ...v, vehicle_color: e.target.value }))} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl text-white" /></label>
+                            <label className="text-xs font-bold text-gray-400">Foto del driver<input type="file" accept="image/*" onChange={e => { const file = e.target.files?.[0] || null; if (avatarPreview) URL.revokeObjectURL(avatarPreview); setAvatarFile(file); setAvatarPreview(file ? URL.createObjectURL(file) : ''); }} className="mt-1 block w-full text-xs text-gray-400" /></label>
+                        </div>
+                        {avatarPreview && <img src={avatarPreview} alt="Vista previa" className="w-24 h-24 rounded-2xl object-cover border border-white/10" />}
+                        <p className="text-xs text-gray-500">Los documentos se pueden revisar y aprobar después desde el botón de credencial en la ficha del driver.</p>
+                        <button disabled={busy} onClick={registerDriver} className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 font-bold disabled:opacity-50">{busy ? 'Creando cuenta…' : 'Crear cuenta y continuar con membresía'}</button>
+                    </div>
+                </Modal>
+            )}
+
+            {modal === 'membership' && selected && <Modal title={`Registrar membresía · ${selected.full_name}`} onClose={() => setModal(null)}>
+                <div className="p-6 space-y-4">
+                    <div><label className="text-xs uppercase font-bold text-gray-500">Plan</label><select value={form.planId} onChange={e => { const p = plans.find(x => x.id === e.target.value); setForm(f => ({ ...f, planId: e.target.value, amount: p?.amount ?? f.amount })); }} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl">{plans.map(p => <option key={p.id} value={p.id}>{p.name} · {money(p.amount, p.currency)}</option>)}</select></div>
+                    <div className="grid grid-cols-2 gap-3"><div><label className="text-xs uppercase font-bold text-gray-500">Monto</label><input type="number" step="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl" /></div><div><label className="text-xs uppercase font-bold text-gray-500">Método</label><select value={form.paymentMethod} onChange={e => setForm(f => ({ ...f, paymentMethod: e.target.value }))} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl"><option value="pago_movil">Pago móvil</option><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option><option value="cortesia">Cortesía autorizada</option></select></div></div>
+                    <div><label className="text-xs uppercase font-bold text-gray-500">Referencia</label><input value={form.reference} onChange={e => setForm(f => ({ ...f, reference: e.target.value }))} placeholder="Única cuando aplique" className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl" /></div>
+                    <div><label className="text-xs uppercase font-bold text-gray-500">Notas</label><textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="mt-1 w-full p-3 bg-[#0F1014] border border-white/10 rounded-xl min-h-24" /></div>
+                    <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-200">Vigencia: {selectedPlan?.duration_days || 0} días. Esta acción queda registrada en auditoría.</div>
+                    <button disabled={busy} onClick={submitMembership} className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-bold disabled:opacity-50">{busy ? 'Registrando…' : 'Confirmar membresía'}</button>
+                </div>
+            </Modal>}
+
+            {modal === 'docs' && selected && <Modal wide title={`Documentos · ${selected.full_name}`} onClose={() => setModal(null)}>
+                <div className="p-6 grid md:grid-cols-2 gap-3">
+                    {docs.map(doc => <div key={doc.id} className="bg-[#0F1014] border border-white/5 rounded-xl p-4"><div className="flex justify-between gap-3"><div><p className="font-bold capitalize">{doc.document_type?.replaceAll('_', ' ')}</p><p className="text-xs text-gray-500">{doc.status || 'pending'}</p></div>{docUrls[doc.id] && <a target="_blank" rel="noreferrer" href={docUrls[doc.id]} className="text-xs text-blue-400">Abrir</a>}</div>{doc.rejection_reason && <p className="text-xs text-red-300 mt-2">{doc.rejection_reason}</p>}<div className="flex gap-2 mt-3"><button onClick={() => reviewDoc(doc, 'approved')} className="px-3 py-2 rounded-lg bg-emerald-500/15 text-emerald-300 text-xs">Aprobar</button><button onClick={() => reviewDoc(doc, 'rejected')} className="px-3 py-2 rounded-lg bg-red-500/15 text-red-300 text-xs">Rechazar</button></div></div>)}
+                    {!docs.length && <p className="text-gray-500 text-sm md:col-span-2 text-center py-12">No hay documentos cargados.</p>}
+                </div>
+            </Modal>}
         </div>
     );
-};
-
-export default AdminDriversPage;
+}

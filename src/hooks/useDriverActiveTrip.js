@@ -1,399 +1,427 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../services/supabase';
-import { Capacitor } from '@capacitor/core';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
+import { supabase } from '../services/supabase';
+import {
+    acceptRide,
+    completeRide,
+    confirmRidePayment,
+    markDropoffArrival,
+    markPickupArrival,
+    startRide,
+} from '../services/rideApi';
+import { FEATURES } from '../config/features';
+import { computeWaitFee } from '../utils/ridePricing';
 import { stopLoopingRequestAlert } from '../services/notificationService';
 import { toast } from '../components/Toast';
 import { sendDeliveryMilestone } from '../utils/sendDeliveryMilestone';
 
-// Wait fee config
-const WAIT_RATES_PER_MIN = { moto: 0.05, standard: 0.08, van: 0.10 };
-
-// Hidrata el activeRide con datos públicos del pasajero (nombre + tel)
-// para que el chofer vea 'Juan Pérez' en vez de 'Pasajero' en el panel.
-// Usa la RPC get_public_profile (mig 34) que devuelve el subset seguro.
-// Idempotente: si ya hay passenger_name no sobrescribe.
 const hydratePassengerInfo = async (ride) => {
-    if (!ride || !ride.user_id) return ride;
-    if (ride.passenger_name) return ride;
+    if (!ride?.user_id || ride.passenger_name) return ride;
     try {
         const { data } = await supabase.rpc('get_public_profile', { p_id: ride.user_id });
-        const p = Array.isArray(data) ? data[0] : data;
-        if (!p) return ride;
+        const profile = Array.isArray(data) ? data[0] : data;
+        if (!profile) return ride;
         return {
             ...ride,
-            passenger_name:  p.full_name || ride.passenger_name || null,
-            passenger_phone: ride.passenger_phone || p.phone || null,
-            passenger_avatar_url: p.avatar_url || null,
+            passenger_name: profile.full_name || null,
+            passenger_phone: ride.passenger_phone || profile.phone || null,
+            passenger_avatar_url: profile.avatar_url || null,
         };
-    } catch (err) {
-        console.warn('hydratePassengerInfo failed:', err?.message || err);
+    } catch {
         return ride;
     }
 };
-const FREE_WAIT_MINUTES = 3;
 
-const computeWaitFee = (rideType, seconds) => {
-    const rate = WAIT_RATES_PER_MIN[rideType] ?? WAIT_RATES_PER_MIN.standard;
-    const billableMin = Math.max(0, seconds / 60 - FREE_WAIT_MINUTES);
-    return parseFloat((billableMin * rate).toFixed(2));
-};
+const isDeliveryRide = (ride) => ride?.service_type === 'delivery' || Boolean(ride?.delivery_info);
 
 export function useDriverActiveTrip(profile, navigate, setRequests) {
     const [activeRide, setActiveRide] = useState(null);
-    const [navStep, setNavStep] = useState(0); // 0: Idle, 1: To Pickup, 2: To Dropoff
+    const [navStep, setNavStep] = useState(0);
     const [arrivalTime, setArrivalTime] = useState(null);
     const [waitElapsedSec, setWaitElapsedSec] = useState(0);
     const [waitFee, setWaitFee] = useState(0);
     const [completing, setCompleting] = useState(false);
     const [showPaymentQR, setShowPaymentQR] = useState(false);
-    const [podRequired, setPodRequired] = useState(null); // 'pickup' | 'delivery' | null
-    const [showCodConfirm, setShowCodConfirm] = useState(false); // gate cobro COD
-    const [instruction, setInstruction] = useState("Esperando viajes...");
+    const [podRequired, setPodRequired] = useState(null);
+    const [showCodConfirm, setShowCodConfirm] = useState(false);
+    const [instruction, setInstruction] = useState('Esperando viajes...');
     const [navInfo, setNavInfo] = useState(null);
     const [voiceEnabled, setVoiceEnabled] = useState(true);
 
-    const wakeLockRef = useRef(null);
-    const lastInstruction = useRef("");
     const activeRideRef = useRef(null);
+    const wakeLockRef = useRef(null);
 
     useEffect(() => {
         activeRideRef.current = activeRide;
     }, [activeRide]);
 
-    // Keep voice instruction memory synchronized
-    useEffect(() => {
-        if (voiceEnabled) {
-            lastInstruction.current = "";
-        }
-    }, [voiceEnabled]);
-
-    // Text to Speech Voice Guidance
     const speak = useCallback(async (text) => {
         setInstruction(text);
         if (!voiceEnabled) return;
-
         try {
             await TextToSpeech.speak({
-                text: text,
+                text,
                 lang: 'es-ES',
-                rate: 1.0,
-                pitch: 1.0,
-                volume: 1.0,
+                rate: 1,
+                pitch: 1,
+                volume: 1,
                 category: 'ambient',
             });
-        } catch (e) {
-            console.error("TTS Error, falling back to Web Speech:", e);
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'es-ES';
-            window.speechSynthesis.speak(utterance);
+        } catch {
+            try {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'es-ES';
+                window.speechSynthesis.speak(utterance);
+            } catch {
+                // Voice guidance is ancillary.
+            }
         }
     }, [voiceEnabled]);
 
-    // Screen Wake Lock
     useEffect(() => {
-        const requestWakeLock = async () => {
-            const isOnline = !!profile;
-            if ('wakeLock' in navigator && (isOnline || activeRide)) {
-                try {
-                    if (wakeLockRef.current) await wakeLockRef.current.release();
-                    wakeLockRef.current = await navigator.wakeLock.request('screen');
+        let disposed = false;
+        let visibilityHandler = null;
 
-                    const handleVisibilityChange = async () => {
-                        if (wakeLockRef.current !== null && document.visibilityState === 'visible') {
+        const requestLock = async () => {
+            if (!('wakeLock' in navigator) || (!profile && !activeRide)) return;
+            try {
+                wakeLockRef.current = await navigator.wakeLock.request('screen');
+                visibilityHandler = async () => {
+                    if (!disposed && document.visibilityState === 'visible') {
+                        try {
                             wakeLockRef.current = await navigator.wakeLock.request('screen');
+                        } catch {
+                            // Device may reject a second lock.
                         }
-                    };
-                    document.addEventListener('visibilitychange', handleVisibilityChange);
-                    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-                } catch (err) {
-                    console.warn('Wake Lock Error:', err);
-                }
-            } else if (wakeLockRef.current) {
-                wakeLockRef.current.release().then(() => {
-                    wakeLockRef.current = null;
-                });
+                    }
+                };
+                document.addEventListener('visibilitychange', visibilityHandler);
+            } catch {
+                // Wake lock is optional.
             }
         };
 
-        requestWakeLock();
-
+        requestLock();
         return () => {
-            if (wakeLockRef.current) {
-                wakeLockRef.current.release();
-            }
+            disposed = true;
+            if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler);
+            wakeLockRef.current?.release?.().catch?.(() => {});
+            wakeLockRef.current = null;
         };
-    }, [profile, activeRide]);
+    }, [profile, activeRide?.id]);
 
-    // Tick the wait timer
     useEffect(() => {
-        if (!arrivalTime) return;
-        const id = setInterval(() => {
-            setWaitElapsedSec(Math.floor((Date.now() - arrivalTime) / 1000));
-        }, 1000);
-        return () => clearInterval(id);
+        if (!arrivalTime) {
+            setWaitElapsedSec(0);
+            return undefined;
+        }
+        const update = () => setWaitElapsedSec(Math.max(0, Math.floor((Date.now() - arrivalTime) / 1000)));
+        update();
+        const timer = setInterval(update, 1000);
+        return () => clearInterval(timer);
     }, [arrivalTime]);
 
-    // Restore active ride on load
     useEffect(() => {
         if (!profile?.id) return;
-
-        const restoreActiveRide = async () => {
+        let cancelled = false;
+        const restore = async () => {
             const { data } = await supabase
                 .from('rides')
                 .select('*')
                 .eq('driver_id', profile.id)
-                .in('status', ['accepted', 'in_progress'])
+                .in('status', ['accepted', 'in_progress', 'arrived_at_dropoff'])
+                .order('created_at', { ascending: false })
+                .limit(1)
                 .maybeSingle();
-
-            if (data) {
-                const hydrated = await hydratePassengerInfo(data);
-                setActiveRide(hydrated);
-                setNavStep(data.status === 'accepted' ? 1 : 2);
+            if (!data || cancelled) return;
+            const hydrated = await hydratePassengerInfo(data);
+            if (cancelled) return;
+            setActiveRide(hydrated);
+            setNavStep(data.status === 'accepted' ? 1 : 2);
+            if (data.arrived_at_pickup_at && data.status === 'accepted') {
+                setArrivalTime(new Date(data.arrived_at_pickup_at).getTime());
             }
+            setWaitFee(Number(data.wait_fee || 0));
         };
-        restoreActiveRide();
+        restore();
+        return () => { cancelled = true; };
     }, [profile?.id]);
 
-    // Listen for cancellations
     useEffect(() => {
-        if (!activeRide) return;
-
+        if (!activeRide?.id) return;
         const channel = supabase
-            .channel(`ride_cancel:${activeRide.id}`)
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rides' }, async (payload) => {
-                if (payload.new.id === activeRide.id && payload.new.status === 'cancelled') {
-                    if (navigator.vibrate) navigator.vibrate([1000, 500, 1000]);
-                    speak("El viaje ha sido cancelado por el pasajero.");
-                    toast.error("El pasajero ha cancelado el viaje. Volviendo al mapa...");
-                    window.location.reload();
+            .channel(`ride-state:${activeRide.id}`)
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'rides',
+                filter: `id=eq.${activeRide.id}`,
+            }, (payload) => {
+                setActiveRide((current) => current ? { ...current, ...payload.new } : payload.new);
+                if (payload.new.status === 'cancelled') {
+                    navigator.vibrate?.([1000, 500, 1000]);
+                    speak('El viaje fue cancelado por el pasajero.');
+                    toast.error('El pasajero canceló el viaje.');
+                    closeRide();
                 }
             })
             .subscribe();
-
         return () => supabase.removeChannel(channel);
-    }, [activeRide, speak]);
+    }, [activeRide?.id, speak]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Actions
-    const handleAcceptRide = async (ride) => {
-        if (profile?.subscription_status === 'suspended') {
-            if (window.confirm("⚠️ Tu membresía está vencida. Necesitás renovarla para aceptar viajes.\n\n¿Ir a Higo Pay ahora?")) {
-                navigate('/higo-pay');
-            }
-            return;
-        }
-        try {
-            const { data, error } = await supabase
-                .from('rides')
-                .update({ status: 'accepted', driver_id: profile.id })
-                .eq('id', ride.id)
-                .eq('status', 'requested')
-                .is('driver_id', null)
-                .select();
-
-            if (error) throw error;
-
-            if (!data || data.length === 0) {
-                toast.error("⚠️ Lo sentimos, este viaje ya fue tomado por otro conductor.");
-                if (setRequests) setRequests(prev => prev.filter(r => r.id !== ride.id));
-                return;
-            }
-
-            // Hidratamos asincrónicamente — UI ya puede dibujar con
-            // 'Pasajero' fallback y se actualiza cuando llega el profile.
-            setActiveRide(ride);
-            hydratePassengerInfo(ride).then(hydrated => {
-                if (hydrated !== ride) setActiveRide(hydrated);
-            });
-            if (setRequests) setRequests([]);
-            stopLoopingRequestAlert();
-            setNavStep(1);
-            speak(`Viaje aceptado. Navegando a ${ride.pickup}`);
-        } catch (error) {
-            console.error("Accept Ride Error:", error);
-            toast.error("Error al aceptar viaje: " + error.message);
-        }
-    };
-
-    const handleMarkArrival = () => {
-        if (arrivalTime) return;
-        setArrivalTime(Date.now());
+    const closeRide = useCallback(() => {
+        setShowPaymentQR(false);
+        setActiveRide(null);
+        setNavStep(0);
+        setArrivalTime(null);
         setWaitElapsedSec(0);
         setWaitFee(0);
-        speak("Llegada marcada. Esperando al pasajero.");
-    };
+        setPodRequired(null);
+        setShowCodConfirm(false);
+        setRequests?.([]);
+        stopLoopingRequestAlert();
+    }, [setRequests]);
 
-    const handleCompleteStep = async () => {
-        if (!activeRide) return;
-        const isDelivery = activeRide.service_type === 'delivery' || activeRide.delivery_info;
-
-        // Gate POD para envíos: foto obligatoria antes de cada transición.
-        if (isDelivery) {
-            if (navStep === 1 && !activeRide.pickup_pod_url) {
-                setPodRequired('pickup');
-                return;
-            }
-            if (navStep === 2) {
-                // E3.1: marcar "Llegué al destino" antes de poder entregar
-                if (!activeRide.arrived_at_dropoff_at) {
-                    const { error } = await supabase
-                        .from('rides')
-                        .update({ status: 'arrived_at_dropoff' })
-                        .eq('id', activeRide.id);
-                    if (error) {
-                        toast.error(`No se pudo marcar llegada: ${error.message}`);
-                        return;
-                    }
-                    const arrivedAt = new Date().toISOString();
-                    setActiveRide({ ...activeRide, status: 'arrived_at_dropoff', arrived_at_dropoff_at: arrivedAt });
-                    speak('Llegada al destino marcada. Coordiná entrega con el destinatario.');
-                    sendDeliveryMilestone({ rideId: activeRide.id, status: 'arrived_at_dropoff' });
-                    return;
-                }
-                // E4.1 gate: COD pendiente
-                if ((Number(activeRide.cod_amount) || 0) > 0 && !activeRide.cod_collected) {
-                    setShowCodConfirm(true);
-                    return;
-                }
-                // POD obligatorio para cerrar
-                if (!activeRide.delivery_pod_url) {
-                    setPodRequired('delivery');
-                    return;
-                }
-            }
-        }
-
-        if (navStep === 1) {
-            const elapsedSec = arrivalTime ? Math.floor((Date.now() - arrivalTime) / 1000) : 0;
-            const fee = arrivalTime ? computeWaitFee(activeRide.ride_type, elapsedSec) : 0;
-            setWaitFee(fee);
-
-            const isSenderPayer = isDelivery && (activeRide.delivery_info?.payer === 'sender' || activeRide.payer === 'sender');
-
-            if (isSenderPayer) {
-                if (fee > 0) {
-                    const finalPrice = parseFloat(((Number(activeRide.price) || 0) + fee).toFixed(2));
-                    await supabase.from('rides').update({
-                        wait_seconds: elapsedSec,
-                        wait_fee: fee,
-                        price: finalPrice
-                    }).eq('id', activeRide.id);
-                    setActiveRide({ ...activeRide, price: finalPrice, wait_fee: fee, wait_seconds: elapsedSec });
-                }
-                speak("Llegada al origen. El remitente debe pagar ahora.");
-                setShowPaymentQR(true);
-            } else {
-                setNavStep(2);
-                setArrivalTime(null);
-                if (isDelivery) {
-                    speak(`Paquete recogido. Iniciando ruta de entrega.`);
-                } else {
-                    speak(`Recogida exitosa. Iniciando viaje a ${activeRide.dropoff}`);
-                }
-
-                const finalPrice = parseFloat(((Number(activeRide.price) || 0) + fee).toFixed(2));
-                await supabase.from('rides').update({
-                    status: 'in_progress',
-                    wait_seconds: elapsedSec,
-                    wait_fee: fee,
-                    price: finalPrice
-                }).eq('id', activeRide.id);
-                setActiveRide({ ...activeRide, price: finalPrice, wait_fee: fee, wait_seconds: elapsedSec });
-
-                if (isDelivery) {
-                    sendDeliveryMilestone({ rideId: activeRide.id, status: 'in_progress' });
-                }
-            }
-
-        } else if (navStep === 2) {
-            if (completing) return;
-            setCompleting(true);
-            try {
-                const { error: completeErr } = await supabase
-                    .from('rides')
-                    .update({ status: 'completed' })
-                    .eq('id', activeRide.id);
-
-                if (completeErr) {
-                    toast.error(`No se pudo completar el viaje: ${completeErr.message}`);
-                    setCompleting(false);
-                    return;
-                }
-
-                if (isDelivery) {
-                    sendDeliveryMilestone({ rideId: activeRide.id, status: 'completed' });
-                }
-
-                if (activeRide.user_id) {
-                    supabase.rpc('credit_pending_referral', { p_user_id: activeRide.user_id }).then(
-                        ({ error }) => { if (error) console.warn("Referral credit warning:", error); },
-                        (err) => console.error("Referral credit error:", err)
-                    );
-                }
-
-                const isSenderPayer = isDelivery && (activeRide.delivery_info?.payer === 'sender' || activeRide.payer === 'sender');
-
-                setCompleting(false);
-
-                if (isSenderPayer) {
-                    speak("Entrega finalizada. Gracias.");
-                    closeRide();
-                } else {
-                    speak(`Viaje completado. Muestre el código QR para el pago.`);
-                    setShowPaymentQR(true);
-                }
-            } catch (err) {
-                console.error('Error completando viaje:', err);
-                toast.error(`Error inesperado al completar el viaje: ${err?.message || err}`);
-                setCompleting(false);
-            }
-        }
-    };
-
-    const confirmDriverPayment = async () => {
-        if (!activeRide) return;
-        const updates = { payment_confirmed_by_driver: true };
-        if (activeRide.payment_confirmed_by_user) {
-            updates.payment_confirmed_at = new Date().toISOString();
-        }
-        const { error } = await supabase.from('rides').update(updates).eq('id', activeRide.id);
-        if (error) {
-            toast.error(`No se pudo confirmar el pago: ${error.message}`);
+    const handleAcceptRide = useCallback(async (ride) => {
+        if (!profile?.id) return;
+        if (profile.subscription_status === 'suspended') {
+            if (window.confirm('Tu membresía no está activa. ¿Ir a Higo Pay?')) navigate('/higo-pay');
             return;
         }
-        setActiveRide({ ...activeRide, ...updates });
-    };
 
-    const handleQRClosed = async () => {
-        setShowPaymentQR(false);
+        try {
+            let accepted;
+            if (FEATURES.serverSideRideState) {
+                accepted = await acceptRide(ride.id);
+            } else {
+                const { data, error } = await supabase
+                    .from('rides')
+                    .update({ status: 'accepted', driver_id: profile.id })
+                    .eq('id', ride.id)
+                    .eq('status', 'requested')
+                    .is('driver_id', null)
+                    .select()
+                    .maybeSingle();
+                if (error) throw error;
+                if (!data) throw new Error('ride_unavailable');
+                accepted = data;
+            }
+
+            const hydrated = await hydratePassengerInfo({ ...ride, ...accepted });
+            setActiveRide(hydrated);
+            setRequests?.([]);
+            stopLoopingRequestAlert();
+            setNavStep(1);
+            setArrivalTime(null);
+            speak(`Viaje aceptado. Navegando a ${ride.pickup}`);
+        } catch (error) {
+            if (/unavailable|ride_unavailable/i.test(error?.message || '')) {
+                toast.error('Este viaje ya fue tomado por otro conductor.');
+                setRequests?.((current) => current.filter((item) => item.id !== ride.id));
+            } else {
+                toast.error(`No se pudo aceptar el viaje: ${error?.message || error}`);
+            }
+        }
+    }, [navigate, profile, setRequests, speak]);
+
+    const handleMarkArrival = useCallback(async () => {
+        if (!activeRideRef.current || arrivalTime) return;
+        try {
+            let updated = activeRideRef.current;
+            if (FEATURES.serverSideRideState) {
+                updated = await markPickupArrival(activeRideRef.current.id);
+                setActiveRide((current) => ({ ...current, ...updated }));
+            }
+            const arrivedAt = updated?.arrived_at_pickup_at
+                ? new Date(updated.arrived_at_pickup_at).getTime()
+                : Date.now();
+            setArrivalTime(arrivedAt);
+            setWaitElapsedSec(0);
+            setWaitFee(0);
+            speak('Llegada marcada. Esperando al pasajero.');
+        } catch (error) {
+            toast.error(`No se pudo marcar la llegada: ${error?.message || error}`);
+        }
+    }, [arrivalTime, speak]);
+
+    const beginTrip = useCallback(async (ride) => {
+        if (FEATURES.serverSideRideState) {
+            const updated = await startRide(ride.id);
+            setActiveRide((current) => ({ ...current, ...updated }));
+            setWaitFee(Number(updated.wait_fee || 0));
+            return updated;
+        }
+
+        const elapsedSeconds = arrivalTime ? Math.max(0, Math.floor((Date.now() - arrivalTime) / 1000)) : 0;
+        const fee = computeWaitFee({ vehicleType: ride.ride_type, elapsedSeconds });
+        const finalPrice = Number((Number(ride.price || 0) + fee).toFixed(2));
+        const { data, error } = await supabase
+            .from('rides')
+            .update({
+                status: 'in_progress',
+                wait_seconds: elapsedSeconds,
+                wait_fee: fee,
+                price: finalPrice,
+            })
+            .eq('id', ride.id)
+            .select()
+            .single();
+        if (error) throw error;
+        setWaitFee(fee);
+        setActiveRide((current) => ({ ...current, ...data }));
+        return data;
+    }, [arrivalTime]);
+
+    const handleCompleteStep = useCallback(async () => {
+        const ride = activeRideRef.current;
+        if (!ride || completing) return;
+        const delivery = isDeliveryRide(ride);
+
+        if (delivery && navStep === 1 && !ride.pickup_pod_url) {
+            setPodRequired('pickup');
+            return;
+        }
 
         if (navStep === 1) {
-            setNavStep(2);
-            setArrivalTime(null);
-            speak(`Pago confirmado. Iniciando viaje al destino.`);
-            await supabase.from('rides').update({ status: 'in_progress' }).eq('id', activeRide.id);
-            
-            const isDelivery = activeRide.service_type === 'delivery' || activeRide.delivery_info;
-            if (isDelivery) {
-                sendDeliveryMilestone({ rideId: activeRide.id, status: 'in_progress' });
+            const senderPays = delivery && (ride.delivery_info?.payer === 'sender' || ride.payer === 'sender');
+            if (senderPays) {
+                setShowPaymentQR(true);
+                speak('Llegada al origen. El remitente debe pagar ahora.');
+                return;
+            }
+
+            setCompleting(true);
+            try {
+                const updated = await beginTrip(ride);
+                setNavStep(2);
+                setArrivalTime(null);
+                speak(delivery
+                    ? 'Paquete recogido. Iniciando ruta de entrega.'
+                    : `Recogida exitosa. Iniciando viaje a ${ride.dropoff}`);
+                if (delivery) sendDeliveryMilestone({ rideId: ride.id, status: 'in_progress' });
+                setActiveRide((current) => ({ ...current, ...updated }));
+            } catch (error) {
+                toast.error(`No se pudo iniciar el viaje: ${error?.message || error}`);
+            } finally {
+                setCompleting(false);
+            }
+            return;
+        }
+
+        if (navStep !== 2) return;
+
+        if (delivery && !ride.arrived_at_dropoff_at) {
+            try {
+                let updated;
+                if (FEATURES.serverSideRideState) {
+                    updated = await markDropoffArrival(ride.id);
+                } else {
+                    const { data, error } = await supabase
+                        .from('rides')
+                        .update({ status: 'arrived_at_dropoff' })
+                        .eq('id', ride.id)
+                        .select()
+                        .single();
+                    if (error) throw error;
+                    updated = { ...data, arrived_at_dropoff_at: new Date().toISOString() };
+                }
+                setActiveRide((current) => ({ ...current, ...updated }));
+                speak('Llegada al destino marcada. Coordiná la entrega.');
+                sendDeliveryMilestone({ rideId: ride.id, status: 'arrived_at_dropoff' });
+            } catch (error) {
+                toast.error(`No se pudo marcar la llegada: ${error?.message || error}`);
+            }
+            return;
+        }
+
+        if (delivery && Number(ride.cod_amount || 0) > 0 && !ride.cod_collected) {
+            setShowCodConfirm(true);
+            return;
+        }
+        if (delivery && !ride.delivery_pod_url) {
+            setPodRequired('delivery');
+            return;
+        }
+
+        setCompleting(true);
+        try {
+            let updated;
+            if (FEATURES.serverSideRideState) {
+                updated = await completeRide(ride.id);
+            } else {
+                const { data, error } = await supabase
+                    .from('rides')
+                    .update({ status: 'completed' })
+                    .eq('id', ride.id)
+                    .select()
+                    .single();
+                if (error) throw error;
+                updated = data;
+            }
+            setActiveRide((current) => ({ ...current, ...updated }));
+            if (delivery) sendDeliveryMilestone({ rideId: ride.id, status: 'completed' });
+            if (ride.user_id) {
+                supabase.rpc('credit_pending_referral', { p_user_id: ride.user_id }).catch(() => {});
+            }
+
+            const senderPays = delivery && (ride.delivery_info?.payer === 'sender' || ride.payer === 'sender');
+            if (senderPays) {
+                speak('Entrega finalizada. Gracias.');
+                closeRide();
+            } else {
+                speak('Viaje completado. Mostrá el código QR para el pago.');
+                setShowPaymentQR(true);
+            }
+        } catch (error) {
+            toast.error(`No se pudo completar el viaje: ${error?.message || error}`);
+        } finally {
+            setCompleting(false);
+        }
+    }, [beginTrip, closeRide, completing, navStep, speak]);
+
+    const confirmDriverPayment = useCallback(async () => {
+        const ride = activeRideRef.current;
+        if (!ride) return;
+        try {
+            let updated;
+            if (FEATURES.serverSideRideState) {
+                updated = await confirmRidePayment(ride.id);
+            } else {
+                const changes = { payment_confirmed_by_driver: true };
+                if (ride.payment_confirmed_by_user) changes.payment_confirmed_at = new Date().toISOString();
+                const { data, error } = await supabase.from('rides').update(changes).eq('id', ride.id).select().single();
+                if (error) throw error;
+                updated = data;
+            }
+            setActiveRide((current) => ({ ...current, ...updated }));
+        } catch (error) {
+            toast.error(`No se pudo confirmar el pago: ${error?.message || error}`);
+        }
+    }, []);
+
+    const handleQRClosed = useCallback(async () => {
+        setShowPaymentQR(false);
+        const ride = activeRideRef.current;
+        if (!ride) return;
+
+        if (navStep === 1) {
+            setCompleting(true);
+            try {
+                const updated = await beginTrip(ride);
+                setActiveRide((current) => ({ ...current, ...updated }));
+                setNavStep(2);
+                setArrivalTime(null);
+                speak('Pago confirmado. Iniciando viaje al destino.');
+                if (isDeliveryRide(ride)) sendDeliveryMilestone({ rideId: ride.id, status: 'in_progress' });
+            } catch (error) {
+                toast.error(`No se pudo iniciar el viaje: ${error?.message || error}`);
+            } finally {
+                setCompleting(false);
             }
         } else {
             closeRide();
         }
-    };
-
-    const closeRide = () => {
-        setShowPaymentQR(false);
-        setTimeout(() => {
-            setActiveRide(null);
-            setNavStep(0);
-            setArrivalTime(null);
-            setWaitElapsedSec(0);
-            setWaitFee(0);
-            if (setRequests) setRequests([]);
-            stopLoopingRequestAlert();
-        }, 150);
-    };
+    }, [beginTrip, closeRide, navStep, speak]);
 
     return {
         activeRide,
@@ -422,6 +450,6 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
         handleCompleteStep,
         confirmDriverPayment,
         handleQRClosed,
-        closeRide
+        closeRide,
     };
 }

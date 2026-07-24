@@ -1,9 +1,9 @@
-// Cliente del endpoint /api/banesco-validate.php para Higo Pay.
-// El servidor PHP se encarga de hablar con Banesco con las credenciales
-// privadas; aquí sólo enviamos los datos del pago + el JWT de Supabase.
+// Client for the server-side Banesco validation endpoints.
+// Driver memberships switch to v2 only when the rollout flag is enabled.
 
 import { supabase } from './supabase';
 import { apiUrl } from '../utils/apiUrl';
+import { FEATURES } from '../config/features';
 
 export const VENEZUELAN_BANKS = [
     { code: '0102', name: 'Banco de Venezuela' },
@@ -35,46 +35,55 @@ export const VENEZUELAN_BANKS = [
     { code: '0191', name: 'Banco Nacional de Crédito (BNC)' },
 ];
 
-/**
- * Llama al endpoint y devuelve el JSON ya parseado tal cual viene del PHP.
- * Forma esperada cuando ok=true:
- *   { ok, statusCode, amountReal, amountRequested, diff, diffPct,
- *     withinTolerance, trnDate, trnTime, referenceNumber,
- *     sourceBankId, destBankId, concept, raw }
- * Cuando ok=false:
- *   { ok:false, errorCode, errorMessage, statusCode?, raw? }
- */
-export async function validateBanescoPayment({ reference, amount, phone, date, bank, storeId }) {
+export async function validateBanescoPayment({
+    reference,
+    amount,
+    phone,
+    date,
+    bank,
+    storeId,
+    planId,
+    paymentType,
+}) {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) {
         return { ok: false, errorCode: 'NO_SESSION', errorMessage: 'No hay sesión iniciada.' };
     }
 
-    // storeId opcional: presente sólo en pagos de membresía de TIENDA. El
-    // servidor activa la membresía correspondiente (tienda vs. conductor)
-    // con service_role tras confirmar el abono (mig 77).
     const payload = { reference, amount, phone, date, bank };
-    if (storeId) payload.store_id = storeId;
+    const useUnifiedDriverFlow = !storeId && FEATURES.unifiedMembershipCheckout;
+    let endpoint = useUnifiedDriverFlow
+        ? '/api/banesco-validate-v2.php'
+        : '/api/banesco-validate.php';
 
-    let resp;
+    if (storeId) {
+        payload.store_id = storeId;
+    } else if (useUnifiedDriverFlow) {
+        if (planId) payload.plan_id = planId;
+        payload.payment_type = paymentType || 'pm_banesco';
+    }
+
+    let response;
     try {
-        resp = await fetch(apiUrl('/api/banesco-validate.php'), {
+        response = await fetch(apiUrl(endpoint), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${session.access_token}`,
+                Authorization: `Bearer ${session.access_token}`,
             },
             body: JSON.stringify(payload),
         });
-    } catch (err) {
-        return { ok: false, errorCode: 'NETWORK', errorMessage: err?.message || 'Error de red.' };
+    } catch (error) {
+        return { ok: false, errorCode: 'NETWORK', errorMessage: error?.message || 'Error de red.' };
     }
 
-    let body;
     try {
-        body = await resp.json();
+        return await response.json();
     } catch {
-        return { ok: false, errorCode: 'BAD_RESPONSE', errorMessage: `Respuesta no-JSON (HTTP ${resp.status}).` };
+        return {
+            ok: false,
+            errorCode: 'BAD_RESPONSE',
+            errorMessage: `Respuesta no válida (HTTP ${response.status}).`,
+        };
     }
-    return body;
 }

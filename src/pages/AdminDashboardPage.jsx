@@ -1,297 +1,141 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { supabase } from '../services/supabase';
 import AdminNav from '../components/AdminNav';
-import AdminGuard from '../components/AdminGuard';
-import InteractiveMap from '../components/InteractiveMap';
+import { supabase } from '../services/supabase';
+import { getAdminDashboardMetrics } from '../services/adminApi';
 
-// Centro default del mapa: Higuerote, Miranda, VE. El mapa permite
-// pan/zoom; este es solo el frame inicial.
-const HIGUEROTE_CENTER = { lat: 10.4862, lng: -66.0944 };
+const money = (value) => `$${Number(value || 0).toFixed(2)}`;
 
-// Criterio para considerar un driver "online" en vivo: status=online Y
-// actualización de ubicación reciente. 90s es el mismo umbral que usa
-// InteractiveMap para no pintar fantasmas en el mapa.
-const DRIVER_ONLINE_STALE_MS = 90_000;
-
-const startOfToday = () => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d.toISOString();
-};
-
-const KpiCard = ({ icon, label, value, accent, loading }) => (
-    <div className="bg-[#1A1F2E] rounded-2xl border border-white/5 p-5">
+const KPI = ({ icon, label, value, note, tone = 'bg-violet-600', alert = false }) => (
+    <div className={`rounded-2xl border p-5 ${alert ? 'bg-red-500/10 border-red-500/30' : 'bg-[#1A1F2E] border-white/5'}`}>
         <div className="flex items-center gap-3 mb-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${accent}`}>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${tone}`}>
                 <span className="material-symbols-outlined text-white text-xl">{icon}</span>
             </div>
             <span className="text-sm font-medium text-gray-400">{label}</span>
         </div>
-        <div className="text-3xl font-extrabold text-white">
-            {loading ? <span className="text-gray-600">--</span> : value}
-        </div>
+        <p className="text-3xl font-black text-white">{value}</p>
+        {note && <p className="text-xs text-gray-500 mt-2">{note}</p>}
     </div>
 );
 
-const NavTile = ({ to, icon, label, description }) => (
-    <Link
-        to={to}
-        className="bg-[#1A1F2E] rounded-2xl border border-white/5 p-5 hover:border-violet-500/40 hover:bg-[#1E2338] transition-all group"
-    >
-        <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-xl bg-violet-600/20 flex items-center justify-center shrink-0 group-hover:bg-violet-600/30 transition-colors">
-                <span className="material-symbols-outlined text-violet-400 text-2xl">{icon}</span>
-            </div>
-            <div className="flex-1 min-w-0">
-                <div className="font-bold text-white mb-1">{label}</div>
-                <div className="text-sm text-gray-400">{description}</div>
-            </div>
-            <span className="material-symbols-outlined text-gray-600 group-hover:text-violet-400 transition-colors">chevron_right</span>
+const Action = ({ to, icon, title, detail, badge }) => (
+    <Link to={to} className="bg-[#1A1F2E] border border-white/5 rounded-2xl p-5 hover:border-violet-500/40 transition-colors flex gap-4">
+        <div className="w-11 h-11 rounded-xl bg-violet-600/20 text-violet-400 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined">{icon}</span>
         </div>
+        <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+                <p className="font-bold text-white">{title}</p>
+                {badge > 0 && <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-500 text-white">{badge}</span>}
+            </div>
+            <p className="text-sm text-gray-400 mt-1">{detail}</p>
+        </div>
+        <span className="material-symbols-outlined text-gray-600">chevron_right</span>
     </Link>
 );
 
-const AdminDashboardContent = () => {
+export default function AdminDashboardPage() {
     const navigate = useNavigate();
+    const [metrics, setMetrics] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [kpis, setKpis] = useState({
-        driversOnline: 0,
-        ridesToday: 0,
-        revenueToday: 0,
-        openDisputes: 0,
-        shopStores: 0,
-        shopRevenueToday: 0,
-        activeMemberships: 0,
-        membershipRevenue: 0
-    });
+    const [error, setError] = useState('');
 
-    const loadKpis = async () => {
-        const since = new Date(Date.now() - DRIVER_ONLINE_STALE_MS).toISOString();
-        const today = startOfToday();
-
-        const [drivers, rides, revenue, disputes, stores, shopOrders] = await Promise.all([
-            supabase
-                .from('profiles')
-                .select('id', { count: 'exact', head: true })
-                .eq('role', 'driver')
-                .eq('status', 'online')
-                .gt('updated_at', since),
-            supabase
-                .from('rides')
-                .select('id', { count: 'exact', head: true })
-                .gte('created_at', today),
-            supabase
-                .from('rides')
-                .select('price')
-                .gte('created_at', today)
-                .not('payment_confirmed_at', 'is', null),
-            supabase
-                .from('rides')
-                .select('id', { count: 'exact', head: true })
-                .is('payment_confirmed_at', null)
-                .or('payment_reference.not.is.null,payment_confirmed_by_user.eq.true,payment_confirmed_by_driver.eq.true'),
-            supabase
-                .from('stores')
-                .select('id', { count: 'exact', head: true }),
-            supabase
-                .from('orders')
-                .select('total')
-                .gte('created_at', today)
-                .eq('status', 'DELIVERED')
-        ]);
-
-        const totalRevenue = (revenue.data || []).reduce(
-            (sum, r) => sum + (Number(r.price) || 0),
-            0
-        );
-
-        const totalShopRevenue = (shopOrders.data || []).reduce(
-            (sum, o) => sum + (Number(o.total) || 0),
-            0
-        );
-
-        let activeMemberships = 0;
-        let totalMembershipRevenue = 0;
+    const load = useCallback(async () => {
         try {
-            const { data: mems, error: memErr } = await supabase
-                .from('store_memberships')
-                .select('amount, status, expires_at');
-            if (memErr) throw memErr;
-            if (mems) {
-                const now = new Date();
-                mems.forEach(m => {
-                    const isExpired = new Date(m.expires_at) < now || m.status !== 'active';
-                    if (!isExpired) {
-                        activeMemberships++;
-                    }
-                    totalMembershipRevenue += Number(m.amount) || 0;
-                });
-            }
-        } catch (e) {
-            console.warn("Failed to fetch store memberships for dashboard KPIs. Applying resilient mock fallback.", e.message);
-            // Resilient mock fallback based on stores count for developer experience
-            const storeCount = stores.count || 0;
-            activeMemberships = Math.max(0, Math.ceil(storeCount * 0.8)); // 80% active
-            totalMembershipRevenue = activeMemberships * 30.00;
+            setError('');
+            setMetrics(await getAdminDashboardMetrics());
+        } catch (err) {
+            console.error('[AdminDashboard] metrics failed:', err);
+            setError('No se pudieron cargar las métricas. No se mostrarán datos estimados.');
+        } finally {
+            setLoading(false);
         }
-
-        setKpis({
-            driversOnline: drivers.count || 0,
-            ridesToday: rides.count || 0,
-            revenueToday: totalRevenue,
-            openDisputes: disputes.count || 0,
-            shopStores: stores.count || 0,
-            shopRevenueToday: totalShopRevenue,
-            activeMemberships,
-            membershipRevenue: totalMembershipRevenue
-        });
-        setLoading(false);
-    };
-
-    useEffect(() => {
-        loadKpis();
-        const ch = supabase.channel('admin-kpi-watch')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'rides' }, loadKpis)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, loadKpis)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'store_memberships' }, loadKpis)
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, loadKpis)
-            .subscribe();
-        return () => supabase.removeChannel(ch);
     }, []);
 
-    const handleLogout = async () => {
+    useEffect(() => {
+        load();
+        let timer;
+        const schedule = () => {
+            clearTimeout(timer);
+            timer = setTimeout(load, 800);
+        };
+        const channel = supabase.channel('admin-business-metrics')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'driver_memberships' }, schedule)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'rides' }, schedule)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'support_threads' }, schedule)
+            .subscribe();
+        return () => { clearTimeout(timer); supabase.removeChannel(channel); };
+    }, [load]);
+
+    const logout = async () => {
         await supabase.auth.signOut();
         localStorage.removeItem('session_id');
         navigate('/admin', { replace: true });
     };
 
+    const m = metrics || {};
+
     return (
         <div className="min-h-screen bg-[#0F1419] text-white">
-            <div className="max-w-6xl lg:max-w-7xl mx-auto px-4 py-6">
-                <div className="flex items-center justify-between mb-6">
+            <div className="max-w-7xl mx-auto px-4 py-6">
+                <header className="flex items-start justify-between gap-4 mb-6">
                     <div>
-                        <h1 className="text-2xl font-extrabold">Panel Admin</h1>
-                        <p className="text-sm text-gray-400">Resumen general de Higo</p>
+                        <h1 className="text-2xl font-black">Centro de control Higo</h1>
+                        <p className="text-sm text-gray-400 mt-1">Ingresos propios por membresías, operación y asuntos pendientes.</p>
                     </div>
-                    <button
-                        onClick={handleLogout}
-                        className="flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
-                    >
-                        <span className="material-symbols-outlined text-[18px]">logout</span>
-                        Cerrar sesión
+                    <button onClick={logout} className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-sm text-gray-300 flex items-center gap-2">
+                        <span className="material-symbols-outlined text-lg">logout</span> Salir
                     </button>
-                </div>
+                </header>
 
                 <AdminNav />
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                    <KpiCard
-                        icon="directions_car"
-                        label="Drivers online"
-                        value={kpis.driversOnline}
-                        accent="bg-green-600"
-                        loading={loading}
-                    />
-                    <KpiCard
-                        icon="receipt_long"
-                        label="Viajes hoy"
-                        value={kpis.ridesToday}
-                        accent="bg-blue-600"
-                        loading={loading}
-                    />
-                    <KpiCard
-                        icon="attach_money"
-                        label="Ingresos hoy"
-                        value={`$${kpis.revenueToday.toFixed(2)}`}
-                        accent="bg-violet-600"
-                        loading={loading}
-                    />
-                    <KpiCard
-                        icon="report"
-                        label="Disputas"
-                        value={kpis.openDisputes}
-                        accent="bg-red-600"
-                        loading={loading}
-                    />
-                    <KpiCard
-                        icon="storefront"
-                        label="Tiendas Shop"
-                        value={kpis.shopStores}
-                        accent="bg-orange-500"
-                        loading={loading}
-                    />
-                    <KpiCard
-                        icon="shopping_bag"
-                        label="Ventas Shop hoy"
-                        value={`$${kpis.shopRevenueToday.toFixed(2)}`}
-                        accent="bg-pink-500"
-                        loading={loading}
-                    />
-                    <KpiCard
-                        icon="verified"
-                        label="Membresías Activas"
-                        value={kpis.activeMemberships}
-                        accent="bg-emerald-600"
-                        loading={loading}
-                    />
-                    <KpiCard
-                        icon="credit_score"
-                        label="Recaudo Membresías"
-                        value={`$${kpis.membershipRevenue.toFixed(2)}`}
-                        accent="bg-teal-600"
-                        loading={loading}
-                    />
-                </div>
+                {error && <div className="mb-5 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300">{error}</div>}
+                {loading ? (
+                    <div className="py-28 flex justify-center"><div className="w-9 h-9 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" /></div>
+                ) : (
+                    <>
+                        <section className="mb-8">
+                            <div className="flex items-end justify-between mb-3 gap-4">
+                                <div>
+                                    <h2 className="font-bold text-lg">Negocio de membresías</h2>
+                                    <p className="text-xs text-gray-500">La única fuente de ingreso mostrada aquí son pagos de membresías de Higo Drivers.</p>
+                                </div>
+                                <Link to="/admin/drivers" className="text-sm font-bold text-violet-400 hover:text-violet-300">Gestionar membresías →</Link>
+                            </div>
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                <KPI icon="payments" label="Ingresos hoy" value={money(m.membershipRevenueToday)} note="Membresías registradas hoy" tone="bg-emerald-600" />
+                                <KPI icon="calendar_month" label="Ingresos del mes" value={money(m.membershipRevenueMonth)} note="Sin incluir valor de viajes" tone="bg-teal-600" />
+                                <KPI icon="verified" label="Membresías vigentes" value={m.activeMemberships || 0} note={`${m.expiringSoon || 0} vencen en 7 días`} tone="bg-blue-600" />
+                                <KPI icon="event_busy" label="Vencidas o faltantes" value={m.expiredMemberships || 0} note="Requieren renovación o revisión" tone="bg-amber-600" />
+                            </div>
+                        </section>
 
-                {/* D.A1: Mapa realtime con drivers online. InteractiveMap
-                    ya se suscribe a profiles UPDATE filtrado por role=driver
-                    y mantiene drivers[] como state interno; renderiza
-                    AnimatedVehicleMarker con heading. Acá lo embebemos sin
-                    assignedDriver ni isDriver para que muestre TODA la flota
-                    online. */}
-                <section className="mb-8 bg-[#1A1F2E] rounded-2xl border border-white/5 overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
-                        <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-green-400 text-[20px]">my_location</span>
-                            <h2 className="font-bold text-sm">Flota en vivo</h2>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-xs text-gray-400">
-                            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                            {kpis.driversOnline} drivers · {kpis.ridesToday} viajes hoy
-                        </div>
-                    </div>
-                    <div className="h-[420px] relative">
-                        <InteractiveMap
-                            center={HIGUEROTE_CENTER}
-                            isDriver={false}
-                            assignedDriver={null}
-                            showPin={false}
-                        />
-                    </div>
-                </section>
+                        <section className="mb-8">
+                            <h2 className="font-bold text-lg mb-3">Operación</h2>
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                <KPI icon="directions_car" label="Drivers online" value={m.driversOnline || 0} tone="bg-green-600" />
+                                <KPI icon="route" label="Viajes hoy" value={m.ridesToday || 0} tone="bg-sky-600" />
+                                <KPI icon="currency_exchange" label="Volumen transado" value={money(m.tripVolumeToday)} note="Pago pasajero → driver; no es ingreso de Higo" tone="bg-indigo-600" />
+                                <KPI icon="warning" label="Activos sin membresía" value={m.activeWithoutMembership || 0} note="Inconsistencia que debe corregirse" tone="bg-red-600" alert={(m.activeWithoutMembership || 0) > 0} />
+                            </div>
+                        </section>
 
-                <h2 className="text-lg font-bold mb-3">Accesos rápidos</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <NavTile to="/admin/drivers"   icon="directions_car" label="Conductores" description="Ver, activar, suspender y registrar drivers" />
-                    <NavTile to="/admin/users"     icon="group"          label="Usuarios"    description="Listado y gestión de pasajeros" />
-                    <NavTile to="/admin/shop"      icon="shopping_bag"   label="Higo Shop"   description="Auditar comercios, menús, productos y pedidos realtime" />
-                    <NavTile to="/admin/pricing"   icon="payments"       label="Tarifas"     description="Precios base y por km por tipo de vehículo" />
-                    <NavTile to="/admin/promos"    icon="local_offer"    label="Promos"      description="Códigos promocionales y referidos" />
-                    <NavTile to="/admin/disputes"  icon="report"         label="Disputas"    description="Conflictos de pago entre driver y pasajero" />
-                    <NavTile to="/admin/analytics" icon="bar_chart"      label="Analytics"   description="Viajes, ingresos y retención de usuarios" />
-                    <NavTile to="/admin/zones"     icon="place"          label="Zonas"       description="Áreas de cobertura geográfica de Higo" />
-                    <NavTile to="/admin/fraud"     icon="crisis_alert"   label="Fraud signals" description="Cancelaciones, ratings bajos, velocidades imposibles" />
-                </div>
+                        <section>
+                            <h2 className="font-bold text-lg mb-3">Pendientes prioritarios</h2>
+                            <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+                                <Action to="/admin/drivers" icon="badge" title="Membresías y drivers" detail="Renovar, revisar vencimientos, documentos y excepciones auditadas." badge={m.expiredMemberships || 0} />
+                                <Action to="/admin/support" icon="support_agent" title="Soporte" detail="Conversaciones abiertas y emergencias SOS." badge={m.supportUnread || 0} />
+                                <Action to="/admin/disputes" icon="report" title="Disputas" detail="Pagos entre pasajero y driver pendientes de resolución." badge={m.openDisputes || 0} />
+                                <Action to="/admin/deliveries" icon="inventory_2" title="Operación de envíos" detail="Seguimiento, evidencia y reclamos de entregas." />
+                                <Action to="/admin/analytics" icon="monitoring" title="Analítica del negocio" detail="Renovación, ingreso medio, membresías y volumen de viajes separados." />
+                                <Action to="/admin/pricing" icon="tune" title="Configuración operativa" detail="Tarifas sugeridas, reglas y zonas de cobertura." />
+                            </div>
+                        </section>
+                    </>
+                )}
             </div>
         </div>
     );
-};
-
-const AdminDashboardPage = () => (
-    <AdminGuard>
-        <AdminDashboardContent />
-    </AdminGuard>
-);
-
-export default AdminDashboardPage;
+}

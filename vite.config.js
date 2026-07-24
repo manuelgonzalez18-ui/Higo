@@ -1,53 +1,54 @@
-import { defineConfig } from 'vite'
+import process from 'node:process'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  base: './',
-  build: {
-    outDir: 'dist',
-    sourcemap: false,
-    rollupOptions: {
-      output: {
-        // Entry (index.js) sin hash: el .htaccess sirve HTML con no-cache,
-        // así el browser siempre lo refetchea y referencia los chunks
-        // nuevos. El index.js sí se sobreescribe en cada deploy lftp.
-        entryFileNames: 'assets/[name].js',
-        // Chunks SÍ con hash: cada lazy chunk + manualChunk tiene un
-        // nombre único por build. Esto resuelve el riesgo histórico de
-        // exports desincronizados entre index.js nuevo y chunk viejo
-        // (que era el motivo para mantener gemini en el main bundle).
-        // Ahora podemos sacar Gemini afuera y hacer lazy de rutas sin
-        // miedo a stale chunks: si el deploy lftp todavía no subió un
-        // chunk, el index.js nuevo tira "Failed to load chunk" visible
-        // (recuperable con reload) en vez de corrupción silenciosa.
-        chunkFileNames: 'assets/[name]-[hash].js',
-        assetFileNames: (info) => {
-          // Fuentes y binarios con [hash] para mejor caching (rara vez cambian)
-          if (/\.(woff2?|ttf|eot|png|jpe?g|gif|svg)$/.test(info.name || '')) {
-            return 'assets/[name]-[hash][extname]';
-          }
-          return 'assets/[name][extname]';
+const booleanFlag = (value, fallback = 'false') => {
+  if (value == null || value === '') return fallback
+  return String(value).trim().toLowerCase()
+}
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+
+  return {
+    plugins: [react(), tailwindcss()],
+    base: './',
+    define: {
+      'import.meta.env.VITE_SHOP_ENABLED': JSON.stringify(booleanFlag(env.VITE_SHOP_ENABLED)),
+      'import.meta.env.VITE_SERVER_SIDE_RIDE_PRICING': JSON.stringify(booleanFlag(env.VITE_SERVER_SIDE_RIDE_PRICING)),
+      'import.meta.env.VITE_SERVER_SIDE_RIDE_STATE': JSON.stringify(booleanFlag(env.VITE_SERVER_SIDE_RIDE_STATE)),
+      'import.meta.env.VITE_UNIFIED_MEMBERSHIP_CHECKOUT': JSON.stringify(booleanFlag(env.VITE_UNIFIED_MEMBERSHIP_CHECKOUT)),
+      'import.meta.env.VITE_DIRECTED_RIDE_OFFERS': JSON.stringify(booleanFlag(env.VITE_DIRECTED_RIDE_OFFERS)),
+      'import.meta.env.VITE_ADMIN_MFA_UI': JSON.stringify(booleanFlag(env.VITE_ADMIN_MFA_UI, 'true')),
+    },
+    build: {
+      outDir: 'dist',
+      sourcemap: false,
+      rollupOptions: {
+        output: {
+          entryFileNames: 'assets/[name].js',
+          chunkFileNames: 'assets/[name]-[hash].js',
+          assetFileNames: (info) => {
+            if (/\.(woff2?|ttf|eot|png|jpe?g|gif|svg)$/.test(info.name || '')) {
+              return 'assets/[name]-[hash][extname]'
+            }
+            return 'assets/[name][extname]'
+          },
+          manualChunks: {
+            'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+            supabase: ['@supabase/supabase-js'],
+            maps: ['@vis.gl/react-google-maps'],
+            capacitor: [
+              '@capacitor/core',
+              '@capacitor/app',
+              '@capacitor/geolocation',
+              '@capacitor/local-notifications',
+              '@capacitor-community/text-to-speech',
+            ],
+          },
         },
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'supabase': ['@supabase/supabase-js'],
-          'maps': ['@vis.gl/react-google-maps'],
-          // Gemini ya no entra en main: los dos consumers (LocationInput
-          // y DriverDashboard) hacen `await import('./geminiService')`,
-          // así que Vite arma un chunk lazy `geminiService-<hash>.js`
-          // que incluye @google/genai SDK. Sin entry acá: deduplica
-          // automáticamente entre los dos consumers.
-          'capacitor': [
-            '@capacitor/core',
-            '@capacitor/app',
-            '@capacitor/geolocation',
-            '@capacitor/local-notifications',
-            '@capacitor-community/text-to-speech'
-          ]
-        }
-      }
-    }
+      },
+    },
   }
 })

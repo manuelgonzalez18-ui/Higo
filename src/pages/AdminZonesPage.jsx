@@ -1,256 +1,73 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase, getUserProfile } from '../services/supabase';
+import React, { useEffect, useMemo, useState } from 'react';
 import AdminNav from '../components/AdminNav';
+import { supabase } from '../services/supabase';
+import { toast } from '../components/Toast';
 
-const emptyForm = { name: '', center_lat: '', center_lng: '', radius_km: 30, active: true };
+const EMPTY = { name: '', center_lat: '10.4862', center_lng: '-66.0944', radius_km: 30, active: true };
 
-const AdminZonesPage = () => {
-    const navigate = useNavigate();
-    const [authorized, setAuthorized] = useState(false);
-    const [loading, setLoading] = useState(true);
+export default function AdminZonesPage() {
     const [zones, setZones] = useState([]);
-    const [form, setForm] = useState(emptyForm);
-    const [editingId, setEditingId] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [editing, setEditing] = useState(null);
+    const [form, setForm] = useState(EMPTY);
     const [showModal, setShowModal] = useState(false);
-    const [message, setMessage] = useState(null);
 
-    useEffect(() => {
-        (async () => {
-            const profile = await getUserProfile();
-            if (!profile || profile.role !== 'admin') { navigate('/'); return; }
-            setAuthorized(true);
-            await fetchZones();
-        })();
-    }, [navigate]);
-
-    const fetchZones = async () => {
+    const load = async () => {
         setLoading(true);
-        // Admin needs to see ALL zones (active and inactive), bypass RLS read-active-only
-        const { data, error } = await supabase
-            .from('coverage_zones')
-            .select('*')
-            .order('created_at', { ascending: false });
-        if (error) setMessage({ type: 'error', text: error.message });
-        else setZones(data || []);
+        const { data, error } = await supabase.from('coverage_zones').select('*').order('created_at', { ascending: false });
+        if (error) toast.error(error.message);
+        setZones(data || []);
         setLoading(false);
     };
+    useEffect(() => { load(); }, []);
 
-    const openCreate = () => { setForm(emptyForm); setEditingId(null); setShowModal(true); };
+    const mapUrl = useMemo(() => {
+        const lat = Number(form.center_lat) || 10.4862;
+        const lng = Number(form.center_lng) || -66.0944;
+        return `https://www.google.com/maps?q=${lat},${lng}&z=11&output=embed`;
+    }, [form.center_lat, form.center_lng]);
 
-    const openEdit = (z) => {
-        setForm({ name: z.name, center_lat: z.center_lat, center_lng: z.center_lng, radius_km: z.radius_km, active: z.active });
-        setEditingId(z.id);
+    const open = zone => {
+        setEditing(zone || null);
+        setForm(zone ? { name: zone.name, center_lat: String(zone.center_lat), center_lng: String(zone.center_lng), radius_km: zone.radius_km, active: zone.active } : EMPTY);
         setShowModal(true);
     };
 
     const save = async () => {
-        if (!form.name.trim() || !form.center_lat || !form.center_lng) {
-            setMessage({ type: 'error', text: 'Nombre, latitud y longitud son obligatorios.' });
-            return;
-        }
-        const payload = {
-            name: form.name.trim(),
-            center_lat: parseFloat(form.center_lat),
-            center_lng: parseFloat(form.center_lng),
-            radius_km: parseFloat(form.radius_km) || 30,
-            active: !!form.active,
-        };
-        const q = editingId
-            ? supabase.from('coverage_zones').update(payload).eq('id', editingId)
-            : supabase.from('coverage_zones').insert(payload);
-        const { error } = await q;
-        if (error) setMessage({ type: 'error', text: error.message });
-        else {
-            setMessage({ type: 'success', text: editingId ? 'Zona actualizada.' : 'Zona creada.' });
-            setShowModal(false);
-            fetchZones();
-        }
+        const lat = Number(form.center_lat), lng = Number(form.center_lng), radius = Number(form.radius_km);
+        if (!form.name.trim() || !Number.isFinite(lat) || !Number.isFinite(lng) || !(radius > 0)) return toast.error('Completá nombre, coordenadas y radio válidos.');
+        const payload = { name: form.name.trim(), center_lat: lat, center_lng: lng, radius_km: radius, active: !!form.active };
+        const { error } = editing
+            ? await supabase.from('coverage_zones').update(payload).eq('id', editing.id)
+            : await supabase.from('coverage_zones').insert(payload);
+        if (error) return toast.error(error.message);
+        toast.success(editing ? 'Zona actualizada.' : 'Zona creada.');
+        setShowModal(false); load();
     };
 
-    const toggleActive = async (z) => {
-        const { error } = await supabase.from('coverage_zones').update({ active: !z.active }).eq('id', z.id);
-        if (error) setMessage({ type: 'error', text: error.message });
-        else fetchZones();
+    const toggle = async zone => {
+        const { error } = await supabase.from('coverage_zones').update({ active: !zone.active }).eq('id', zone.id);
+        if (error) toast.error(error.message); else load();
     };
 
-    const remove = async (z) => {
-        if (!confirm(`¿Eliminar la zona "${z.name}"?`)) return;
-        const { error } = await supabase.from('coverage_zones').delete().eq('id', z.id);
-        if (error) setMessage({ type: 'error', text: error.message });
-        else { setMessage({ type: 'success', text: 'Zona eliminada.' }); fetchZones(); }
+    const archive = async zone => {
+        const reason = prompt(`Desactivar la zona “${zone.name}”. Motivo:`, '');
+        if (!reason?.trim()) return;
+        const { error } = await supabase.rpc('admin_archive_zone', { p_id: zone.id, p_reason: reason.trim() });
+        if (error) return toast.error(error.message);
+        toast.success('Zona desactivada y auditada sin borrar su historial.');
+        load();
     };
-
-    if (!authorized) return (
-        <div className="min-h-screen bg-[#0F1014] flex items-center justify-center">
-            <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin"></div>
-        </div>
-    );
 
     return (
-        <div className="min-h-screen bg-[#0F1014] p-4 md:p-8 font-sans text-white">
+        <div className="min-h-screen bg-[#0F1014] text-white p-4 md:p-8">
             <AdminNav />
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6"><div><h1 className="text-2xl font-black">Zonas de cobertura</h1><p className="text-sm text-gray-400 mt-1">Configuración visual del centro y radio de operación.</p></div><button onClick={() => open(null)} className="px-5 py-3 rounded-xl bg-teal-600 font-bold flex items-center gap-2"><span className="material-symbols-outlined">add_location</span>Nueva zona</button></div>
+            {loading ? <div className="py-24 flex justify-center"><div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" /></div> : <div className="grid lg:grid-cols-2 gap-4">{zones.map(zone => <article key={zone.id} className="bg-[#1A1F2E] border border-white/5 rounded-2xl overflow-hidden"><iframe title={`Mapa ${zone.name}`} src={`https://www.google.com/maps?q=${zone.center_lat},${zone.center_lng}&z=11&output=embed`} className="w-full h-48 border-0" loading="lazy" /><div className="p-5 flex gap-4 items-center"><div className="flex-1"><div className="flex items-center gap-2"><h2 className="font-black text-lg">{zone.name}</h2><span className={`text-[10px] px-2 py-1 rounded-full ${zone.active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-gray-500/15 text-gray-400'}`}>{zone.active ? 'Activa' : 'Inactiva'}</span></div><p className="text-xs text-gray-400 font-mono mt-2">{Number(zone.center_lat).toFixed(4)}, {Number(zone.center_lng).toFixed(4)} · radio {zone.radius_km} km</p></div><div className="flex gap-2"><button onClick={() => toggle(zone)} className="px-3 py-2 rounded-lg bg-white/5 text-xs font-bold">{zone.active ? 'Pausar' : 'Activar'}</button><button onClick={() => open(zone)} className="w-9 h-9 rounded-lg bg-blue-500/10 text-blue-300"><span className="material-symbols-outlined text-lg">edit</span></button>{zone.active && <button onClick={() => archive(zone)} className="w-9 h-9 rounded-lg bg-red-500/10 text-red-300" title="Desactivar sin borrar"><span className="material-symbols-outlined text-lg">archive</span></button>}</div></div></article>)}{!zones.length && <div className="lg:col-span-2 py-20 text-center rounded-2xl bg-[#1A1F2E] border border-dashed border-white/10 text-gray-500">No hay zonas configuradas.</div>}</div>}
 
-            <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-                <div className="flex items-center gap-4">
-                    <div className="bg-gradient-to-br from-teal-600 to-emerald-600 p-3 rounded-2xl shadow-lg shadow-teal-600/20">
-                        <span className="material-symbols-outlined text-white text-2xl">place</span>
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-black tracking-tight">Zonas de Cobertura</h1>
-                        <p className="text-gray-400 text-sm">Áreas donde opera Higo</p>
-                    </div>
-                </div>
-                <button
-                    onClick={openCreate}
-                    className="bg-teal-600 hover:bg-teal-500 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95"
-                >
-                    <span className="material-symbols-outlined">add</span>
-                    Nueva Zona
-                </button>
-            </div>
-
-            {message && (
-                <div className={`mb-6 p-4 rounded-xl flex items-center gap-3 ${message.type === 'success' ? 'bg-green-500/10 border border-green-500/20 text-green-400' : 'bg-red-500/10 border border-red-500/20 text-red-400'}`}>
-                    <span className="material-symbols-outlined">{message.type === 'success' ? 'check_circle' : 'error'}</span>
-                    <span className="font-medium">{message.text}</span>
-                </div>
-            )}
-
-            <div className="space-y-3">
-                {loading ? (
-                    <div className="flex justify-center py-20">
-                        <div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
-                    </div>
-                ) : zones.length === 0 ? (
-                    <div className="text-center py-20 bg-[#1A1F2E] rounded-2xl border border-dashed border-white/10">
-                        <span className="material-symbols-outlined text-gray-500 text-4xl">place</span>
-                        <p className="text-gray-400 font-medium mt-2">No hay zonas definidas. Crea la primera.</p>
-                    </div>
-                ) : zones.map(z => (
-                    <div key={z.id} className="bg-[#1A1F2E] p-4 md:p-5 rounded-[20px] border border-white/5 flex flex-col md:flex-row gap-4 items-center relative overflow-hidden">
-                        <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${z.active ? 'bg-teal-500' : 'bg-gray-600'}`}></div>
-
-                        <div className="flex-1 pl-3">
-                            <p className="font-bold text-white text-lg">{z.name}</p>
-                            <p className="text-xs text-gray-400 font-mono mt-0.5">
-                                {z.center_lat.toFixed(4)}, {z.center_lng.toFixed(4)} · radio {z.radius_km} km
-                            </p>
-                        </div>
-
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => toggleActive(z)}
-                                className={`px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1 ${z.active
-                                    ? 'bg-teal-500/10 text-teal-400 border border-teal-500/20 hover:bg-teal-500/20'
-                                    : 'bg-gray-600/10 text-gray-400 border border-gray-600/20 hover:bg-gray-600/20'}`}
-                            >
-                                <span className="material-symbols-outlined text-[16px]">{z.active ? 'toggle_on' : 'toggle_off'}</span>
-                                {z.active ? 'Activa' : 'Inactiva'}
-                            </button>
-                            <button
-                                onClick={() => openEdit(z)}
-                                className="w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white"
-                            >
-                                <span className="material-symbols-outlined text-[18px]">edit</span>
-                            </button>
-                            <button
-                                onClick={() => remove(z)}
-                                className="w-9 h-9 rounded-lg bg-red-500/10 hover:bg-red-500/20 flex items-center justify-center text-red-400"
-                            >
-                                <span className="material-symbols-outlined text-[18px]">delete</span>
-                            </button>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {showModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
-                    <div className="bg-[#1A1F2E] w-full max-w-md rounded-[32px] shadow-2xl my-8 border border-white/10">
-                        <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#151925] rounded-t-[32px]">
-                            <h2 className="text-xl font-bold flex items-center gap-2">
-                                <span className="material-symbols-outlined text-teal-500">{editingId ? 'edit' : 'add_location'}</span>
-                                {editingId ? 'Editar Zona' : 'Nueva Zona'}
-                            </h2>
-                            <button onClick={() => setShowModal(false)} className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white">
-                                <span className="material-symbols-outlined text-sm">close</span>
-                            </button>
-                        </div>
-
-                        <div className="p-6 space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Nombre de la zona</label>
-                                <input
-                                    className="w-full p-3.5 bg-[#0F1014] border border-white/10 rounded-xl text-white outline-none focus:border-teal-500"
-                                    placeholder="Ej: Higuerote Centro"
-                                    value={form.name}
-                                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Latitud</label>
-                                    <input
-                                        type="number"
-                                        step="0.0001"
-                                        className="w-full p-3.5 bg-[#0F1014] border border-white/10 rounded-xl text-white font-mono outline-none focus:border-teal-500"
-                                        placeholder="10.4653"
-                                        value={form.center_lat}
-                                        onChange={(e) => setForm({ ...form, center_lat: e.target.value })}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Longitud</label>
-                                    <input
-                                        type="number"
-                                        step="0.0001"
-                                        className="w-full p-3.5 bg-[#0F1014] border border-white/10 rounded-xl text-white font-mono outline-none focus:border-teal-500"
-                                        placeholder="-65.9711"
-                                        value={form.center_lng}
-                                        onChange={(e) => setForm({ ...form, center_lng: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Radio (km)</label>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    step="0.5"
-                                    className="w-full p-3.5 bg-[#0F1014] border border-white/10 rounded-xl text-white font-mono outline-none focus:border-teal-500"
-                                    value={form.radius_km}
-                                    onChange={(e) => setForm({ ...form, radius_km: e.target.value })}
-                                />
-                            </div>
-
-                            <label className="flex items-center gap-3 p-3 bg-[#0F1014] rounded-xl border border-white/10 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={form.active}
-                                    onChange={(e) => setForm({ ...form, active: e.target.checked })}
-                                    className="w-5 h-5 accent-teal-500"
-                                />
-                                <span className="text-sm font-medium">Zona activa</span>
-                            </label>
-                        </div>
-
-                        <div className="p-6 border-t border-white/5 bg-[#151925] rounded-b-[32px]">
-                            <button
-                                onClick={save}
-                                className="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-4 rounded-xl flex gap-2 justify-center items-center transition-all active:scale-[0.98]"
-                            >
-                                <span className="material-symbols-outlined">{editingId ? 'save' : 'check_circle'}</span>
-                                {editingId ? 'Guardar Cambios' : 'Crear Zona'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {showModal && <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"><div className="w-full max-w-3xl bg-[#1A1F2E] border border-white/10 rounded-3xl my-8 overflow-hidden"><div className="flex justify-between items-center px-6 py-4 border-b border-white/5"><h2 className="font-black text-lg">{editing ? 'Editar zona' : 'Nueva zona'}</h2><button onClick={() => setShowModal(false)} className="w-9 h-9 rounded-full bg-white/5"><span className="material-symbols-outlined">close</span></button></div><div className="grid md:grid-cols-2"><div className="p-6 space-y-4"><Field label="Nombre"><input value={form.name} onChange={e => setForm({...form,name:e.target.value})} className="input" /></Field><div className="grid grid-cols-2 gap-3"><Field label="Latitud"><input type="number" step="0.0001" value={form.center_lat} onChange={e => setForm({...form,center_lat:e.target.value})} className="input" /></Field><Field label="Longitud"><input type="number" step="0.0001" value={form.center_lng} onChange={e => setForm({...form,center_lng:e.target.value})} className="input" /></Field></div><Field label="Radio en kilómetros"><input type="number" min="1" step="0.5" value={form.radius_km} onChange={e => setForm({...form,radius_km:e.target.value})} className="input" /></Field><label className="flex gap-3 items-center p-3 bg-[#0F1014] border border-white/10 rounded-xl"><input type="checkbox" checked={form.active} onChange={e => setForm({...form,active:e.target.checked})} /> Zona activa</label><button onClick={save} className="w-full py-3 rounded-xl bg-teal-600 font-bold">Guardar zona</button></div><div className="min-h-[380px] bg-white"><iframe title="Vista previa de la zona" src={mapUrl} className="w-full h-full min-h-[380px] border-0" /></div></div></div></div>}
+            <style>{`.input{width:100%;margin-top:.25rem;padding:.75rem;background:#0F1014;border:1px solid rgba(255,255,255,.1);border-radius:.75rem;outline:none}.input:focus{border-color:#14b8a6}`}</style>
         </div>
     );
-};
-
-export default AdminZonesPage;
+}
+const Field = ({ label, children }) => <label className="text-xs uppercase font-bold text-gray-500">{label}{children}</label>;
