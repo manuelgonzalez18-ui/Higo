@@ -16,16 +16,19 @@ Esta integración conecta el pre-registro público de `higodriver.com` con el pa
 - Cada cambio sensible exige MFA cuando la política administrativa lo requiere.
 - Los cambios quedan registrados en el historial de la solicitud y en `admin_audit_log`.
 - La cuenta creada permanece suspendida hasta registrar una membresía vigente.
+- El conductor crea su propia contraseña desde un enlace de activación; la contraseña aleatoria interna nunca se envía por correo.
 
-## Migración requerida
+## Migraciones requeridas
 
-Aplicar únicamente después de revisar el PR:
+Aplicar en este orden y únicamente después de revisar el PR:
 
 ```text
-supabase/migrations/20260724110000_driver_application_admin_integration.sql
+supabase/migrations/20260724110100_driver_application_admin_integration.sql
+supabase/migrations/20260724110200_driver_application_flow_hardening.sql
+supabase/migrations/20260724110300_driver_application_approval_guard.sql
 ```
 
-La migración crea:
+Las migraciones crean y protegen:
 
 - `driver_applications`
 - `driver_application_documents`
@@ -33,6 +36,8 @@ La migración crea:
 - `driver_application_events`
 - bucket privado `driver-applications`
 - políticas RLS y funciones RPC administrativas
+- reclamos atómicos para cargas y conversiones concurrentes
+- bloqueo de aprobación hasta validar los cinco documentos principales
 
 No ejecutar `db push` en producción hasta que el historial local y remoto de migraciones esté reconciliado.
 
@@ -72,22 +77,23 @@ El valor debe ser exactamente el mismo en ambos hostings.
 ## Orden seguro de despliegue
 
 1. Fusionar y desplegar Higo App.
-2. Aplicar `20260724110000_driver_application_admin_integration.sql` en Supabase.
-3. Configurar `DRIVER_APPLICATION_INGEST_SECRET` en higoapp.com.
-4. Confirmar que `https://higoapp.com/api/driver-applications-ingest.php` responde `method_not_allowed` al abrirlo por GET. Esto confirma que el endpoint existe sin revelar información.
-5. Configurar `higo_app_ingest_secret` en higodriver.com.
-6. Fusionar y desplegar Higo Driver.
-7. Purgar caché de Hostinger.
-8. Realizar un único pre-registro de prueba.
-9. Confirmar que aparece en `#/admin/driver-applications`.
-10. Probar el flujo completo con datos de prueba controlados:
+2. Aplicar las tres migraciones en Supabase, en el orden indicado.
+3. Registrar las versiones como aplicadas en el historial de migraciones solo después de confirmar su ejecución correcta.
+4. Configurar `DRIVER_APPLICATION_INGEST_SECRET` en higoapp.com.
+5. Confirmar que `https://higoapp.com/api/driver-applications-ingest.php` responde `method_not_allowed` al abrirlo por GET. Esto confirma que el endpoint existe sin revelar información.
+6. Configurar `higo_app_ingest_secret` en higodriver.com.
+7. Fusionar y desplegar Higo Driver.
+8. Purgar caché de Hostinger.
+9. Realizar un único pre-registro de prueba.
+10. Confirmar que aparece en `#/admin/driver-applications`.
+11. Probar el flujo completo con archivos de prueba no sensibles:
     - iniciar revisión;
     - solicitar documentos;
-    - cargar archivos no sensibles de prueba;
+    - cargar los cinco requisitos principales;
     - aprobar o solicitar corrección;
     - aprobar la solicitud;
     - registrar el driver;
-    - confirmar el correo de bienvenida y la suspensión por membresía.
+    - confirmar el enlace para crear contraseña, Google Play y la suspensión por membresía.
 
 ## Recuperación
 
@@ -100,8 +106,12 @@ Para detener únicamente el ingreso de nuevas solicitudes sin deshacer la base d
 ## Seguridad
 
 - Nunca colocar service-role keys en Higo Driver ni en el navegador.
+- Los reintentos del portal no pueden retroceder un estado ya administrado.
 - Los documentos se cargan mediante tokens aleatorios, almacenados únicamente como hash y con vencimiento de siete días.
-- Cada token se invalida después de una carga exitosa.
+- Al generar un enlace nuevo, los anteriores quedan invalidados.
+- Cada carga obtiene un reclamo temporal para impedir el uso simultáneo del mismo token.
+- Una carga incompleta intenta eliminar sus objetos y metadatos antes de liberar el token.
 - Los archivos se almacenan en un bucket privado.
+- La conversión a driver usa un reclamo atómico para evitar cuentas duplicadas.
 - El aspirante solo consulta un estado mínimo usando código y correo; no recibe datos internos ni documentos.
 - Los administradores necesitan sesión válida, permiso `manage_drivers` y MFA cuando esté exigido.
