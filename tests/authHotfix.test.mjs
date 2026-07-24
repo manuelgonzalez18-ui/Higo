@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { deferAuthCallback } from '../src/utils/deferAuthCallback.js';
 import { isRetryableNetworkError, withRetry } from '../src/utils/withTimeout.js';
 
+const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
+
 test('deferAuthCallback never executes application code synchronously', async () => {
     const scheduled = [];
     const events = [];
@@ -18,8 +20,7 @@ test('deferAuthCallback never executes application code synchronously', async ()
     assert.equal(scheduled.length, 1);
 
     scheduled.shift()();
-    await Promise.resolve();
-    await Promise.resolve();
+    await nextTurn();
 
     assert.deepEqual(events, [['SIGNED_IN', 'user-1']]);
 });
@@ -37,9 +38,7 @@ test('deferAuthCallback routes async failures without returning a promise to Sup
     assert.equal(result, undefined);
 
     scheduled.shift()();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    await nextTurn();
 
     assert.deepEqual(errors, ['callback failed']);
 });
