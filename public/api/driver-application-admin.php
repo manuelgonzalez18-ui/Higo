@@ -28,6 +28,13 @@ try {
 }
 if ($application === null) da_send(404, ['ok' => false, 'error' => 'not_found']);
 
+$adminHeaders = [
+    'apikey: ' . $cfg['_supabase_anon'],
+    'Authorization: Bearer ' . $callerJwt,
+    'Content-Type: application/json',
+    'Accept: application/json',
+];
+
 if ($action === 'review_document') {
     $documentId = trim((string) ($input['document_id'] ?? ''));
     $reviewStatus = trim((string) ($input['review_status'] ?? ''));
@@ -36,109 +43,97 @@ if ($action === 'review_document') {
         da_send(422, ['ok' => false, 'error' => 'invalid_document_review']);
     }
     if ($reviewStatus === 'rejected' && $notes === '') {
-        da_send(422, ['ok' => false, 'error' => 'document_rejection_reason_required']);
+        da_send(422, ['ok' => false, 'error' => 'review_notes_required']);
     }
 
-    $rpcBody = json_encode([
-        'p_document_id' => $documentId,
-        'p_review_status' => $reviewStatus,
-        'p_notes' => $notes === '' ? null : $notes,
-    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     [$status, $body] = bl_http_post(
         $cfg['_supabase_url'] . '/rest/v1/rpc/admin_review_driver_application_document',
-        (string) $rpcBody,
-        [
-            'apikey: ' . $cfg['_supabase_anon'],
-            'Authorization: Bearer ' . $callerJwt,
-            'Content-Type: application/json',
-            'Accept: application/json',
-        ]
+        (string) json_encode([
+            'p_document_id' => $documentId,
+            'p_review_status' => $reviewStatus,
+            'p_notes' => $notes === '' ? null : $notes,
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+        $adminHeaders
     );
     $result = json_decode($body, true);
     if ($status < 200 || $status >= 300 || !is_array($result)) {
         da_send(422, ['ok' => false, 'error' => 'document_review_failed', 'detail' => substr($body, 0, 250)]);
     }
 
-    $updatedApplication = null;
-    $emailSent = null;
-    if ($reviewStatus === 'rejected' && (string) ($application['status'] ?? '') === 'documents_submitted') {
-        $statusBody = json_encode([
-            'p_application_code' => $code,
-            'p_status' => 'correction_requested',
-            'p_reason' => $notes,
-            'p_metadata' => [
-                'source' => 'document_review',
-                'document_id' => $documentId,
-            ],
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        [$statusCode, $statusResponse] = bl_http_post(
+    $applicationUpdated = null;
+    $emailSent = false;
+    if ($reviewStatus === 'rejected') {
+        [$updateStatus, $updateBody] = bl_http_post(
             $cfg['_supabase_url'] . '/rest/v1/rpc/admin_set_driver_application_status',
-            (string) $statusBody,
-            [
-                'apikey: ' . $cfg['_supabase_anon'],
-                'Authorization: Bearer ' . $callerJwt,
-                'Content-Type: application/json',
-                'Accept: application/json',
-            ]
+            (string) json_encode([
+                'p_application_code' => $code,
+                'p_status' => 'correction_requested',
+                'p_reason' => $notes,
+                'p_metadata' => ['source' => 'document_review', 'document_id' => $documentId],
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            $adminHeaders
         );
-        $updatedApplication = json_decode($statusResponse, true);
-        if ($statusCode < 200 || $statusCode >= 300 || !is_array($updatedApplication)) {
+        $applicationUpdated = json_decode($updateBody, true);
+        if ($updateStatus < 200 || $updateStatus >= 300 || !is_array($applicationUpdated)) {
             da_send(409, [
                 'ok' => false,
                 'error' => 'document_reviewed_status_update_failed',
                 'document_reviewed' => true,
-                'detail' => substr($statusResponse, 0, 250),
+                'detail' => substr($updateBody, 0, 250),
             ]);
         }
         [$subject, $html] = da_application_email_for_status($application, 'correction_requested', $notes);
-        $emailSent = $subject === '' ? false : da_send_email((string) $application['email'], $subject, $html);
+        $emailSent = $subject !== '' && da_send_email((string) $application['email'], $subject, $html);
     }
 
     da_send(200, [
         'ok' => true,
         'document' => $result,
-        'application' => $updatedApplication,
+        'application' => $applicationUpdated,
         'email_sent' => $emailSent,
     ]);
 }
 
 if ($action === 'request_documents') {
+    // Un aspirante solo debe tener un enlace de carga vigente.
+    bl_http_patch(
+        $cfg['_supabase_url'] . '/rest/v1/driver_application_upload_tokens?application_id=eq.'
+            . rawurlencode((string) $application['id']) . '&used_at=is.null',
+        (string) json_encode([
+            'expires_at' => gmdate('c'),
+            'claim_id' => null,
+            'claimed_at' => null,
+        ]),
+        da_service_headers($cfg, ['Prefer: return=minimal'])
+    );
+
     $rawToken = rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
     $tokenHash = hash('sha256', $rawToken);
     $expiresAt = gmdate('c', time() + 7 * 86400);
-    $tokenBody = json_encode([[
-        'application_id' => (string) $application['id'],
-        'token_hash' => $tokenHash,
-        'expires_at' => $expiresAt,
-        'created_by' => $callerId,
-    ]], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     [$tokenStatus, $tokenResponse] = bl_http_post(
         $cfg['_supabase_url'] . '/rest/v1/driver_application_upload_tokens',
-        (string) $tokenBody,
+        (string) json_encode([[
+            'application_id' => (string) $application['id'],
+            'token_hash' => $tokenHash,
+            'expires_at' => $expiresAt,
+            'created_by' => $callerId,
+        ]], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
         da_service_headers($cfg, ['Prefer: return=representation'])
     );
     if ($tokenStatus < 200 || $tokenStatus >= 300) {
         da_send(502, ['ok' => false, 'error' => 'upload_token_failed', 'detail' => substr($tokenResponse, 0, 200)]);
     }
 
-    $status = 'documents_requested';
     $reason = trim((string) ($input['reason'] ?? ''));
-    $metadata = ['source' => 'admin_panel', 'upload_expires_at' => $expiresAt];
-    $rpcBody = json_encode([
-        'p_application_code' => $code,
-        'p_status' => $status,
-        'p_reason' => $reason === '' ? null : $reason,
-        'p_metadata' => $metadata,
-    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     [$rpcStatus, $rpcResponse] = bl_http_post(
         $cfg['_supabase_url'] . '/rest/v1/rpc/admin_set_driver_application_status',
-        (string) $rpcBody,
-        [
-            'apikey: ' . $cfg['_supabase_anon'],
-            'Authorization: Bearer ' . $callerJwt,
-            'Content-Type: application/json',
-            'Accept: application/json',
-        ]
+        (string) json_encode([
+            'p_application_code' => $code,
+            'p_status' => 'documents_requested',
+            'p_reason' => $reason === '' ? null : $reason,
+            'p_metadata' => ['source' => 'admin_panel', 'upload_expires_at' => $expiresAt],
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+        $adminHeaders
     );
     $updated = json_decode($rpcResponse, true);
     if ($rpcStatus < 200 || $rpcStatus >= 300 || !is_array($updated)) {
@@ -171,21 +166,19 @@ if ($action === 'set_status') {
     if (!in_array($status, $allowed, true)) {
         da_send(422, ['ok' => false, 'error' => 'invalid_status']);
     }
-    $rpcBody = json_encode([
-        'p_application_code' => $code,
-        'p_status' => $status,
-        'p_reason' => $reason === '' ? null : $reason,
-        'p_metadata' => ['source' => 'admin_panel'],
-    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    if (in_array($status, ['correction_requested','waitlist','rejected'], true) && $reason === '') {
+        da_send(422, ['ok' => false, 'error' => 'status_reason_required']);
+    }
+
     [$rpcStatus, $rpcResponse] = bl_http_post(
         $cfg['_supabase_url'] . '/rest/v1/rpc/admin_set_driver_application_status',
-        (string) $rpcBody,
-        [
-            'apikey: ' . $cfg['_supabase_anon'],
-            'Authorization: Bearer ' . $callerJwt,
-            'Content-Type: application/json',
-            'Accept: application/json',
-        ]
+        (string) json_encode([
+            'p_application_code' => $code,
+            'p_status' => $status,
+            'p_reason' => $reason === '' ? null : $reason,
+            'p_metadata' => ['source' => 'admin_panel'],
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+        $adminHeaders
     );
     $updated = json_decode($rpcResponse, true);
     if ($rpcStatus < 200 || $rpcStatus >= 300 || !is_array($updated)) {
@@ -193,7 +186,7 @@ if ($action === 'set_status') {
     }
 
     [$subject, $html] = da_application_email_for_status($application, $status, $reason);
-    $emailSent = $subject === '' ? false : da_send_email((string) $application['email'], $subject, $html);
+    $emailSent = $subject !== '' && da_send_email((string) $application['email'], $subject, $html);
     da_send(200, ['ok' => true, 'application' => $updated, 'email_sent' => $emailSent]);
 }
 
