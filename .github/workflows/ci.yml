@@ -1,22 +1,27 @@
-name: CI
-
-# Corre en cada Pull Request y en pushes a main: instala, buildea y corre
-# los tests. Antes NO existía ningún trigger `pull_request`, así que lint y
-# tests nunca se ejecutaban solos y una regresión podía mergearse a main
-# (evaluación profunda 2026-07-02, hallazgo 3.1).
+name: Quality Gate
 
 on:
   pull_request:
   push:
-    branches: [main]
+    branches:
+      - main
+      - agent/platform-hardening
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
+  pull-requests: write
+  issues: write
 
 jobs:
   build-test:
-    name: Build & Test
+    name: Build and test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,22 +30,209 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
+          cache: npm
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps --no-audit --no-fund
 
-      # Lint informativo: el repo arrastra ~116 errores pre-existentes de
-      # reglas estrictas de react-compiler. No bloquea el PR todavía; cuando
-      # se limpie el baseline, quitar `continue-on-error` para volverlo gate.
-      - name: Lint (no bloqueante)
+      - name: Validate migrations
+        run: npm run check:migrations
+
+      - name: Full lint baseline report
         run: npm run lint
         continue-on-error: true
 
-      - name: Tests
-        run: npm run test:run
+      - name: Strict lint for hardened modules
+        run: >-
+          npx eslint
+          scripts/check-migrations.mjs
+          tests/featureFlags.test.mjs
+          tests/ridePricing.test.mjs
+          src/components/AdminGuard.jsx
+          src/components/AdminNav.jsx
+          src/config/features.js
+          src/config/parseBooleanFlag.js
+          src/hooks/useBackgroundLocation.js
+          src/hooks/useDriverActiveTrip.js
+          src/pages/ConfirmTripPage.jsx
+          src/pages/HigoPayPage.jsx
+          src/services/adminApi.js
+          src/services/analytics.js
+          src/services/banesco.js
+          src/services/membershipApi.js
+          src/services/rideApi.js
+          src/utils/apiUrl.js
+          src/utils/ridePricing.js
+          src/main.jsx
+          vite.config.js
 
-      # Verifica que el bundle compile. Sin secrets: las env VITE_* faltantes
-      # solo activan fallbacks en runtime, no rompen el build.
-      - name: Build
+      - name: PHP syntax validation
+        run: |
+          php -l public/api/_cors.php
+          php -l public/api/welcome-driver.php
+          php -l public/api/welcome-driver-v2.php
+          php -l public/api/banesco-validate-v2.php
+
+      - name: Test feature flags
+        run: node --test tests/featureFlags.test.mjs
+
+      - name: Test ride pricing
+        run: node --test tests/ridePricing.test.mjs
+
+      - name: Production build
+        env:
+          VITE_SHOP_ENABLED: 'false'
+          VITE_SERVER_SIDE_RIDE_PRICING: 'false'
+          VITE_SERVER_SIDE_RIDE_STATE: 'false'
+          VITE_UNIFIED_MEMBERSHIP_CHECKOUT: 'false'
+          VITE_DIRECTED_RIDE_OFFERS: 'false'
         run: npm run build
+
+  database-migrations:
+    name: Replay Supabase migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.101.0
+          github-token: ${{ github.token }}
+
+      - name: Start local database and replay schema contract
+        id: migration_start
+        continue-on-error: true
+        env:
+          PGPASSWORD: postgres
+        shell: bash
+        run: |
+          set +e
+          rm -rf /tmp/higo-migrations
+          mkdir -p /tmp/higo-migrations
+          find supabase/migrations -maxdepth 1 -type f -name '*.sql' -print0 \
+            | sort -z \
+            | xargs -0 -r -I{} mv "{}" /tmp/higo-migrations/
+
+          {
+            echo '=== START EMPTY LOCAL SUPABASE DATABASE ==='
+            supabase db start
+            status=$?
+
+            if [ "$status" -eq 0 ]; then
+              echo '=== APPLY HISTORICAL CONTRACT FIXTURE ==='
+              psql --host 127.0.0.1 --port 54322 --username postgres --dbname postgres \
+                --set ON_ERROR_STOP=1 --file supabase/tests/platform_base_fixture.sql
+              status=$?
+            fi
+
+            if [ "$status" -eq 0 ]; then
+              echo '=== REPLAY REPOSITORY MIGRATIONS ==='
+              for migration in /tmp/higo-migrations/*.sql; do
+                echo "--- Applying $(basename "$migration")"
+                psql --host 127.0.0.1 --port 54322 --username postgres --dbname postgres \
+                  --set ON_ERROR_STOP=1 --file "$migration" || { status=$?; break; }
+              done
+            fi
+          } > /tmp/supabase-db-start.log 2>&1
+
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          tail -n 140 /tmp/supabase-db-start.log
+          exit 0
+
+      - name: Publish migration failure on PR
+        if: steps.migration_start.outputs.exit_code != '0' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          {
+            echo '<!-- higo-migration-replay-failure -->'
+            echo '### Supabase migration replay failed'
+            echo
+            echo 'The CI contract database could not apply the repository migrations. Last log lines:'
+            echo
+            echo '```text'
+            tail -n 110 /tmp/supabase-db-start.log
+            echo '```'
+          } > /tmp/migration-comment.md
+          gh pr comment "$PR_NUMBER" --body-file /tmp/migration-comment.md
+
+      - name: Stop when migration replay failed
+        if: steps.migration_start.outputs.exit_code != '0'
+        run: exit 1
+
+      - name: Run post-deploy database assertions
+        if: steps.migration_start.outputs.exit_code == '0'
+        env:
+          PGPASSWORD: postgres
+        run: >-
+          psql
+          --host 127.0.0.1
+          --port 54322
+          --username postgres
+          --dbname postgres
+          --set ON_ERROR_STOP=1
+          --file supabase/tests/platform_hardening_postdeploy.sql
+
+      - name: Run behavioral database assertions
+        id: behavior_tests
+        if: steps.migration_start.outputs.exit_code == '0'
+        continue-on-error: true
+        env:
+          PGPASSWORD: postgres
+        shell: bash
+        run: |
+          set +e
+          psql \
+            --host 127.0.0.1 \
+            --port 54322 \
+            --username postgres \
+            --dbname postgres \
+            --set ON_ERROR_STOP=1 \
+            --file supabase/tests/platform_hardening_behavior.sql \
+            > /tmp/platform-behavior.log 2>&1
+          status=$?
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          tail -n 100 /tmp/platform-behavior.log
+          exit 0
+
+      - name: Publish behavioral failure on PR
+        if: steps.behavior_tests.outputs.exit_code != '0' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          {
+            echo '<!-- higo-behavior-test-failure -->'
+            echo '### Platform behavior assertions failed'
+            echo
+            echo 'The migration replay succeeded, but an end-to-end database rule did not. Last log lines:'
+            echo
+            echo '```text'
+            tail -n 90 /tmp/platform-behavior.log
+            echo '```'
+          } > /tmp/behavior-comment.md
+          gh pr comment "$PR_NUMBER" --body-file /tmp/behavior-comment.md
+
+      - name: Upload behavioral failure log
+        if: steps.behavior_tests.outputs.exit_code != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: platform-behavior-log
+          path: /tmp/platform-behavior.log
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Stop when behavioral assertions failed
+        if: steps.behavior_tests.outputs.exit_code != '0'
+        run: exit 1
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup

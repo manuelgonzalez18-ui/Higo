@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { supabase } from '../services/supabase';
-import { getAdminContext } from '../services/adminApi';
+import { useAdminContext } from '../contexts/AdminContext';
 import { useAdminKeyboardNav } from '../hooks/useAdminKeyboardNav';
-
-const SHOP_ENABLED = import.meta.env.VITE_SHOP_ENABLED === 'true';
+import { FEATURES } from '../config/features';
 
 const ITEMS = [
     { to: '/admin/dashboard', label: 'Resumen', icon: 'dashboard', group: 'Principal', permissions: ['view_dashboard'] },
@@ -23,14 +22,10 @@ const ITEMS = [
 
 export default function AdminNav() {
     const { pathname } = useLocation();
+    const context = useAdminContext();
     const [supportUnread, setSupportUnread] = useState(0);
-    const [context, setContext] = useState(null);
     const [open, setOpen] = useState(false);
     useAdminKeyboardNav();
-
-    useEffect(() => {
-        getAdminContext().then(setContext).catch(() => setContext(null));
-    }, []);
 
     useEffect(() => {
         if (!context?.permissions?.manage_support) return;
@@ -52,9 +47,8 @@ export default function AdminNav() {
 
     const groups = useMemo(() => {
         const visible = ITEMS.filter(item => {
-            if (item.shop && !SHOP_ENABLED) return false;
-            if (!context) return item.to === '/admin/dashboard';
-            return item.permissions.some(permission => context.permissions?.[permission]);
+            if (item.shop && !FEATURES.shop) return false;
+            return item.permissions.some(permission => context?.permissions?.[permission]);
         });
         return visible.reduce((acc, item) => {
             (acc[item.group] ||= []).push(item);
