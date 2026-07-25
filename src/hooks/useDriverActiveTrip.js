@@ -228,13 +228,23 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
         if (!activeRideRef.current || arrivalTime) return;
         try {
             let updated = activeRideRef.current;
+            let arrivedAtIso = new Date().toISOString();
             if (FEATURES.serverSideRideState) {
                 updated = await markPickupArrival(activeRideRef.current.id);
-                setActiveRide((current) => ({ ...current, ...updated }));
+                arrivedAtIso = updated?.arrived_at_pickup_at || arrivedAtIso;
+            } else {
+                const { data, error } = await supabase
+                    .from('rides')
+                    .update({ arrived_at_pickup_at: arrivedAtIso })
+                    .eq('id', activeRideRef.current.id)
+                    .eq('status', 'accepted')
+                    .select()
+                    .single();
+                if (error) throw error;
+                updated = data;
             }
-            const arrivedAt = updated?.arrived_at_pickup_at
-                ? new Date(updated.arrived_at_pickup_at).getTime()
-                : Date.now();
+            setActiveRide((current) => ({ ...current, ...updated }));
+            const arrivedAt = new Date(updated?.arrived_at_pickup_at || arrivedAtIso).getTime();
             setArrivalTime(arrivedAt);
             setWaitElapsedSec(0);
             setWaitFee(0);
