@@ -1,6 +1,5 @@
 import { supabase } from './supabase';
 import { trackEventLater } from './analytics';
-import { FEATURES } from '../config/features';
 
 const unwrap = ({ data, error }) => {
     if (error) throw error;
@@ -8,12 +7,10 @@ const unwrap = ({ data, error }) => {
 };
 
 export const listDriverCheckoutPlans = async () => {
-    // Rollout safety: when the flag is disabled, callers must keep using the
-    // legacy membership_plans table. Returning an empty list lets Higo Pay use
-    // its existing fallback without touching RPCs or columns that may not have
-    // been migrated in the current environment yet.
-    if (!FEATURES.unifiedMembershipCheckout) return [];
-
+    // Production already has the unified membership catalog. Always ask the
+    // server for the authenticated driver's compatible plans so weekly and
+    // monthly options cannot disappear because of a stale build-time flag.
+    // Higo Pay already catches RPC errors and uses its legacy fallback safely.
     const plans = unwrap(await supabase.rpc('driver_membership_checkout')) || [];
     trackEventLater('membership.checkout_viewed', {
         entityType: 'membership_checkout',
