@@ -28,6 +28,8 @@ export default function PassengerArrivalBanner() {
     const dismissedRideIdsRef = useRef(new Set());
 
     useEffect(() => {
+        let routeSequence = 0;
+
         const clearTemporaryTimer = () => {
             if (temporaryTimerRef.current) {
                 window.clearTimeout(temporaryTimerRef.current);
@@ -38,6 +40,13 @@ export default function PassengerArrivalBanner() {
         const hideNotice = () => {
             clearTemporaryTimer();
             setNotice(null);
+        };
+
+        const hidePersistentNoticeForRide = (rideId) => {
+            setNotice((current) => {
+                if (current?.rideId === rideId && !current.temporary) return null;
+                return current;
+            });
         };
 
         const showNotice = (rideId, { temporary = false } = {}) => {
@@ -58,6 +67,7 @@ export default function PassengerArrivalBanner() {
         };
 
         const subscribeForCurrentRoute = async () => {
+            const sequence = ++routeSequence;
             stopRideSubscription();
             hideNotice();
 
@@ -69,7 +79,8 @@ export default function PassengerArrivalBanner() {
             let previousArrivalAt = null;
 
             const handleRide = (ride, { initial = false } = {}) => {
-                if (disposed || !ride || isDeliveryRide(ride)) {
+                if (disposed || sequence !== routeSequence) return;
+                if (!ride || isDeliveryRide(ride)) {
                     hideNotice();
                     return;
                 }
@@ -86,8 +97,8 @@ export default function PassengerArrivalBanner() {
                     showNotice(rideId, { temporary: ride.status !== 'accepted' });
                 } else if (legacyArrivalTransition) {
                     showNotice(rideId, { temporary: true });
-                } else if (notice?.rideId === rideId && !notice.temporary && ride.status !== 'accepted') {
-                    hideNotice();
+                } else if (ride.status !== 'accepted') {
+                    hidePersistentNoticeForRide(rideId);
                 }
 
                 previousStatus = ride.status;
@@ -100,7 +111,7 @@ export default function PassengerArrivalBanner() {
                 .eq('id', rideId)
                 .maybeSingle();
 
-            if (disposed) return;
+            if (disposed || sequence !== routeSequence) return;
             if (initialRide) handleRide(initialRide, { initial: true });
 
             const channel = supabase
@@ -125,11 +136,12 @@ export default function PassengerArrivalBanner() {
         void subscribeForCurrentRoute();
 
         return () => {
+            routeSequence += 1;
             window.removeEventListener('hashchange', subscribeForCurrentRoute);
             stopRideSubscription();
             clearTemporaryTimer();
         };
-    }, [notice]);
+    }, []);
 
     if (!notice) return null;
 
