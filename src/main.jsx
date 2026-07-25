@@ -2,9 +2,9 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import PassengerArrivalBanner from './components/PassengerArrivalBanner.jsx'
 import './index.css'
 import 'material-symbols/outlined.css'; // Offline Icons
-import './services/passengerRideVoice';
 
 // Register Service Worker
 if ('serviceWorker' in navigator) {
@@ -17,7 +17,10 @@ if ('serviceWorker' in navigator) {
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary source="app-root">
-      <App />
+      <>
+        <App />
+        <PassengerArrivalBanner />
+      </>
     </ErrorBoundary>
   </React.StrictMode>,
 )
