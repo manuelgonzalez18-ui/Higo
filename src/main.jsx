@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import './services/passengerStatusMessageCompat.js'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import PassengerArrivalBanner from './components/PassengerArrivalBanner.jsx'
