@@ -1,22 +1,13 @@
 name: Deploy current Higo Driver
 
+# Despliegue de respaldo exclusivamente manual.
+# El despliegue automático de higodriver.com ya forma parte de deploy.yml.
+# Mantener ambos activos provocaba conexiones FTPS simultáneas y jobs colgados.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/deploy-current-higodriver.yml
-  workflow_run:
-    workflows:
-      - Deploy to Hostinger
-    types:
-      - completed
   workflow_dispatch:
-  schedule:
-    - cron: '17 */6 * * *'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: deploy-current-higodriver
@@ -24,17 +15,10 @@ concurrency:
 
 jobs:
   deploy-higodriver:
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'cancelled' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
-      - name: Checkout control repository
-        uses: actions/checkout@v4
-        with:
-          path: control
-          fetch-depth: 0
-
       - name: Checkout current Higo-Driver site
-        id: checkout_site
         uses: actions/checkout@v4
         with:
           repository: manuelgonzalez18-ui/Higo-Driver
@@ -45,7 +29,6 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y lftp
 
       - name: Deploy current site to higodriver.com
-        id: deploy
         env:
           HIGODRIVER_FTP_SERVER: ${{ secrets.HIGODRIVER_FTP_SERVER }}
           HIGODRIVER_FTP_USERNAME: ${{ secrets.HIGODRIVER_FTP_USERNAME }}
@@ -56,82 +39,47 @@ jobs:
             exit 1
           fi
 
-          attempt=0
-          max=3
-          until lftp -c "
-          set ftp:ssl-allow yes;
-          set ftp:ssl-force true;
-          set ftp:ssl-protect-data true;
-          set ftp:ssl-protect-list true;
-          set ssl:verify-certificate no;
-          set net:timeout 60;
-          set net:max-retries 10;
-          set net:reconnect-interval-base 5;
-          set net:reconnect-interval-multiplier 1.5;
-          set xfer:clobber on;
-          set ftp:use-allo off;
-          set mirror:parallel-transfer-count 1;
-          open -u '$HIGODRIVER_FTP_USERNAME','$HIGODRIVER_FTP_PASSWORD' '$HIGODRIVER_FTP_SERVER';
-          mirror --reverse --verbose --parallel=1 --no-perms --ignore-time --exclude '(^|/)\.git(/|$)' --exclude '(^|/)\.github(/|$)' ./site/ ./;
-          put -O ./ ./site/index.html;
-          put -O ./assets ./site/assets/style.css;
-          put -O ./assets ./site/assets/app.js;
-          put -O ./assets ./site/assets/logo.svg;
-          " || [ $attempt -ge $max ]; do
-            attempt=$((attempt + 1))
-            echo "::warning::Deploy de higodriver falló (intento $attempt/$max). Reintentando en 15s..."
-            sleep 15
-          done
-
-          if [ $attempt -ge $max ]; then
-            echo "::error::Deploy de higodriver falló después de $max intentos."
-            exit 1
-          fi
-
-      - name: Smoke test current higodriver.com
-        id: smoke
-        run: |
-          sleep 10
-          for i in 1 2 3 4; do
-            cache_bust=$(date +%s)
-            if curl -fsS --max-time 20 "https://higodriver.com/?cb=$cache_bust" -o /tmp/higodriver.html \
-              && grep -q "Conduce con Higo" /tmp/higodriver.html \
-              && curl -fsS --max-time 20 "https://higodriver.com/assets/app.js?cb=$cache_bust" -o /dev/null; then
-              echo "✓ higodriver.com sirve la versión actual del repositorio Higo-Driver."
+          attempt=1
+          max=2
+          while [ "$attempt" -le "$max" ]; do
+            if timeout 240s lftp -c "
+            set ftp:ssl-allow yes;
+            set ftp:ssl-force true;
+            set ftp:ssl-protect-data true;
+            set ftp:ssl-protect-list true;
+            set ssl:verify-certificate no;
+            set net:timeout 30;
+            set net:max-retries 2;
+            set net:reconnect-interval-base 5;
+            set xfer:clobber on;
+            set ftp:use-allo off;
+            set mirror:parallel-transfer-count 1;
+            open -u '$HIGODRIVER_FTP_USERNAME','$HIGODRIVER_FTP_PASSWORD' '$HIGODRIVER_FTP_SERVER';
+            mirror --reverse --verbose --parallel=1 --no-perms --ignore-time --exclude '(^|/)\.git(/|$)' --exclude '(^|/)\.github(/|$)' ./site/ ./;
+            put -O ./ ./site/index.html;
+            "; then
               exit 0
             fi
-            echo "::warning::Smoke test de higodriver.com falló (intento $i/4)."
-            sleep 8
+
+            echo "::warning::Deploy de higodriver falló (intento $attempt/$max)."
+            attempt=$((attempt + 1))
+            sleep 10
           done
-          echo "::error::higodriver.com continúa sirviendo una versión anterior o incompleta."
+
+          echo "::error::Deploy de higodriver falló después de $max intentos."
           exit 1
 
-      - name: Record deployment diagnostics
-        if: always()
-        working-directory: control
-        env:
-          JOB_STATUS: ${{ job.status }}
-          CHECKOUT_OUTCOME: ${{ steps.checkout_site.outcome }}
-          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
-          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
-          FTP_SERVER_CONFIGURED: ${{ secrets.HIGODRIVER_FTP_SERVER != '' }}
-          FTP_USERNAME_CONFIGURED: ${{ secrets.HIGODRIVER_FTP_USERNAME != '' }}
-          FTP_PASSWORD_CONFIGURED: ${{ secrets.HIGODRIVER_FTP_PASSWORD != '' }}
+      - name: Smoke test higodriver.com
         run: |
-          mkdir -p .deploy-status
-          cat > .deploy-status/higodriver.txt <<EOF
-          timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          job_status=$JOB_STATUS
-          checkout_outcome=$CHECKOUT_OUTCOME
-          deploy_outcome=$DEPLOY_OUTCOME
-          smoke_outcome=$SMOKE_OUTCOME
-          ftp_server_configured=$FTP_SERVER_CONFIGURED
-          ftp_username_configured=$FTP_USERNAME_CONFIGURED
-          ftp_password_configured=$FTP_PASSWORD_CONFIGURED
-          source_repository=manuelgonzalez18-ui/Higo-Driver@main
-          EOF
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .deploy-status/higodriver.txt
-          git commit -m "ci: record higodriver deployment status" || true
-          git push --force origin HEAD:deploy-status
+          sleep 8
+          for i in 1 2 3; do
+            cache_bust=$(date +%s)
+            if curl -fsS --max-time 20 "https://higodriver.com/?cb=$cache_bust" -o /tmp/higodriver.html \
+              && grep -q "Conduce con Higo" /tmp/higodriver.html; then
+              echo "✓ higodriver.com sirve la versión actual."
+              exit 0
+            fi
+            sleep 6
+          done
+          echo "::error::higodriver.com no superó la prueba de humo."
+          exit 1
