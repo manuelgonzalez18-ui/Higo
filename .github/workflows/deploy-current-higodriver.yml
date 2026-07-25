@@ -1,6 +1,11 @@
 name: Deploy current Higo Driver
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/deploy-current-higodriver.yml
   workflow_run:
     workflows:
       - Deploy to Hostinger
