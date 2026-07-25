@@ -49,10 +49,18 @@ const MapSkeleton = ({ className }) => (
     </div>
 );
 
-const InteractiveMap = (props) => (
-    <Suspense fallback={<MapSkeleton className={props.className} />}>
-        {useMapbox ? <InteractiveMapMapbox {...props} /> : <InteractiveMapGoogle {...props} />}
-    </Suspense>
-);
+const InteractiveMap = (props) => {
+    // Remontar el motor cuando cambia o termina el viaje elimina cualquier
+    // DirectionsRenderer/polyline que el SDK anterior haya dejado en el mapa.
+    const mapInstanceKey = `${useMapbox ? 'mapbox' : 'google'}:${props.activeRideId || 'idle'}:${props.navStep || 0}`;
+
+    return (
+        <Suspense fallback={<MapSkeleton className={props.className} />}>
+            {useMapbox
+                ? <InteractiveMapMapbox key={mapInstanceKey} {...props} />
+                : <InteractiveMapGoogle key={mapInstanceKey} {...props} />}
+        </Suspense>
+    );
+};
 
 export default InteractiveMap;
