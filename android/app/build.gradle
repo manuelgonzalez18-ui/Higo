@@ -50,6 +50,11 @@ dependencies {
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    // MyFirebaseMessagingService lives in the app module and imports the FCM
+    // service/message classes directly. The Capacitor push plugin declares FCM
+    // with `implementation`, so those classes are not exposed transitively to
+    // this module's compile classpath; declare the same dependency explicitly.
+    implementation "com.google.firebase:firebase-messaging:$firebaseMessagingVersion"
     implementation project(':capacitor-android')
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
