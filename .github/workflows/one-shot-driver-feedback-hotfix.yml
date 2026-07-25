@@ -67,30 +67,6 @@ jobs:
           )
 
           replace_once(
-              'src/components/InteractiveMap.jsx',
-              """const InteractiveMap = (props) => (
-    <Suspense fallback={<MapSkeleton className={props.className} />}>
-        {useMapbox ? <InteractiveMapMapbox {...props} /> : <InteractiveMapGoogle {...props} />}
-    </Suspense>
-);
-""",
-              """const InteractiveMap = (props) => {
-    // Remontar el motor cuando cambia o termina el viaje elimina cualquier
-    // DirectionsRenderer/polyline que el SDK anterior haya dejado en el mapa.
-    const mapInstanceKey = `${useMapbox ? 'mapbox' : 'google'}:${props.activeRideId || 'idle'}:${props.navStep || 0}`;
-
-    return (
-        <Suspense fallback={<MapSkeleton className={props.className} />}>
-            {useMapbox
-                ? <InteractiveMapMapbox key={mapInstanceKey} {...props} />
-                : <InteractiveMapGoogle key={mapInstanceKey} {...props} />}
-        </Suspense>
-    );
-};
-""",
-          )
-
-          replace_once(
               'src/pages/RideStatusPage.jsx',
               '                                        body: "🚗 ¡Tu Higo Driver ha llegado!",',
               '                                        body: "🚗 ¡Tu viaje ha comenzado!",',
@@ -111,6 +87,10 @@ jobs:
   push:
 """,
           )
+
+          map_wrapper = Path('src/components/InteractiveMap.jsx').read_text(encoding='utf-8')
+          if 'mapInstanceKey' not in map_wrapper:
+              raise SystemExit('src/components/InteractiveMap.jsx: route cleanup fix is missing')
           PY
 
       - name: Install dependencies
@@ -125,9 +105,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/hooks/useDriverActiveTrip.js src/components/InteractiveMap.jsx src/pages/RideStatusPage.jsx .github/workflows/deploy.yml
+          git add src/hooks/useDriverActiveTrip.js src/pages/RideStatusPage.jsx .github/workflows/deploy.yml
           git rm .github/workflows/one-shot-driver-feedback-hotfix.yml
-          git commit -m "fix(driver): clear completed routes and persist pickup arrival"
+          git commit -m "fix(driver): persist pickup arrival and correct passenger message"
           git push origin HEAD:main
 
       - name: Deploy generated hotfix
