@@ -4,6 +4,7 @@ import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import './index.css'
 import 'material-symbols/outlined.css'; // Offline Icons
+import './services/passengerRideVoice';
 
 // Register Service Worker
 if ('serviceWorker' in navigator) {
