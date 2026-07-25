@@ -1,0 +1,136 @@
+name: One-shot driver feedback hotfix
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/one-shot-driver-feedback-hotfix.yml
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  apply-hotfix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply targeted source fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              file_path = Path(path)
+              text = file_path.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, found {count}')
+              file_path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace_once(
+              'src/hooks/useDriverActiveTrip.js',
+              """            let updated = activeRideRef.current;
+            if (FEATURES.serverSideRideState) {
+                updated = await markPickupArrival(activeRideRef.current.id);
+                setActiveRide((current) => ({ ...current, ...updated }));
+            }
+            const arrivedAt = updated?.arrived_at_pickup_at
+                ? new Date(updated.arrived_at_pickup_at).getTime()
+                : Date.now();
+""",
+              """            let updated = activeRideRef.current;
+            let arrivedAtIso = new Date().toISOString();
+            if (FEATURES.serverSideRideState) {
+                updated = await markPickupArrival(activeRideRef.current.id);
+                arrivedAtIso = updated?.arrived_at_pickup_at || arrivedAtIso;
+            } else {
+                const { data, error } = await supabase
+                    .from('rides')
+                    .update({ arrived_at_pickup_at: arrivedAtIso })
+                    .eq('id', activeRideRef.current.id)
+                    .eq('status', 'accepted')
+                    .select()
+                    .single();
+                if (error) throw error;
+                updated = data;
+            }
+            setActiveRide((current) => ({ ...current, ...updated }));
+            const arrivedAt = new Date(updated?.arrived_at_pickup_at || arrivedAtIso).getTime();
+""",
+          )
+
+          replace_once(
+              'src/components/InteractiveMap.jsx',
+              """const InteractiveMap = (props) => (
+    <Suspense fallback={<MapSkeleton className={props.className} />}>
+        {useMapbox ? <InteractiveMapMapbox {...props} /> : <InteractiveMapGoogle {...props} />}
+    </Suspense>
+);
+""",
+              """const InteractiveMap = (props) => {
+    // Remontar el motor cuando cambia o termina el viaje elimina cualquier
+    // DirectionsRenderer/polyline que el SDK anterior haya dejado en el mapa.
+    const mapInstanceKey = `${useMapbox ? 'mapbox' : 'google'}:${props.activeRideId || 'idle'}:${props.navStep || 0}`;
+
+    return (
+        <Suspense fallback={<MapSkeleton className={props.className} />}>
+            {useMapbox
+                ? <InteractiveMapMapbox key={mapInstanceKey} {...props} />
+                : <InteractiveMapGoogle key={mapInstanceKey} {...props} />}
+        </Suspense>
+    );
+};
+""",
+          )
+
+          replace_once(
+              'src/pages/RideStatusPage.jsx',
+              '                                        body: "🚗 ¡Tu Higo Driver ha llegado!",',
+              '                                        body: "🚗 ¡Tu viaje ha comenzado!",',
+          )
+          replace_once(
+              'src/pages/RideStatusPage.jsx',
+              '                            toast.success("🔔 ¡Tu Higo Driver ha llegado!");',
+              '                            toast.success("🚗 ¡Tu viaje ha comenzado!");',
+          )
+
+          replace_once(
+              '.github/workflows/deploy.yml',
+              """on:
+  push:
+""",
+              """on:
+  workflow_dispatch:
+  push:
+""",
+          )
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate tests and production build
+        env:
+          VITE_SHOP_ENABLED: 'false'
+        run: npm run check
+
+      - name: Commit generated hotfix and remove one-shot workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/hooks/useDriverActiveTrip.js src/components/InteractiveMap.jsx src/pages/RideStatusPage.jsx .github/workflows/deploy.yml
+          git rm .github/workflows/one-shot-driver-feedback-hotfix.yml
+          git commit -m "fix(driver): clear completed routes and persist pickup arrival"
+          git push origin HEAD:main
+
+      - name: Deploy generated hotfix
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy.yml --ref main
