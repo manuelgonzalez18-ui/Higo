@@ -12,6 +12,9 @@ buildscript {
         androidxFragmentVersion = '1.8.4'
         coreSplashScreenVersion = '1.0.1'
         androidxWebkitVersion = '1.12.1'
+        // Shared with the app module's custom MyFirebaseMessagingService and
+        // aligned with @capacitor/push-notifications 7.x.
+        firebaseMessagingVersion = '24.1.0'
         junitVersion = '4.13.2'
         androidxJunitVersion = '1.2.1'
         androidxEspressoCoreVersion = '3.6.1'
