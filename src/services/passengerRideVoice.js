@@ -8,16 +8,30 @@ const VOICE_MESSAGES = Object.freeze({
     completed: 'Ha llegado a su destino. Gracias.',
 });
 
+const MILESTONE_ORDER = Object.freeze({
+    searching: 1,
+    found: 2,
+    arrived: 3,
+    completed: 4,
+});
+
 const ARRIVAL_RADIUS_METERS = 100;
+const STORAGE_PREFIX = 'higo:passenger-ride-voice:';
 
 let activeCleanup = null;
-let speechQueue = Promise.resolve();
 let syncSequence = 0;
+let speechGeneration = 0;
+let browserSpeechPrimed = false;
 
 const getRideIdFromHash = () => {
     if (typeof window === 'undefined') return null;
     const match = window.location.hash.match(/^#\/ride\/([^/?#]+)/);
     return match?.[1] ? decodeURIComponent(match[1]) : null;
+};
+
+const isPassengerVoiceRoute = () => {
+    if (typeof window === 'undefined') return false;
+    return /^#\/(confirm(?:[/?#]|$)|ride\/)/.test(window.location.hash);
 };
 
 const isDeliveryRide = (ride) => (
@@ -50,43 +64,101 @@ const getMilestone = (ride) => {
     return null;
 };
 
-const speakWithBrowser = (text) => new Promise((resolve) => {
+const getStoredMilestones = (rideId) => {
+    if (!rideId || typeof sessionStorage === 'undefined') return new Set();
     try {
-        if (typeof window === 'undefined' || !window.speechSynthesis) {
-            resolve();
-            return;
+        const stored = JSON.parse(sessionStorage.getItem(`${STORAGE_PREFIX}${rideId}`) || '[]');
+        return new Set(Array.isArray(stored) ? stored : []);
+    } catch {
+        return new Set();
+    }
+};
+
+const persistMilestones = (rideId, milestones) => {
+    if (!rideId || typeof sessionStorage === 'undefined') return;
+    try {
+        sessionStorage.setItem(`${STORAGE_PREFIX}${rideId}`, JSON.stringify([...milestones]));
+    } catch {
+        // Voice deduplication is optional and must never affect ride tracking.
+    }
+};
+
+const primeBrowserSpeech = () => {
+    if (browserSpeechPrimed || typeof window === 'undefined' || !window.speechSynthesis) return;
+    browserSpeechPrimed = true;
+    try {
+        window.speechSynthesis.resume();
+        const utterance = new SpeechSynthesisUtterance('.');
+        utterance.lang = 'es-VE';
+        utterance.rate = 10;
+        utterance.volume = 0;
+        window.speechSynthesis.speak(utterance);
+    } catch {
+        // Native TTS remains available even when Web Speech cannot be primed.
+    }
+};
+
+const stopCurrentSpeech = async () => {
+    try {
+        window.speechSynthesis?.cancel?.();
+    } catch {
+        // Browser speech cancellation is best effort.
+    }
+
+    try {
+        const stopPromise = TextToSpeech.stop?.();
+        if (stopPromise) {
+            await Promise.race([
+                Promise.resolve(stopPromise),
+                new Promise((resolve) => setTimeout(resolve, 500)),
+            ]);
         }
+    } catch {
+        // Some web runtimes do not implement the native stop method.
+    }
+};
+
+const speakWithBrowser = (text, generation) => {
+    if (generation !== speechGeneration) return;
+    try {
+        if (typeof window === 'undefined' || !window.speechSynthesis) return;
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.resume();
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'es-VE';
         utterance.rate = 0.95;
         utterance.pitch = 1;
         utterance.volume = 1;
-        utterance.onend = resolve;
-        utterance.onerror = resolve;
         window.speechSynthesis.speak(utterance);
     } catch {
-        resolve();
+        // Voice status is ancillary and must not interrupt the trip flow.
     }
-});
+};
 
-const speak = (text) => {
-    speechQueue = speechQueue
-        .catch(() => {})
-        .then(async () => {
-            try {
-                await TextToSpeech.speak({
-                    text,
-                    lang: 'es-VE',
-                    rate: 0.95,
-                    pitch: 1,
-                    volume: 1,
-                    category: 'ambient',
-                });
-            } catch {
-                await speakWithBrowser(text);
-            }
-        });
-    return speechQueue;
+const speakNow = (text) => {
+    const generation = ++speechGeneration;
+
+    void (async () => {
+        await stopCurrentSpeech();
+        if (generation !== speechGeneration) return;
+
+        try {
+            const nativeSpeech = TextToSpeech.speak({
+                text,
+                lang: 'es-VE',
+                rate: 0.95,
+                pitch: 1,
+                volume: 1,
+                category: 'ambient',
+            });
+
+            Promise.resolve(nativeSpeech).catch(() => {
+                if (generation === speechGeneration) speakWithBrowser(text, generation);
+            });
+        } catch {
+            speakWithBrowser(text, generation);
+        }
+    })();
 };
 
 const subscribeToRideVoice = async (rideId, sequence) => {
@@ -94,17 +166,33 @@ const subscribeToRideVoice = async (rideId, sequence) => {
     let latestRide = null;
     let driverChannel = null;
     let trackedDriverId = null;
-    const spokenMilestones = new Set();
+    const spokenMilestones = getStoredMilestones(rideId);
+    let highestMilestoneOrder = [...spokenMilestones].reduce(
+        (highest, milestone) => Math.max(highest, MILESTONE_ORDER[milestone] || 0),
+        0,
+    );
+
+    const stopDriverTracking = () => {
+        if (driverChannel) supabase.removeChannel(driverChannel);
+        driverChannel = null;
+        trackedDriverId = null;
+    };
 
     const announceMilestone = (milestone) => {
         if (disposed || sequence !== syncSequence) return;
-        if (!milestone || spokenMilestones.has(milestone)) return;
+        const order = MILESTONE_ORDER[milestone] || 0;
+        if (!order || order <= highestMilestoneOrder) return;
+
+        highestMilestoneOrder = order;
         spokenMilestones.add(milestone);
-        void speak(VOICE_MESSAGES[milestone]);
+        persistMilestones(rideId, spokenMilestones);
+        speakNow(VOICE_MESSAGES[milestone]);
+
+        if (order >= MILESTONE_ORDER.arrived) stopDriverTracking();
     };
 
     const checkDriverProximity = (profile) => {
-        if (!latestRide || spokenMilestones.has('arrived')) return;
+        if (!latestRide || highestMilestoneOrder >= MILESTONE_ORDER.arrived) return;
         const pickup = {
             lat: Number(latestRide.pickup_lat),
             lng: Number(latestRide.pickup_lng),
@@ -124,15 +212,14 @@ const subscribeToRideVoice = async (rideId, sequence) => {
         }
     };
 
-    const stopDriverTracking = () => {
-        if (driverChannel) supabase.removeChannel(driverChannel);
-        driverChannel = null;
-        trackedDriverId = null;
-    };
-
-    const ensureDriverTracking = async (ride) => {
-        if (!ride?.driver_id || isDeliveryRide(ride) || spokenMilestones.has('arrived')) {
-            if (spokenMilestones.has('arrived')) stopDriverTracking();
+    const ensureDriverTracking = async (ride, milestone) => {
+        if (
+            milestone !== 'found'
+            || !ride?.driver_id
+            || isDeliveryRide(ride)
+            || highestMilestoneOrder >= MILESTONE_ORDER.arrived
+        ) {
+            stopDriverTracking();
             return;
         }
         if (trackedDriverId === ride.driver_id) return;
@@ -164,8 +251,9 @@ const subscribeToRideVoice = async (rideId, sequence) => {
     const handleRide = (ride) => {
         if (!ride || isDeliveryRide(ride)) return;
         latestRide = ride;
-        announceMilestone(getMilestone(ride));
-        void ensureDriverTracking(ride);
+        const milestone = getMilestone(ride);
+        announceMilestone(milestone);
+        void ensureDriverTracking(ride, milestone);
     };
 
     const { data: initialRide, error } = await supabase
@@ -203,7 +291,11 @@ const syncPassengerRideVoice = async () => {
     activeCleanup = null;
 
     const rideId = getRideIdFromHash();
-    if (!rideId) return;
+    if (!rideId) {
+        speechGeneration += 1;
+        void stopCurrentSpeech();
+        return;
+    }
 
     const cleanup = await subscribeToRideVoice(rideId, sequence);
     if (sequence !== syncSequence) {
@@ -214,12 +306,23 @@ const syncPassengerRideVoice = async () => {
 };
 
 if (typeof window !== 'undefined') {
+    const primeOnInteraction = () => {
+        if (!isPassengerVoiceRoute()) return;
+        primeBrowserSpeech();
+        window.removeEventListener('pointerdown', primeOnInteraction, true);
+        window.removeEventListener('keydown', primeOnInteraction, true);
+    };
+
+    window.addEventListener('pointerdown', primeOnInteraction, true);
+    window.addEventListener('keydown', primeOnInteraction, true);
     window.addEventListener('hashchange', syncPassengerRideVoice);
     queueMicrotask(syncPassengerRideVoice);
 }
 
 export const stopPassengerRideVoice = () => {
     syncSequence += 1;
+    speechGeneration += 1;
     activeCleanup?.();
     activeCleanup = null;
+    void stopCurrentSpeech();
 };
