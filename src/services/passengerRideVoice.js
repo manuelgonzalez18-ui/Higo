@@ -8,6 +8,8 @@ const VOICE_MESSAGES = Object.freeze({
     completed: 'Ha llegado a su destino. Gracias.',
 });
 
+const ARRIVAL_RADIUS_METERS = 100;
+
 let activeCleanup = null;
 let speechQueue = Promise.resolve();
 let syncSequence = 0;
@@ -21,6 +23,19 @@ const getRideIdFromHash = () => {
 const isDeliveryRide = (ride) => (
     ride?.service_type === 'delivery' || Boolean(ride?.delivery_info)
 );
+
+const distanceMeters = (a, b) => {
+    if (!a || !b) return Infinity;
+    const toRadians = (degrees) => degrees * Math.PI / 180;
+    const radius = 6371000;
+    const latitudeDelta = toRadians(b.lat - a.lat);
+    const longitudeDelta = toRadians(b.lng - a.lng);
+    const latitudeA = toRadians(a.lat);
+    const latitudeB = toRadians(b.lat);
+    const h = Math.sin(latitudeDelta / 2) ** 2
+        + Math.cos(latitudeA) * Math.cos(latitudeB) * Math.sin(longitudeDelta / 2) ** 2;
+    return 2 * radius * Math.asin(Math.sqrt(h));
+};
 
 const getMilestone = (ride) => {
     if (!ride || isDeliveryRide(ride)) return null;
@@ -76,27 +91,94 @@ const speak = (text) => {
 
 const subscribeToRideVoice = async (rideId, sequence) => {
     let disposed = false;
+    let latestRide = null;
+    let driverChannel = null;
+    let trackedDriverId = null;
     const spokenMilestones = new Set();
 
-    const announceCurrentMilestone = (ride) => {
+    const announceMilestone = (milestone) => {
         if (disposed || sequence !== syncSequence) return;
-        const milestone = getMilestone(ride);
         if (!milestone || spokenMilestones.has(milestone)) return;
         spokenMilestones.add(milestone);
         void speak(VOICE_MESSAGES[milestone]);
     };
 
+    const checkDriverProximity = (profile) => {
+        if (!latestRide || spokenMilestones.has('arrived')) return;
+        const pickup = {
+            lat: Number(latestRide.pickup_lat),
+            lng: Number(latestRide.pickup_lng),
+        };
+        const driverLocation = {
+            lat: Number(profile?.curr_lat),
+            lng: Number(profile?.curr_lng),
+        };
+        if (
+            !Number.isFinite(pickup.lat)
+            || !Number.isFinite(pickup.lng)
+            || !Number.isFinite(driverLocation.lat)
+            || !Number.isFinite(driverLocation.lng)
+        ) return;
+        if (distanceMeters(driverLocation, pickup) <= ARRIVAL_RADIUS_METERS) {
+            announceMilestone('arrived');
+        }
+    };
+
+    const stopDriverTracking = () => {
+        if (driverChannel) supabase.removeChannel(driverChannel);
+        driverChannel = null;
+        trackedDriverId = null;
+    };
+
+    const ensureDriverTracking = async (ride) => {
+        if (!ride?.driver_id || isDeliveryRide(ride) || spokenMilestones.has('arrived')) {
+            if (spokenMilestones.has('arrived')) stopDriverTracking();
+            return;
+        }
+        if (trackedDriverId === ride.driver_id) return;
+
+        stopDriverTracking();
+        trackedDriverId = ride.driver_id;
+
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('id,curr_lat,curr_lng')
+            .eq('id', ride.driver_id)
+            .maybeSingle();
+        if (disposed || sequence !== syncSequence) return;
+        if (profile) checkDriverProximity(profile);
+
+        driverChannel = supabase
+            .channel(`passenger-driver-proximity:${ride.id}:${ride.driver_id}`)
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'profiles',
+                filter: `id=eq.${ride.driver_id}`,
+            }, (payload) => {
+                checkDriverProximity(payload.new);
+            })
+            .subscribe();
+    };
+
+    const handleRide = (ride) => {
+        if (!ride || isDeliveryRide(ride)) return;
+        latestRide = ride;
+        announceMilestone(getMilestone(ride));
+        void ensureDriverTracking(ride);
+    };
+
     const { data: initialRide, error } = await supabase
         .from('rides')
-        .select('id,status,driver_id,service_type,delivery_info,arrived_at_pickup_at')
+        .select('id,status,driver_id,service_type,delivery_info,arrived_at_pickup_at,pickup_lat,pickup_lng')
         .eq('id', rideId)
         .maybeSingle();
 
     if (!disposed && sequence === syncSequence && !error && initialRide) {
-        announceCurrentMilestone(initialRide);
+        handleRide(initialRide);
     }
 
-    const channel = supabase
+    const rideChannel = supabase
         .channel(`passenger-ride-voice:${rideId}`)
         .on('postgres_changes', {
             event: 'UPDATE',
@@ -104,13 +186,14 @@ const subscribeToRideVoice = async (rideId, sequence) => {
             table: 'rides',
             filter: `id=eq.${rideId}`,
         }, (payload) => {
-            announceCurrentMilestone(payload.new);
+            handleRide(payload.new);
         })
         .subscribe();
 
     return () => {
         disposed = true;
-        supabase.removeChannel(channel);
+        supabase.removeChannel(rideChannel);
+        stopDriverTracking();
     };
 };
 
