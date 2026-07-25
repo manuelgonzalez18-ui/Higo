@@ -1,0 +1,9 @@
+timestamp=2026-07-25T19:16:18Z
+job_status=failure
+checkout_outcome=success
+deploy_outcome=failure
+smoke_outcome=skipped
+ftp_server_configured=true
+ftp_username_configured=true
+ftp_password_configured=true
+source_repository=manuelgonzalez18-ui/Higo-Driver@main
