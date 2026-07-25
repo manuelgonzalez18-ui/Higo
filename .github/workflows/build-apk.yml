@@ -47,6 +47,10 @@ jobs:
           # pulido: sin rutas, sin botones de entrada y sin chunks en el
           # bundle. La web (deploy.yml) no setea la variable → Shop activo.
           VITE_SHOP_ENABLED: 'false'
+          # El APK debe usar el catálogo unificado y la activación segura V2.
+          # Sin esta variable, el bundle cae al endpoint legado y guarda el
+          # monto real de Banesco como si fuera USD en driver_memberships.
+          VITE_UNIFIED_MEMBERSHIP_CHECKOUT: 'true'
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           # Maps key SEPARADO del de web (deploy.yml usa VITE_GOOGLE_MAPS_API_KEY,
