@@ -1,74 +1,97 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { supabase } from '../services/supabase';
+import React, { useEffect, useRef, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { playIntenseBeep, vibrateIntense, playAlertSound } from '../services/notificationService';
+import { supabase } from '../services/supabase';
+import { vibrateIntense, playAlertSound } from '../services/notificationService';
 import { toast } from './Toast';
 
+const CHAT_CHANNEL_ID = 'higo_messages_v1';
+const MAX_MESSAGE_LENGTH = 1000;
 
+const mergeMessages = (...groups) => {
+    const byId = new Map();
+    groups.flat().filter(Boolean).forEach((message) => {
+        const key = message.id != null
+            ? String(message.id)
+            : `${message.sender_id}:${message.created_at}:${message.content}`;
+        byId.set(key, message);
+    });
+    return [...byId.values()].sort(
+        (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime(),
+    );
+};
 
 const ChatWidget = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [isSending, setIsSending] = useState(false);
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
     const [rideId, setRideId] = useState(null);
     const [userId, setUserId] = useState(null);
-    const [chatTitle, setChatTitle] = useState("Chat");
+    const [chatTitle, setChatTitle] = useState('Chat del viaje');
     const [unreadCount, setUnreadCount] = useState(0);
+
     const messagesEndRef = useRef(null);
-
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    };
+    const isOpenRef = useRef(false);
+    const userIdRef = useRef(null);
 
     useEffect(() => {
-        scrollToBottom();
-    }, [messages, isOpen]);
-
-    // Clear unread on open
-    useEffect(() => {
-        if (isOpen) {
-            setUnreadCount(0);
-        }
+        isOpenRef.current = isOpen;
+        if (isOpen) setUnreadCount(0);
     }, [isOpen]);
 
     useEffect(() => {
-        // 1. Sesión desde localStorage (síncrono, no requiere red).
-        //    getUser() hace roundtrip y dejaba userId=null en redes lentas,
-        //    rompiendo el send con "Faltan datos: ID de usuario".
+        userIdRef.current = userId;
+    }, [userId]);
+
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages, isOpen]);
+
+    useEffect(() => {
         const fetchUser = async () => {
             const { data: { session } } = await supabase.auth.getSession();
             if (session?.user) {
                 setUserId(session.user.id);
-                return;
+                return session.user.id;
             }
-            // Fallback: si no hay sesión cacheada, intentamos refrescar contra el server.
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) setUserId(user.id);
-        };
-        fetchUser();
 
-        // 2. Listen for Auth Changes (Login/Logout)
+            const { data: { user } } = await supabase.auth.getUser();
+            setUserId(user?.id || null);
+            return user?.id || null;
+        };
+
+        void fetchUser();
+
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            if (session?.user) {
-                setUserId(session.user.id);
-            } else {
-                setUserId(null);
+            const nextUserId = session?.user?.id || null;
+            setUserId(nextUserId);
+            if (!nextUserId) {
+                setIsOpen(false);
+                setRideId(null);
+                setMessages([]);
+                setUnreadCount(0);
             }
         });
 
         const handleOpenChat = (event) => {
+            const nextRideId = event.detail?.rideId || null;
+            if (!nextRideId) {
+                toast.error('No se pudo abrir el chat: falta el viaje activo.');
+                return;
+            }
+
+            setRideId((currentRideId) => {
+                if (String(currentRideId || '') !== String(nextRideId)) {
+                    setMessages([]);
+                    setUnreadCount(0);
+                }
+                return nextRideId;
+            });
+            setChatTitle(event.detail?.title || 'Chat del viaje');
             setIsOpen(true);
-            if (event.detail && event.detail.rideId) {
-                setRideId(event.detail.rideId);
-            }
-            if (event.detail && event.detail.title) {
-                setChatTitle(event.detail.title);
-            } else {
-                setChatTitle("Chat"); // Default
-            }
-            // Re-fetch user on open just in case
-            fetchUser();
+            void fetchUser();
         };
 
         window.addEventListener('open-chat', handleOpenChat);
@@ -79,140 +102,204 @@ const ChatWidget = () => {
     }, []);
 
     useEffect(() => {
-        if (!rideId) return;
+        if (!Capacitor.isNativePlatform()) return undefined;
+
+        const setupNotifications = async () => {
+            try {
+                const permission = await LocalNotifications.checkPermissions();
+                if (permission.display === 'prompt') {
+                    await LocalNotifications.requestPermissions();
+                }
+
+                if (Capacitor.getPlatform() === 'android') {
+                    await LocalNotifications.createChannel({
+                        id: CHAT_CHANNEL_ID,
+                        name: 'Mensajes del viaje',
+                        description: 'Mensajes entre pasajero y conductor',
+                        importance: 5,
+                        visibility: 1,
+                        vibration: true,
+                        sound: 'alert_sound.wav',
+                    });
+                }
+            } catch (error) {
+                console.warn('[ride-chat] notification setup failed:', error);
+            }
+        };
+
+        void setupNotifications();
+        return undefined;
+    }, []);
+
+    useEffect(() => {
+        if (!rideId) return undefined;
+
+        let cancelled = false;
 
         const fetchMessages = async () => {
+            setIsLoading(true);
             const { data, error } = await supabase
                 .from('ride_messages')
                 .select('*')
                 .eq('ride_id', rideId)
                 .order('created_at', { ascending: true });
 
-            if (data) setMessages(data);
+            if (cancelled) return;
+            if (error) {
+                console.error('[ride-chat] fetch failed:', error);
+                toast.error('No se pudieron cargar los mensajes del viaje.');
+            } else {
+                setMessages((current) => mergeMessages(current, data || []));
+            }
+            setIsLoading(false);
         };
 
-        fetchMessages();
+        void fetchMessages();
 
         const channel = supabase
-            .channel(`chat:${rideId}`)
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ride_messages', filter: `ride_id=eq.${rideId}` }, async (payload) => {
-                setMessages(prev => [...prev, payload.new]);
+            .channel(`ride-chat:${rideId}`)
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'ride_messages',
+                filter: `ride_id=eq.${rideId}`,
+            }, (payload) => {
+                const incoming = payload.new;
+                setMessages((current) => mergeMessages(current, [incoming]));
 
-                if (payload.new.sender_id === userId) return;
+                if (incoming.sender_id === userIdRef.current || isOpenRef.current) return;
 
-                if (!isOpen) setUnreadCount(prev => prev + 1);
+                setUnreadCount((current) => current + 1);
                 vibrateIntense();
                 playAlertSound();
 
-                const msgText = payload.new.content || 'Tienes un nuevo mensaje';
-                LocalNotifications.schedule({
+                if (!Capacitor.isNativePlatform()) return;
+                const notificationId = Math.floor(Date.now() % 2147483647);
+                void LocalNotifications.schedule({
                     notifications: [{
-                        title: 'Nuevo Mensaje',
-                        body: msgText,
-                        id: new Date().getTime(),
-                        schedule: { at: new Date() },
-                        sound: 'alert_sound',
-                        channelId: 'higo_rides_v11',
-                        extra: { rideId: rideId }
-                    }]
+                        title: 'Nuevo mensaje del viaje',
+                        body: incoming.content || 'Tienes un nuevo mensaje',
+                        id: notificationId,
+                        schedule: { at: new Date(Date.now() + 150) },
+                        sound: 'alert_sound.wav',
+                        channelId: CHAT_CHANNEL_ID,
+                        extra: { rideId },
+                    }],
+                }).catch((error) => {
+                    console.warn('[ride-chat] local notification failed:', error);
                 });
             })
-            .subscribe();
-
-        return () => supabase.removeChannel(channel);
-    }, [rideId, userId, isOpen]);
-
-    // Request Permissions on mount
-    useEffect(() => {
-        const setupNotifications = async () => {
-            await LocalNotifications.requestPermissions();
-            // Ensure channel exists (idempotent)
-            await LocalNotifications.createChannel({
-                id: 'higo_messages_v1',
-                name: 'Higo Chat Messages',
-                description: 'Notifications for new messages',
-                importance: 5,
-                visibility: 1,
-                vibration: true,
-                // sound: 'alert_sound.wav' // Removed
+            .subscribe((status) => {
+                if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                    console.warn(`[ride-chat] realtime status for ${rideId}:`, status);
+                }
             });
+
+        return () => {
+            cancelled = true;
+            supabase.removeChannel(channel);
         };
-        setupNotifications();
-    }, []);
+    }, [rideId]);
 
     const handleSend = async () => {
-        // Retry fetching user if missing
-        let currentUserId = userId;
+        if (isSending) return;
+
+        const content = inputValue.trim().slice(0, MAX_MESSAGE_LENGTH);
+        let currentUserId = userIdRef.current;
+
         if (!currentUserId) {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                setUserId(user.id);
-                currentUserId = user.id;
-            }
+            const { data: { session } } = await supabase.auth.getSession();
+            currentUserId = session?.user?.id || null;
+            if (currentUserId) setUserId(currentUserId);
         }
 
-        if (!inputValue.trim() || !rideId || !currentUserId) {
-            console.error("Missing data for chat:", { inputValue, rideId, userId: currentUserId });
-
-            let missing = [];
-            if (!rideId) missing.push("ID de viaje");
-            if (!currentUserId) missing.push("ID de usuario");
-
-            toast.error(`Error: Faltan datos para enviar: ${missing.join(', ')}. Intenta recargar la página.`);
+        if (!content || !rideId || !currentUserId) {
+            const missing = [];
+            if (!rideId) missing.push('viaje activo');
+            if (!currentUserId) missing.push('sesión');
+            toast.error(`No se pudo enviar: falta ${missing.join(' y ') || 'el mensaje'}.`);
             return;
         }
 
-        const content = inputValue.trim();
-        setInputValue(''); // Optimistic clear
+        setInputValue('');
+        setIsSending(true);
 
-        const { error } = await supabase
+        const { data, error } = await supabase
             .from('ride_messages')
             .insert({
                 ride_id: rideId,
                 sender_id: currentUserId,
-                content: content
-            });
+                content,
+            })
+            .select('*')
+            .single();
+
+        setIsSending(false);
 
         if (error) {
-            console.error('Error sending message:', error);
-            toast.error(`Error al enviar: ${error.message}`);
-            setInputValue(content); // Restore if failed
+            console.error('[ride-chat] send failed:', error);
+            toast.error('No se pudo enviar el mensaje. Revisa tu conexión e inténtalo nuevamente.');
+            setInputValue(content);
+            return;
         }
+
+        // El INSERT devuelto mantiene el chat útil incluso si Realtime tarda o
+        // se reconecta. mergeMessages evita duplicarlo cuando llegue el evento.
+        setMessages((current) => mergeMessages(current, [data]));
     };
 
-    if (!rideId) return null; // Don't render anything if no ride context (except initial listener)
+    if (!rideId) return null;
 
     return (
         <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end pointer-events-none">
-            {/* Window */}
             {isOpen && (
-                <div className="mb-4 w-80 md:w-96 bg-white dark:bg-[#1a2c2c] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col max-h-[500px] animate-in fade-in slide-in-from-bottom-5 pointer-events-auto">
+                <div className="mb-4 w-[calc(100vw-2rem)] max-w-96 bg-white dark:bg-[#1a2c2c] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col max-h-[min(500px,75vh)] animate-in fade-in slide-in-from-bottom-5 pointer-events-auto">
                     <div className="p-4 bg-blue-600/10 dark:bg-blue-900/20 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
                             <span className="material-symbols-outlined text-blue-600">chat</span>
-                            <h3 className="font-bold text-gray-800 dark:text-white">{chatTitle}</h3>
+                            <div className="min-w-0">
+                                <h3 className="font-bold text-gray-800 dark:text-white truncate">{chatTitle}</h3>
+                                <p className="text-[11px] text-gray-500 dark:text-gray-400">Mensajería privada de este viaje</p>
+                            </div>
                         </div>
-                        <button onClick={() => setIsOpen(false)} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
+                        <button
+                            type="button"
+                            onClick={() => setIsOpen(false)}
+                            className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                            aria-label="Cerrar chat"
+                        >
                             <span className="material-symbols-outlined">close</span>
                         </button>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-[#152323] min-h-[300px]">
-                        {messages.length === 0 && !isLoading && (
-                            <div className="text-center text-gray-400 mt-10">
-                                <p>Envía un mensaje para comenzar...</p>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-[#152323] min-h-[260px]">
+                        {isLoading && messages.length === 0 && (
+                            <div className="h-full flex items-center justify-center text-gray-400 gap-2">
+                                <span className="material-symbols-outlined animate-spin">progress_activity</span>
+                                <span className="text-sm">Cargando mensajes…</span>
                             </div>
                         )}
 
-                        {messages.map((msg) => {
-                            const isMe = msg.sender_id === userId;
+                        {!isLoading && messages.length === 0 && (
+                            <div className="text-center text-gray-400 mt-10">
+                                <p>Envía un mensaje para comenzar.</p>
+                            </div>
+                        )}
+
+                        {messages.map((message) => {
+                            const isMe = message.sender_id === userId;
                             return (
-                                <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[80%] p-3 rounded-2xl ${isMe
+                                <div key={message.id || `${message.sender_id}-${message.created_at}`} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`max-w-[82%] p-3 rounded-2xl ${isMe
                                         ? 'bg-blue-600 text-white rounded-tr-none'
                                         : 'bg-white dark:bg-[#233535] text-gray-800 dark:text-gray-200 rounded-tl-none shadow-sm'
-                                        }`}>
-                                        <p className="text-sm">{msg.content}</p>
+                                    }`}>
+                                        <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                                        {message.created_at && (
+                                            <p className={`mt-1 text-[9px] text-right ${isMe ? 'text-blue-100/80' : 'text-gray-400'}`}>
+                                                {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                             );
@@ -223,25 +310,46 @@ const ChatWidget = () => {
                     <div className="p-3 bg-white dark:bg-[#1a2c2c] border-t border-gray-200 dark:border-gray-700 flex gap-2">
                         <input
                             type="text"
-                            className="flex-1 bg-gray-100 dark:bg-[#0f1c1c] border-none outline-none rounded-lg text-sm px-3 focus:ring-1 focus:ring-blue-600 text-gray-800 dark:text-white"
-                            placeholder="Escribe un mensaje..."
+                            maxLength={MAX_MESSAGE_LENGTH}
+                            className="flex-1 min-w-0 bg-gray-100 dark:bg-[#0f1c1c] border-none outline-none rounded-lg text-sm px-3 focus:ring-1 focus:ring-blue-600 text-gray-800 dark:text-white"
+                            placeholder="Escribe un mensaje…"
                             value={inputValue}
-                            onChange={(e) => setInputValue(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                            onChange={(event) => setInputValue(event.target.value)}
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter' && !event.repeat) {
+                                    event.preventDefault();
+                                    void handleSend();
+                                }
+                            }}
                         />
                         <button
-                            onClick={handleSend}
-                            disabled={isLoading || !inputValue.trim() || !userId}
-                            title={!userId ? 'Cargando sesión…' : ''}
+                            type="button"
+                            onClick={() => void handleSend()}
+                            disabled={isSending || !inputValue.trim() || !userId}
+                            title={!userId ? 'Cargando sesión…' : 'Enviar mensaje'}
                             className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
                         >
-                            <span className="material-symbols-outlined text-[20px]">send</span>
+                            <span className={`material-symbols-outlined text-[20px] ${isSending ? 'animate-spin' : ''}`}>
+                                {isSending ? 'progress_activity' : 'send'}
+                            </span>
                         </button>
                     </div>
                 </div>
             )}
 
-            {/* Floating Button - REMOVED as per user request */}
+            {!isOpen && unreadCount > 0 && (
+                <button
+                    type="button"
+                    onClick={() => setIsOpen(true)}
+                    className="pointer-events-auto w-14 h-14 rounded-full bg-blue-600 text-white shadow-2xl flex items-center justify-center relative"
+                    aria-label={`Abrir ${unreadCount} mensajes sin leer`}
+                >
+                    <span className="material-symbols-outlined">chat_bubble</span>
+                    <span className="absolute -top-1 -right-1 min-w-6 h-6 px-1 rounded-full bg-red-500 border-2 border-white text-[10px] font-black flex items-center justify-center">
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                </button>
+            )}
         </div>
     );
 };
