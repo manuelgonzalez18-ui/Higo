@@ -1,7 +1,7 @@
 -- Read-only post-deploy checks for the platform hardening migrations.
 -- Expected result: every object_exists value is true, every violation count is
 -- zero, directed dispatch remains disabled initially, event ingestion is
--- denied to anon but allowed to authenticated, and Pricing V4 starts in shadow.
+-- denied to anon but allowed to authenticated, and Pricing V4 is active.
 
 select 'driver_membership_checkout' as object_name,
        to_regprocedure('public.driver_membership_checkout()') is not null as object_exists
@@ -136,7 +136,7 @@ where singleton;
 
 select
     mode,
-    mode = 'shadow' as safe_default,
+    mode = 'active' as prelaunch_ready,
     pilot_percentage,
     maximum_multiplier,
     maximum_multiplier <= 1.30 as conservative_cap
