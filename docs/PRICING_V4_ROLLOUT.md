@@ -1,4 +1,4 @@
-# Higo Pricing V4 — operación y rollout
+# Higo Pricing V4 — operación y lanzamiento
 
 ## Fórmula
 
@@ -24,42 +24,47 @@ La espera en el punto de recogida permanece separada. Se cobra después de
 
 - La tarifa mínima es un piso, no un cargo adicional.
 - El tiempo proviene del proveedor de rutas y está limitado contra inflación.
-- Si coinciden varias reglas, el motor legado devuelve el multiplicador más
-  alto; Pricing V4 lo limita por vehículo y por rollout.
-- El tope inicial recomendado es `1.30x`.
-- Pricing V4 nunca reduce el subtotal legado durante el rollout.
+- Si coinciden varias reglas, el motor devuelve el multiplicador más alto y
+  Pricing V4 lo limita por vehículo y por configuración general.
+- El tope inicial es `1.30x`.
 - Cada viaje guarda el desglose completo en `rides.pricing_snapshot` y una fila
   analítica en `pricing_quote_audit`.
+- La cotización y la creación del viaje se verifican en el servidor.
 
-## Modos
+## Estado de prelaunch
 
-| Modo | Comportamiento |
-|---|---|
-| `legacy` | Cobra únicamente la fórmula anterior. |
-| `shadow` | Calcula ambos modelos y cobra el anterior. Es el valor inicial. |
-| `pilot` | Aplica V4 a un porcentaje determinístico de pasajeros. |
-| `active` | Aplica V4 a todos los viajes nuevos. |
+Higo todavía no se ha lanzado al público. Por esa razón, Pricing V4 queda en
+`active` para todos los viajes nuevos y no necesita pasar primero por sombra o
+piloto. Web y Android usan cotización autoritativa del servidor por defecto.
 
-## Secuencia recomendada
+La activación no inventa importes comerciales ni aumenta automáticamente los
+precios existentes:
 
-1. Mantener `shadow` durante al menos 7 días o hasta reunir una muestra útil.
-2. Configurar `per_minute`, `minimum_fare` y límites desde `/admin/pricing`.
-3. Revisar diferencia media, porcentaje de cotizaciones que suben, aceptación,
-   cancelación, tiempo hasta aceptación y reclamos.
-4. Activar `pilot` en 10–20 %, con multiplicador máximo de 1.20–1.30.
-5. Ampliar gradualmente. Usar `active` solo después de confirmar los indicadores.
-6. Para rollback inmediato, seleccionar `legacy` o `shadow` en el panel.
-
-## Valores de despliegue
-
-La migración comienza sin alterar precios:
-
-- `mode = shadow`
-- `per_minute = 0`
+- `mode = active`
+- `per_minute = 0` hasta que el administrador defina el valor comercial
 - `minimum_fare = base`
 - `included_km = 1`
 - `free_wait_minutes = 3`
 - `maximum_multiplier = 1.30`
 
-Los valores comerciales definitivos deben definirse con datos reales de costos,
-aceptación y duración por vehículo y zona.
+Así, toda la arquitectura V4 queda funcionando desde las pruebas de prelaunch,
+pero el precio continúa equivalente al modelo vigente hasta editar los valores
+desde `/admin/pricing`.
+
+## Modos disponibles
+
+| Modo | Comportamiento |
+|---|---|
+| `legacy` | Cobra únicamente la fórmula anterior. |
+| `shadow` | Calcula ambos modelos y cobra el anterior. |
+| `pilot` | Aplica V4 a un porcentaje determinístico de pasajeros. |
+| `active` | Aplica V4 a todos los viajes nuevos. Es el estado de prelaunch. |
+
+## Operación antes del lanzamiento
+
+1. Ejecutar viajes reales de prueba con moto, carro y camioneta.
+2. Revisar el desglose de base, distancia, tiempo, paradas y extras.
+3. Definir desde `/admin/pricing` la tarifa mínima y el precio por minuto de cada vehículo usando costos reales.
+4. Confirmar que promociones, espera, Higo Envíos y multiplicadores respetan sus límites.
+5. Mantener el multiplicador máximo en `1.30x` durante el lanzamiento inicial.
+6. Para rollback inmediato, seleccionar `legacy` o `shadow` en el panel administrativo.
