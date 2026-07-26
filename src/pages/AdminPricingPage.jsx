@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, getUserProfile } from '../services/supabase';
 import AdminNav from '../components/AdminNav';
+import PricingSimulator from '../components/admin/PricingSimulator';
+import PricingRolloutPanel from '../components/admin/PricingRolloutPanel';
 
 const VEHICLE_META = {
     moto:     { label: 'Moto',      icon: 'two_wheeler',       color: 'from-sky-500 to-indigo-500' },
@@ -10,11 +12,16 @@ const VEHICLE_META = {
 };
 
 const FIELDS = [
-    { key: 'base',         label: 'Tarifa base',        hint: 'Incluye el primer km' },
-    { key: 'per_km',       label: 'Por km adicional',   hint: 'Después del primer km' },
-    { key: 'delivery_fee', label: 'Cargo de envío',     hint: 'Solo Higo Envíos' },
-    { key: 'wait_per_min', label: 'Espera ($/min)',     hint: 'Primeros 3 min gratis' },
-    { key: 'stop_fee',     label: 'Por parada extra',   hint: 'Paradas intermedias' }
+    { key: 'minimum_fare',       label: 'Tarifa mínima',            hint: 'Piso del viaje', prefix: '$' },
+    { key: 'base',               label: 'Tarifa base',              hint: 'Monto inicial', prefix: '$' },
+    { key: 'included_km',        label: 'Kilómetros incluidos',     hint: 'Antes de cobrar por km', prefix: '' },
+    { key: 'per_km',             label: 'Por km adicional',         hint: 'Después de los km incluidos', prefix: '$' },
+    { key: 'per_minute',         label: 'Por minuto estimado',      hint: 'Tiempo previsto de ruta', prefix: '$' },
+    { key: 'delivery_fee',       label: 'Cargo de envío',           hint: 'Solo Higo Envíos', prefix: '$' },
+    { key: 'free_wait_minutes',  label: 'Minutos gratis de espera', hint: 'En el punto de recogida', prefix: '' },
+    { key: 'wait_per_min',       label: 'Espera por minuto',        hint: 'Después del tiempo gratis', prefix: '$' },
+    { key: 'stop_fee',           label: 'Por parada extra',         hint: 'Paradas intermedias', prefix: '$' },
+    { key: 'maximum_multiplier', label: 'Multiplicador máximo',     hint: 'Tope recomendado 1.30', prefix: '×' }
 ];
 
 const AdminPricingPage = () => {
@@ -114,11 +121,16 @@ const AdminPricingPage = () => {
         setMessage(null);
         const row = rows[type];
         const patch = {
+            minimum_fare: parseFloat(row.minimum_fare) || 0,
             base: parseFloat(row.base) || 0,
+            included_km: parseFloat(row.included_km) || 0,
             per_km: parseFloat(row.per_km) || 0,
+            per_minute: parseFloat(row.per_minute) || 0,
             delivery_fee: parseFloat(row.delivery_fee) || 0,
+            free_wait_minutes: parseFloat(row.free_wait_minutes) || 0,
             wait_per_min: parseFloat(row.wait_per_min) || 0,
-            stop_fee: parseFloat(row.stop_fee) || 0
+            stop_fee: parseFloat(row.stop_fee) || 0,
+            maximum_multiplier: parseFloat(row.maximum_multiplier) || 1
         };
         const { error } = await supabase
             .from('pricing_config')
@@ -191,7 +203,7 @@ const AdminPricingPage = () => {
                                             <span className="text-[10px] text-gray-600">{f.hint}</span>
                                         </label>
                                         <div className="relative">
-                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-mono">$</span>
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-mono">{f.prefix ?? '$'}</span>
                                             <input
                                                 type="number"
                                                 step="0.01"
@@ -230,6 +242,9 @@ const AdminPricingPage = () => {
                     );
                 })}
             </div>
+
+            <PricingSimulator ratesByType={rows} />
+            <PricingRolloutPanel />
 
             {/* D.A2 — Reglas de surge pricing */}
             <div className="max-w-6xl lg:max-w-7xl mx-auto mt-10">

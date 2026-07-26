@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import InteractiveMap from '../components/InteractiveMap';
 import { supabase } from '../services/supabase';
@@ -45,6 +45,7 @@ export default function ConfirmTripPage() {
         deliveryData = null,
         stops = [],
         roadDistance = null,
+        routeDurationMin = null,
     } = location.state || {};
 
     const [loading, setLoading] = useState(false);
@@ -52,6 +53,7 @@ export default function ConfirmTripPage() {
     const [promoCode, setPromoCode] = useState('');
     const [appliedPromo, setAppliedPromo] = useState(null);
     const [validatingPromo, setValidatingPromo] = useState(false);
+    const [serverQuote, setServerQuote] = useState(null);
 
     const isDelivery = serviceType === 'delivery';
     const vehicle = VEHICLE_INFO[selectedRide] || VEHICLE_INFO.standard;
@@ -61,7 +63,27 @@ export default function ConfirmTripPage() {
             ? selectedRide === 'moto' ? 'Máx. 4 kg' : selectedRide === 'van' ? 'Máx. 100 kg' : 'Máx. 40 kg'
             : vehicle.seats,
     }), [vehicle, isDelivery, selectedRide]);
-    const finalPrice = appliedPromo?.finalPrice ?? Number(price || 0);
+    const finalPrice = appliedPromo?.finalPrice ?? serverQuote?.finalPrice ?? Number(price || 0);
+
+    useEffect(() => {
+        if (!FEATURES.serverSideRidePricing || !pickupCoords || !dropoffCoords) return;
+        let cancelled = false;
+        void quoteRide({
+            pickupCoords,
+            dropoffCoords,
+            vehicleType: selectedRide,
+            serviceType,
+            routeDistanceKm: roadDistance ? Number(roadDistance) / 1000 : null,
+            routeDurationMin: routeDurationMin == null ? null : Number(routeDurationMin),
+            stopsCount: Array.isArray(stops) ? stops.length : 0,
+            clientSubtotalFloor: Number(price || 0),
+        }).then((quote) => {
+            if (!cancelled) setServerQuote(quote);
+        }).catch(() => {
+            // La confirmación vuelve a cotizar de forma autoritativa.
+        });
+        return () => { cancelled = true; };
+    }, [dropoffCoords?.lat, dropoffCoords?.lng, pickupCoords?.lat, pickupCoords?.lng, price, roadDistance, routeDurationMin, selectedRide, serviceType, stops]);
 
     if (!pickup || !dropoff || !pickupCoords || !dropoffCoords) {
         return (
@@ -108,6 +130,7 @@ export default function ConfirmTripPage() {
                     vehicleType: selectedRide,
                     serviceType,
                     routeDistanceKm: roadDistance ? Number(roadDistance) / 1000 : null,
+                    routeDurationMin: routeDurationMin == null ? null : Number(routeDurationMin),
                     stopsCount: Array.isArray(stops) ? stops.length : 0,
                     promoCode: code,
                     clientSubtotalFloor: Number(price || 0),
@@ -115,6 +138,7 @@ export default function ConfirmTripPage() {
                 if (!quote?.promoValid) {
                     throw new Error(PROMO_ERRORS[quote?.promoError] || 'El código no se puede aplicar.');
                 }
+                setServerQuote(quote);
                 setAppliedPromo({
                     id: quote.promoId,
                     code: quote.promoCode,
@@ -236,6 +260,7 @@ export default function ConfirmTripPage() {
                         vehicleType: selectedRide,
                         serviceType,
                         routeDistanceKm: roadDistance ? Number(roadDistance) / 1000 : null,
+                        routeDurationMin: routeDurationMin == null ? null : Number(routeDurationMin),
                         stops,
                         promoCode: appliedPromo?.code || null,
                         passengerPhone,
@@ -294,6 +319,19 @@ export default function ConfirmTripPage() {
                     <div className="flex-1"><p className="font-black">{vehicleDetails.title}</p><p className="text-xs text-gray-500">{vehicleDetails.seats}{Array.isArray(stops) && stops.length ? ` · ${stops.length} parada(s)` : ''}</p></div>
                     <p className="text-2xl font-black">{money(finalPrice)}</p>
                 </section>
+
+                {serverQuote && (
+                    <section className="bg-[#1A1F2E] rounded-3xl p-5 border border-white/5 space-y-2 text-sm">
+                        <div className="flex justify-between"><span className="text-gray-400">Tarifa base</span><strong>{money(serverQuote.base)}</strong></div>
+                        <div className="flex justify-between"><span className="text-gray-400">Distancia · {Number(serverQuote.distanceKm || 0).toFixed(1)} km</span><strong>{money(serverQuote.distanceAmount)}</strong></div>
+                        <div className="flex justify-between"><span className="text-gray-400">Tiempo estimado · {Math.round(Number(serverQuote.durationMin || 0))} min</span><strong>{money(serverQuote.timeAmount)}</strong></div>
+                        {Number(serverQuote.stopsAmount || 0) > 0 && <div className="flex justify-between"><span className="text-gray-400">Paradas</span><strong>{money(serverQuote.stopsAmount)}</strong></div>}
+                        {Number(serverQuote.extrasAmount || 0) > 0 && <div className="flex justify-between"><span className="text-gray-400">Extras del servicio</span><strong>{money(serverQuote.extrasAmount)}</strong></div>}
+                        {Number(serverQuote.surgeMultiplier || 1) > 1 && <div className="flex justify-between text-amber-300"><span>Factor zona/horario</span><strong>×{Number(serverQuote.surgeMultiplier).toFixed(2)}</strong></div>}
+                        <div className="pt-2 mt-2 border-t border-white/10 flex justify-between"><span className="text-gray-400">Tarifa mínima</span><strong>{money(serverQuote.minimumFare)}</strong></div>
+                        {serverQuote.rolloutMode === 'shadow' && <p className="pt-2 text-[10px] text-blue-300">Modelo V4 en evaluación interna. El precio cobrado mantiene la fórmula vigente.</p>}
+                    </section>
+                )}
 
                 <section className="bg-[#1A1F2E] rounded-3xl p-5 border border-white/5 space-y-3">
                     <label className="text-xs font-bold text-gray-400">Teléfono de contacto (opcional)</label>

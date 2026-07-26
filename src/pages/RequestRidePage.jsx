@@ -10,6 +10,7 @@ import DeliveryFormSteps from '../components/DeliveryFormSteps';
 import ProhibitedItemsModal from '../components/ProhibitedItemsModal';
 import { toast } from '../components/Toast';
 import { openLegalLink } from '../utils/openLegalLink';
+import { computeFallbackQuote } from '../utils/ridePricing';
 import { TERMS_URL, PRIVACY_URL } from '../constants/legalUrls';
 
 // Higo Shop se apaga por build en el APK de Play Store (ver App.jsx).
@@ -30,6 +31,7 @@ const RequestRidePage = () => {
     const [oldPrice, setOldPrice] = useState(0);
     const [surgeMultiplier, setSurgeMultiplier] = useState(1.0);
     const [roadDistance, setRoadDistance] = useState(0); // Store actual road distance in meters
+    const [routeDurationMin, setRouteDurationMin] = useState(0);
     const [showStopConfirm, setShowStopConfirm] = useState(false);
     const [hasPendingStopConfirm, setHasPendingStopConfirm] = useState(false);
 
@@ -91,9 +93,9 @@ const RequestRidePage = () => {
     // Vehicle Rates: viven en DB (tabla pricing_config), editables desde /admin/pricing.
     // Fallback a estos valores si la query falla (primer render o error de red).
     const FALLBACK_RATES = {
-        moto:     { base: 1.00, perKm: 0.25, deliveryFee: 0.50, waitPerMin: 0.05, stopFee: 0.50 },
-        standard: { base: 1.50, perKm: 0.40, deliveryFee: 1.50, waitPerMin: 0.08, stopFee: 1.00 },
-        van:      { base: 1.70, perKm: 0.60, deliveryFee: 2.00, waitPerMin: 0.10, stopFee: 1.00 }
+        moto:     { base: 1.00, minimumFare: 1.00, perKm: 0.25, perMinute: 0, includedKm: 1, deliveryFee: 0.50, waitPerMin: 0.05, freeWaitMinutes: 3, stopFee: 0.50, maximumMultiplier: 1.30 },
+        standard: { base: 1.50, minimumFare: 1.50, perKm: 0.40, perMinute: 0, includedKm: 1, deliveryFee: 1.50, waitPerMin: 0.08, freeWaitMinutes: 3, stopFee: 1.00, maximumMultiplier: 1.30 },
+        van:      { base: 1.70, minimumFare: 1.70, perKm: 0.60, perMinute: 0, includedKm: 1, deliveryFee: 2.00, waitPerMin: 0.10, freeWaitMinutes: 3, stopFee: 1.00, maximumMultiplier: 1.30 }
     };
     const [VEHICLE_RATES, setVehicleRates] = useState(FALLBACK_RATES);
     const FREE_WAIT_MINUTES = 3;
@@ -107,10 +109,15 @@ const RequestRidePage = () => {
             for (const r of data) {
                 rates[r.vehicle_type] = {
                     base: Number(r.base),
+                    minimumFare: Number(r.minimum_fare ?? r.base),
                     perKm: Number(r.per_km),
+                    perMinute: Number(r.per_minute || 0),
+                    includedKm: Number(r.included_km ?? 1),
                     deliveryFee: Number(r.delivery_fee),
                     waitPerMin: Number(r.wait_per_min),
-                    stopFee: Number(r.stop_fee)
+                    freeWaitMinutes: Number(r.free_wait_minutes ?? 3),
+                    stopFee: Number(r.stop_fee),
+                    maximumMultiplier: Number(r.maximum_multiplier ?? 1.30)
                 };
             }
             setVehicleRates(prev => ({ ...prev, ...rates }));
@@ -186,39 +193,40 @@ const RequestRidePage = () => {
         const distKm = roadDistance > 0 ? (roadDistance / 1000) : totalDistanceKm;
 
 
-        // Pricing Logic based on selectedRide (type)
-        const type = selectedRide; // Use selectedRide from state
-        const rates = VEHICLE_RATES[type];
-        const basePrice = rates.base;
-        const perKm = rates.perKm;
-        const serviceFee = serviceType === 'delivery' ? rates.deliveryFee : 0;
-
-        // Add additional stops cost (leído desde pricing_config, fallback 1.0)
         const validStopsCount = stops.filter(s => s.coords).length;
-        const stopFee = rates.stopFee ?? (type === 'moto' ? 0.50 : 1.00);
-        const stopsCost = validStopsCount * stopFee;
-
-        let calculated = basePrice + (Math.max(0, distKm - INCLUDED_KM) * perKm) + stopsCost + serviceFee;
-
-        // Minimum is the base price
-        if (calculated < basePrice) calculated = basePrice;
-
-        // Aplicar surge multiplier (D.A2). Defensive: 1.0 si fetch falló.
-        calculated = calculated * (surgeMultiplier || 1.0);
-
-        setPrice(parseFloat(calculated.toFixed(2)));
+        const quote = computeFallbackQuote({
+            origin: pickupCoords,
+            destination: dropoffCoords,
+            routeDistanceKm: distKm,
+            routeDurationMin,
+            vehicleType: selectedRide,
+            serviceType: serviceType || 'ride',
+            stopsCount: validStopsCount,
+            surgeMultiplier: surgeMultiplier || 1,
+            rates: VEHICLE_RATES,
+        });
+        setPrice(quote.subtotal);
 
         // Calculate old price (without stops) for comparison in modal
         if (validStopsCount > 0) {
             const baseDistNoStops = roadDistance > 0 ? (roadDistance / 1000) : getDistanceFromLatLonInKm(pickupCoords.lat, pickupCoords.lng, dropoffCoords.lat, dropoffCoords.lng);
-            let oldCalculated = basePrice + (Math.max(0, baseDistNoStops - INCLUDED_KM) * perKm) + serviceFee;
-            if (oldCalculated < basePrice) oldCalculated = basePrice;
-            setOldPrice(parseFloat(oldCalculated.toFixed(2)));
+            const quoteWithoutStops = computeFallbackQuote({
+                origin: pickupCoords,
+                destination: dropoffCoords,
+                routeDistanceKm: baseDistNoStops,
+                routeDurationMin,
+                vehicleType: selectedRide,
+                serviceType: serviceType || 'ride',
+                stopsCount: 0,
+                surgeMultiplier: surgeMultiplier || 1,
+                rates: VEHICLE_RATES,
+            });
+            setOldPrice(quoteWithoutStops.subtotal);
         } else {
             setOldPrice(0); // No stops, so no "old price" to compare
         }
 
-    }, [pickupCoords, dropoffCoords, selectedRide, stops, serviceType, roadDistance, VEHICLE_RATES, surgeMultiplier]);
+    }, [pickupCoords, dropoffCoords, selectedRide, stops, serviceType, roadDistance, routeDurationMin, VEHICLE_RATES, surgeMultiplier]);
 
 
     // Check if we should show the "Confirm Stop" modal
@@ -252,7 +260,7 @@ const RequestRidePage = () => {
             navigate('/confirm', {
                 state: {
                     pickup, dropoff, price, selectedRide, pickupCoords, dropoffCoords,
-                    serviceType: 'ride'
+                    serviceType: 'ride', stops, roadDistance, routeDurationMin
                 }
             });
         }
@@ -273,7 +281,9 @@ const RequestRidePage = () => {
                 dropoffCoords,
                 serviceType: 'delivery',
                 deliveryData: data,
-                stops // Pass stops to confirm page
+                stops, // Pass stops to confirm page
+                roadDistance,
+                routeDurationMin
             }
         });
     };
@@ -333,6 +343,7 @@ const RequestRidePage = () => {
                     markersProp={stops}
                     onRouteData={(data) => {
                         if (data?.distance?.value) setRoadDistance(data.distance.value);
+                        if (data?.duration?.value) setRouteDurationMin(data.duration.value / 60);
                     }}
                 />
                 {/* Overlay Gradients */}
@@ -436,6 +447,7 @@ const RequestRidePage = () => {
                                                 if (place && place.lat && place.lng) {
                                                     setPickupCoords({ lat: place.lat, lng: place.lng });
                                                     setRoadDistance(0);
+                                                    setRouteDurationMin(0);
                                                 }
                                             }}
                                             onMapClick={() => { /* Not implemented yet */ }}
@@ -486,6 +498,7 @@ const RequestRidePage = () => {
                                                 if (place && place.lat && place.lng) {
                                                     setDropoffCoords({ lat: place.lat, lng: place.lng });
                                                     setRoadDistance(0); // Reset road distance to force recalculation for new destination
+                                                    setRouteDurationMin(0);
                                                 }
                                             }}
                                             onMapClick={() => { /* Not implemented yet */ }}
