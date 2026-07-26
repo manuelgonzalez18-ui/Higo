@@ -5,8 +5,12 @@ import { supabase } from '../services/supabase';
 import { vibrateIntense, playAlertSound } from '../services/notificationService';
 import { toast } from './Toast';
 
-const CHAT_CHANNEL_ID = 'higo_messages_v1';
+// Android no permite cambiar el sonido de un canal ya creado. La versión v1
+// pudo quedar registrada sin sonido en teléfonos que instalaron builds
+// anteriores, por eso usamos un ID nuevo para forzar un canal audible.
+const CHAT_CHANNEL_ID = 'higo_messages_v2';
 const MAX_MESSAGE_LENGTH = 1000;
+const ACTIVE_RIDE_STATUSES = ['requested', 'accepted', 'in_progress', 'arrived_at_dropoff'];
 
 const mergeMessages = (...groups) => {
     const byId = new Map();
@@ -19,6 +23,17 @@ const mergeMessages = (...groups) => {
     return [...byId.values()].sort(
         (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime(),
     );
+};
+
+const getRideIdFromHash = () => {
+    if (typeof window === 'undefined') return null;
+    const match = window.location.hash.match(/^#\/ride\/([^/?#]+)/);
+    return match?.[1] ? decodeURIComponent(match[1]) : null;
+};
+
+const getMessagePreview = (content) => {
+    const normalized = String(content || 'Tienes un nuevo mensaje').replace(/\s+/g, ' ').trim();
+    return normalized.length > 90 ? `${normalized.slice(0, 87)}…` : normalized;
 };
 
 const ChatWidget = () => {
@@ -50,16 +65,47 @@ const ChatWidget = () => {
     }, [messages, isOpen]);
 
     useEffect(() => {
+        let disposed = false;
+
+        const resolveActiveRide = async (currentUserId) => {
+            if (!currentUserId || disposed) return;
+
+            const routeRideId = getRideIdFromHash();
+            if (routeRideId) {
+                setRideId((currentRideId) => currentRideId || routeRideId);
+                return;
+            }
+
+            const { data, error } = await supabase
+                .from('rides')
+                .select('id')
+                .or(`user_id.eq.${currentUserId},driver_id.eq.${currentUserId}`)
+                .in('status', ACTIVE_RIDE_STATUSES)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            if (disposed) return;
+            if (error) {
+                console.warn('[ride-chat] active ride lookup failed:', error);
+                return;
+            }
+            if (data?.id) setRideId((currentRideId) => currentRideId || data.id);
+        };
+
         const fetchUser = async () => {
             const { data: { session } } = await supabase.auth.getSession();
             if (session?.user) {
                 setUserId(session.user.id);
+                void resolveActiveRide(session.user.id);
                 return session.user.id;
             }
 
             const { data: { user } } = await supabase.auth.getUser();
-            setUserId(user?.id || null);
-            return user?.id || null;
+            const nextUserId = user?.id || null;
+            setUserId(nextUserId);
+            if (nextUserId) void resolveActiveRide(nextUserId);
+            return nextUserId;
         };
 
         void fetchUser();
@@ -67,7 +113,9 @@ const ChatWidget = () => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             const nextUserId = session?.user?.id || null;
             setUserId(nextUserId);
-            if (!nextUserId) {
+            if (nextUserId) {
+                void resolveActiveRide(nextUserId);
+            } else {
                 setIsOpen(false);
                 setRideId(null);
                 setMessages([]);
@@ -94,15 +142,35 @@ const ChatWidget = () => {
             void fetchUser();
         };
 
+        const syncCurrentRoute = () => {
+            const currentUserId = userIdRef.current;
+            if (currentUserId) void resolveActiveRide(currentUserId);
+        };
+
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') syncCurrentRoute();
+        };
+
         window.addEventListener('open-chat', handleOpenChat);
+        window.addEventListener('hashchange', syncCurrentRoute);
+        window.addEventListener('focus', syncCurrentRoute);
+        document.addEventListener('visibilitychange', handleVisibility);
+
         return () => {
+            disposed = true;
             window.removeEventListener('open-chat', handleOpenChat);
+            window.removeEventListener('hashchange', syncCurrentRoute);
+            window.removeEventListener('focus', syncCurrentRoute);
+            document.removeEventListener('visibilitychange', handleVisibility);
             subscription.unsubscribe();
         };
     }, []);
 
     useEffect(() => {
         if (!Capacitor.isNativePlatform()) return undefined;
+
+        let actionListener = null;
+        let disposed = false;
 
         const setupNotifications = async () => {
             try {
@@ -122,13 +190,28 @@ const ChatWidget = () => {
                         sound: 'alert_sound.wav',
                     });
                 }
+
+                actionListener = await LocalNotifications.addListener(
+                    'localNotificationActionPerformed',
+                    (action) => {
+                        const notificationRideId = action.notification?.extra?.rideId;
+                        if (!notificationRideId) return;
+                        setRideId(notificationRideId);
+                        setIsOpen(true);
+                    },
+                );
+
+                if (disposed) actionListener?.remove?.();
             } catch (error) {
                 console.warn('[ride-chat] notification setup failed:', error);
             }
         };
 
         void setupNotifications();
-        return undefined;
+        return () => {
+            disposed = true;
+            actionListener?.remove?.();
+        };
     }, []);
 
     useEffect(() => {
@@ -167,18 +250,37 @@ const ChatWidget = () => {
                 const incoming = payload.new;
                 setMessages((current) => mergeMessages(current, [incoming]));
 
-                if (incoming.sender_id === userIdRef.current || isOpenRef.current) return;
+                if (incoming.sender_id === userIdRef.current) return;
+
+                const preview = getMessagePreview(incoming.content);
+                const chatIsOpen = isOpenRef.current;
+
+                // Mientras el chat está abierto emitimos el sonido directamente.
+                // Cuando está cerrado, Android usa el canal local v2 para mostrar
+                // el banner y reproducir alert_sound.wav sin duplicar el tono.
+                if (!Capacitor.isNativePlatform() || chatIsOpen) {
+                    void playAlertSound();
+                    vibrateIntense();
+                }
+
+                if (chatIsOpen) return;
 
                 setUnreadCount((current) => current + 1);
-                vibrateIntense();
-                playAlertSound();
+                toast.info(`Nuevo mensaje del viaje: ${preview}`, {
+                    duration: 6000,
+                    action: {
+                        label: 'Abrir chat',
+                        onClick: () => setIsOpen(true),
+                    },
+                });
 
                 if (!Capacitor.isNativePlatform()) return;
+
                 const notificationId = Math.floor(Date.now() % 2147483647);
                 void LocalNotifications.schedule({
                     notifications: [{
                         title: 'Nuevo mensaje del viaje',
-                        body: incoming.content || 'Tienes un nuevo mensaje',
+                        body: preview,
                         id: notificationId,
                         schedule: { at: new Date(Date.now() + 150) },
                         sound: 'alert_sound.wav',
@@ -187,6 +289,10 @@ const ChatWidget = () => {
                     }],
                 }).catch((error) => {
                     console.warn('[ride-chat] local notification failed:', error);
+                    // Si el permiso o canal nativo falla, todavía intentamos el
+                    // sonido interno para que el mensaje no llegue en silencio.
+                    void playAlertSound();
+                    vibrateIntense();
                 });
             })
             .subscribe((status) => {
