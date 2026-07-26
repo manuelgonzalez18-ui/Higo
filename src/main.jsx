@@ -4,6 +4,7 @@ import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import PassengerArrivalBanner from './components/PassengerArrivalBanner.jsx'
 import PassengerActiveRideRecovery from './components/PassengerActiveRideRecovery.jsx'
+import DriverActiveRideRecovery from './components/DriverActiveRideRecovery.jsx'
 import './index.css'
 import 'material-symbols/outlined.css'; // Offline Icons
 
@@ -22,6 +23,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <App />
         <PassengerArrivalBanner />
         <PassengerActiveRideRecovery />
+        <DriverActiveRideRecovery />
       </>
     </ErrorBoundary>
   </React.StrictMode>,
