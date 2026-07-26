@@ -20,10 +20,11 @@ export const quoteRide = async ({
     vehicleType,
     serviceType = 'ride',
     routeDistanceKm = null,
+    routeDurationMin = null,
     stopsCount = 0,
     promoCode = null,
     clientSubtotalFloor = null,
-}) => unwrap(await supabase.rpc('higo_quote_ride_v3', {
+}) => unwrap(await supabase.rpc('higo_quote_ride_v4', {
     p_pickup_lat: pickupCoords?.lat,
     p_pickup_lng: pickupCoords?.lng,
     p_dropoff_lat: dropoffCoords?.lat,
@@ -31,6 +32,7 @@ export const quoteRide = async ({
     p_vehicle_type: vehicleType,
     p_service_type: serviceType,
     p_route_distance_km: routeDistanceKm,
+    p_route_duration_min: routeDurationMin,
     p_stops_count: stopsCount,
     p_promo_code: promoCode || null,
     p_client_subtotal_floor: clientSubtotalFloor == null || clientSubtotalFloor === '' ? null : Number(clientSubtotalFloor),
@@ -45,6 +47,7 @@ export const createRideRequest = async ({
     vehicleType,
     serviceType = 'ride',
     routeDistanceKm = null,
+    routeDurationMin = null,
     stops = [],
     promoCode = null,
     passengerPhone = null,
@@ -54,7 +57,7 @@ export const createRideRequest = async ({
     termsVersion = null,
     clientSubtotalFloor = null,
 }) => {
-    const result = unwrap(await supabase.rpc('create_ride_request_v4', {
+    const result = unwrap(await supabase.rpc('create_ride_request_v5', {
         p_client_request_id: clientRequestId,
         p_pickup: pickup,
         p_dropoff: dropoff,
@@ -65,6 +68,7 @@ export const createRideRequest = async ({
         p_vehicle_type: vehicleType,
         p_service_type: serviceType,
         p_route_distance_km: routeDistanceKm,
+        p_route_duration_min: routeDurationMin,
         p_stops: stops || [],
         p_promo_code: promoCode || null,
         p_passenger_phone: passengerPhone || null,
@@ -83,6 +87,10 @@ export const createRideRequest = async ({
             stops_count: Array.isArray(stops) ? stops.length : 0,
             promo_applied: Boolean(promoCode),
             idempotent_replay: Boolean(result?.idempotentReplay),
+            pricing_version: result?.quote?.pricingVersion || null,
+            pricing_rollout_mode: result?.quote?.rolloutMode || null,
+            pricing_model_applied: Boolean(result?.quote?.modelApplied),
+            route_duration_min: routeDurationMin,
         },
     });
     return result;
