@@ -5,10 +5,14 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import InteractiveMap from '../components/InteractiveMap';
 import { triggerEmergencyAlert } from '../utils/triggerEmergencyAlert';
 import { toast } from '../components/Toast';
+import { useFabLift } from '../hooks/useFabLift';
 
 const RideStatusPage = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    // Sube la burbuja de soporte por encima de la tarjeta inferior del viaje.
+    const bottomSheetRef = useRef(null);
+    useFabLift(bottomSheetRef);
     const [ride, setRide] = useState(null);
     const [driver, setDriver] = useState(null);
     const [rating, setRating] = useState(0);
@@ -497,7 +501,7 @@ const RideStatusPage = () => {
 
 
             {/* Bottom Sheet - Driver Details */}
-            <div className={`absolute bottom-0 left-0 right-0 bg-[#1A1F2E] rounded-t-[32px] p-6 pb-8 transition-transform duration-300 z-30 ${showDriverDetails ? 'translate-y-0' : 'translate-y-[85%]'}`}>
+            <div ref={bottomSheetRef} className={`absolute bottom-0 left-0 right-0 bg-[#1A1F2E] rounded-t-[32px] p-6 pb-8 transition-transform duration-300 z-30 ${showDriverDetails ? 'translate-y-0' : 'translate-y-[85%]'}`}>
 
                 {/* Drag Handle */}
                 <div className="w-12 h-1.5 bg-gray-600/50 rounded-full mx-auto mb-6 cursor-pointer" onClick={() => setShowDriverDetails(!showDriverDetails)}></div>
