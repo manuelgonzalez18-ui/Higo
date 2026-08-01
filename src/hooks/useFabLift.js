@@ -25,10 +25,17 @@ export function useFabLift(ref, active = true) {
             return undefined;
         }
 
-        const GAP = 12; // px de aire entre la tarjeta y la burbuja
+        const GAP = 12;       // px de aire entre la tarjeta y la burbuja
+        const FLOOR = 96;     // 6rem: posición por defecto de la burbuja.
+        // Nunca bajamos por debajo del FLOOR: ahí es donde vive el chat interno
+        // conductor↔pasajero (ChatWidget, bottom-6 right-6). Si la tarjeta es
+        // baja (p.ej. bottom-sheet del pasajero colapsado o tarjeta del driver
+        // minimizada), mantenemos la posición por defecto para no tapar el chat.
+        // Solo elevamos cuando la tarjeta es alta y su borde superior queda por
+        // encima del FLOOR.
         const update = () => {
             const rect = el.getBoundingClientRect();
-            const fromBottom = Math.max(0, window.innerHeight - rect.top + GAP);
+            const fromBottom = Math.max(FLOOR, window.innerHeight - rect.top + GAP);
             root.style.setProperty('--higo-fab-bottom', `${fromBottom}px`);
         };
 
