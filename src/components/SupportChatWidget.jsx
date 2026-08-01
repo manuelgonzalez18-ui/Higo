@@ -349,7 +349,10 @@ const SupportChatWidget = () => {
     const showUnreadBadge = !isOpen && thread?.unread_for_user;
 
     return (
-        <div className="fixed bottom-24 right-6 z-40 flex flex-col items-end pointer-events-none">
+        <div
+            className="fixed right-6 z-40 flex flex-col items-end pointer-events-none"
+            style={{ bottom: 'var(--higo-fab-bottom, 6rem)' }}
+        >
             {isOpen && (
                 <div className="mb-3 w-80 md:w-96 bg-white dark:bg-[#1a2c2c] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col max-h-[500px] animate-in fade-in slide-in-from-bottom-5 pointer-events-auto">
                     <div className="p-4 bg-blue-600 text-white flex justify-between items-center">

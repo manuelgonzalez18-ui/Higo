@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { triggerEmergencyAlert } from '../../utils/triggerEmergencyAlert';
+import { useFabLift } from '../../hooks/useFabLift';
 
 // Wait fee config matching the system
 const WAIT_RATES_PER_MIN = { moto: 0.05, standard: 0.08, van: 0.10 };
@@ -28,6 +29,10 @@ const TripInfoPanel = ({
 }) => {
     const [showTripDetails, setShowTripDetails] = useState(false);
     const [isCardMinimized, setIsCardMinimized] = useState(false);
+
+    // Sube la burbuja de soporte por encima de la tarjeta inferior del viaje.
+    const bottomCardRef = useRef(null);
+    useFabLift(bottomCardRef, !!activeRide);
 
     if (!activeRide) return null;
 
@@ -100,7 +105,7 @@ const TripInfoPanel = ({
             </div>
 
             {/* Bottom Panel Container */}
-            <div className="bg-[#0F172A]/95 backdrop-blur-md rounded-[32px] p-5 shadow-2xl border border-white/10 pointer-events-auto animate-in slide-in-from-bottom-10 mt-auto">
+            <div ref={bottomCardRef} className="bg-[#0F172A]/95 backdrop-blur-md rounded-[32px] p-5 shadow-2xl border border-white/10 pointer-events-auto animate-in slide-in-from-bottom-10 mt-auto">
                 
                 {/* Drag Handle / Minimize Toggle */}
                 <div
