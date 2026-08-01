@@ -15,7 +15,15 @@ import { useEffect } from 'react';
 // real en viewport), así funciona aunque la tarjeta cambie de alto o sea un
 // bottom-sheet que se colapsa/expande. Recalcula ante resize del elemento, del
 // window y al terminar transiciones (el sheet del pasajero se desliza).
-export function useFabLift(ref, active = true) {
+//
+// Opción `fromCardHeight`: para tarjetas ancladas al fondo (p.ej. el
+// bottom-sheet del pasajero, `absolute bottom-0` dentro de un `h-screen`),
+// medimos por el ALTO real de la tarjeta (`offsetHeight`) en vez de `rect.top`.
+// Esto evita el desfase de la barra del navegador móvil (window.innerHeight ≠
+// viewport visible) que dejaba la burbuja pegada al borde de la tarjeta, y la
+// mantiene arriba aunque el sheet esté colapsado (offsetHeight no cambia con el
+// transform).
+export function useFabLift(ref, active = true, { fromCardHeight = false, gap = 12 } = {}) {
     useEffect(() => {
         const el = ref?.current;
         const root = document.documentElement;
@@ -25,7 +33,6 @@ export function useFabLift(ref, active = true) {
             return undefined;
         }
 
-        const GAP = 12;       // px de aire entre la tarjeta y la burbuja
         const FLOOR = 96;     // 6rem: posición por defecto de la burbuja.
         // Nunca bajamos por debajo del FLOOR: ahí es donde vive el chat interno
         // conductor↔pasajero (ChatWidget, bottom-6 right-6). Si la tarjeta es
@@ -34,9 +41,10 @@ export function useFabLift(ref, active = true) {
         // Solo elevamos cuando la tarjeta es alta y su borde superior queda por
         // encima del FLOOR.
         const update = () => {
-            const rect = el.getBoundingClientRect();
-            const fromBottom = Math.max(FLOOR, window.innerHeight - rect.top + GAP);
-            root.style.setProperty('--higo-fab-bottom', `${fromBottom}px`);
+            const fromBottom = fromCardHeight
+                ? el.offsetHeight + gap
+                : window.innerHeight - el.getBoundingClientRect().top + gap;
+            root.style.setProperty('--higo-fab-bottom', `${Math.max(FLOOR, fromBottom)}px`);
         };
 
         update();
@@ -52,7 +60,7 @@ export function useFabLift(ref, active = true) {
             el.removeEventListener('transitionend', update);
             root.style.removeProperty('--higo-fab-bottom');
         };
-    }, [ref, active]);
+    }, [ref, active, fromCardHeight, gap]);
 }
 
 export default useFabLift;
