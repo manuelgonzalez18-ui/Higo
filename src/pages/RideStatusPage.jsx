@@ -11,8 +11,11 @@ const RideStatusPage = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     // Sube la burbuja de soporte por encima de la tarjeta inferior del viaje.
+    // El sheet está anclado al fondo (absolute bottom-0 en un h-screen), así que
+    // medimos por su alto real para dejar la burbuja despejada sobre el mapa
+    // igual que en el driver (evita el desfase de la barra del navegador móvil).
     const bottomSheetRef = useRef(null);
-    useFabLift(bottomSheetRef);
+    useFabLift(bottomSheetRef, true, { fromCardHeight: true });
     const [ride, setRide] = useState(null);
     const [driver, setDriver] = useState(null);
     const [rating, setRating] = useState(0);
