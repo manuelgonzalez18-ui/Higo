@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import LocationInput from '../components/LocationInput';
 import InteractiveMap from '../components/InteractiveMap';
@@ -10,6 +10,7 @@ import DeliveryFormSteps from '../components/DeliveryFormSteps';
 import ProhibitedItemsModal from '../components/ProhibitedItemsModal';
 import { toast } from '../components/Toast';
 import { openLegalLink } from '../utils/openLegalLink';
+import { useFabLift } from '../hooks/useFabLift';
 import { computeFallbackQuote } from '../utils/ridePricing';
 import { TERMS_URL, PRIVACY_URL } from '../constants/legalUrls';
 
@@ -20,6 +21,9 @@ const SHOP_ENABLED = import.meta.env.VITE_SHOP_ENABLED !== 'false';
 const RequestRidePage = () => {
     const navigate = useNavigate();
     const { location: userLocation } = useGeolocation();
+    // Sube la burbuja de soporte por encima del bloque de tarjetas de servicio.
+    const serviceCardRef = useRef(null);
+    useFabLift(serviceCardRef);
 
     const [selectedRide, setSelectedRide] = useState('standard');
     const [pickup, setPickup] = useState("Ubicación Actual");
@@ -407,7 +411,7 @@ const RequestRidePage = () => {
             </header>
 
             {/* MAIN CONTENT - Floating Bottom Panel */}
-            <main className="absolute bottom-0 left-0 right-0 z-30 flex flex-col items-center pb-8 px-4 sm:px-0 pointer-events-none">
+            <main ref={serviceCardRef} className="absolute bottom-0 left-0 right-0 z-30 flex flex-col items-center pb-8 px-4 sm:px-0 pointer-events-none">
 
                 <div className="w-full max-w-md pointer-events-auto">
                     {!withinCoverage && (
