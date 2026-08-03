@@ -3,11 +3,13 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const migrationPath = new URL('../supabase/migrations/20260803150000_fair_progressive_dispatch.sql', import.meta.url);
+const raceGuardPath = new URL('../supabase/migrations/20260803150100_fair_dispatch_acceptance_race_guard.sql', import.meta.url);
 const hookPath = new URL('../src/hooks/useBackgroundLocation.js', import.meta.url);
 const pushPath = new URL('../public/api/send-ride-offer-push.php', import.meta.url);
 
-const [migration, hook, push] = await Promise.all([
+const [migration, raceGuard, hook, push] = await Promise.all([
     readFile(migrationPath, 'utf8'),
+    readFile(raceGuardPath, 'utf8'),
     readFile(hookPath, 'utf8'),
     readFile(pushPath, 'utf8'),
 ]);
@@ -35,6 +37,12 @@ test('candidate scoring balances distance, waiting and recent opportunity defici
     assert.match(migration, /offer_deficit_score/i);
     assert.match(migration, /ignored_30m < 5/i);
     assert.match(migration, /not exists \([\s\S]*active_ride[\s\S]*accepted','in_progress','arrived_at_dropoff'/i);
+});
+
+test('wave expansion locks the ride before inserting late offers', () => {
+    assert.match(raceGuard, /from public\.rides r[\s\S]*for update;/i);
+    assert.match(raceGuard, /r\.status = 'requested'/i);
+    assert.match(raceGuard, /r\.driver_id is null/i);
 });
 
 test('driver client treats directed offers as authoritative and listens in realtime', () => {
