@@ -11,11 +11,13 @@ const RideStatusPage = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     // Sube la burbuja de soporte por encima de la tarjeta inferior del viaje.
-    // El sheet está anclado al fondo (absolute bottom-0 en un h-screen), así que
-    // medimos por su alto real para dejar la burbuja despejada sobre el mapa
-    // igual que en el driver (evita el desfase de la barra del navegador móvil).
+    // Usamos el método por rect.top (igual que el driver, que quedó perfecto) —
+    // NO offsetHeight, porque el sheet vive en un h-screen (100vh) que en móvil
+    // es más alto que el viewport visible y dejaba la burbuja a media tarjeta.
+    // Como la tarjeta del pasajero es más baja que la del driver, damos un gap
+    // mayor para que quede despejada sobre el mapa, no al ras del borde.
     const bottomSheetRef = useRef(null);
-    useFabLift(bottomSheetRef, true, { fromCardHeight: true });
+    useFabLift(bottomSheetRef, true, { gap: 72 });
     const [ride, setRide] = useState(null);
     const [driver, setDriver] = useState(null);
     const [rating, setRating] = useState(0);
