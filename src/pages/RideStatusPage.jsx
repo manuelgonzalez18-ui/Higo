@@ -34,6 +34,10 @@ const RideStatusPage = () => {
     const [pickupPodSignedUrl, setPickupPodSignedUrl] = useState(null);
     const [deliveryPodSignedUrl, setDeliveryPodSignedUrl] = useState(null);
     const statusRef = useRef(null);
+    // Rastrea si el conductor ya marcó llegada al origen (arrived_at_pickup_at).
+    // El status NO cambia al marcar llegada (sigue 'accepted'), así que sin esto
+    // el pasajero nunca se enteraba de que el conductor llegó al punto de encuentro.
+    const arrivedPickupRef = useRef(false);
 
     const isDelivery = ride?.service_type === 'delivery' || !!ride?.delivery_info;
 
@@ -146,6 +150,31 @@ const RideStatusPage = () => {
 
                 const isDel = payload.new.service_type === 'delivery' || !!payload.new.delivery_info;
 
+                // Llegada al origen: el conductor marca arrived_at_pickup_at pero
+                // el status NO cambia (sigue 'accepted'), así que se detecta aparte
+                // del cambio de status (null -> con valor).
+                if (payload.new.arrived_at_pickup_at && !arrivedPickupRef.current) {
+                    arrivedPickupRef.current = true;
+                    if (navigator.vibrate) navigator.vibrate([500, 300, 500]);
+                    const arrivalBody = isDel
+                        ? "📍 ¡El conductor llegó al punto de recolección!"
+                        : "🚗 ¡Tu Higo Driver llegó al punto de encuentro!";
+                    try {
+                        await LocalNotifications.schedule({
+                            notifications: [{
+                                title: isDel ? "Higo Envíos" : "Higo",
+                                body: arrivalBody,
+                                id: new Date().getTime(),
+                                schedule: { at: new Date(Date.now()) },
+                                sound: 'beep.wav',
+                            }]
+                        });
+                    } catch (e) {
+                        console.error("Notification Error:", e);
+                    }
+                    toast.success(arrivalBody);
+                }
+
                 if (prevStatus !== newStatus) {
                     // Transition detected!
                     if (isDel) {
@@ -207,7 +236,7 @@ const RideStatusPage = () => {
                                 await LocalNotifications.schedule({
                                     notifications: [{
                                         title: "Higo",
-                                        body: "🚗 ¡Tu Higo Driver ha llegado!",
+                                        body: "🚗 ¡Tu viaje ha comenzado! Vas rumbo a tu destino.",
                                         id: new Date().getTime(),
                                         schedule: { at: new Date(Date.now()) },
                                         sound: 'beep.wav',
@@ -216,7 +245,7 @@ const RideStatusPage = () => {
                             } catch (e) {
                                 console.error("Notification Error:", e);
                             }
-                            toast.success("🔔 ¡Tu Higo Driver ha llegado!");
+                            toast.success("🚗 ¡Tu viaje ha comenzado! Vas rumbo a tu destino.");
                         }
                     }
                 }
@@ -312,6 +341,7 @@ const RideStatusPage = () => {
             setRide(data);
             
             const isDel = data.service_type === 'delivery' || !!data.delivery_info;
+            arrivedPickupRef.current = !!data.arrived_at_pickup_at;
             if (!statusRef.current) {
                 statusRef.current = data.status;
                 // If already completed on load, show modal

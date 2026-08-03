@@ -8,48 +8,17 @@ const booleanFlag = (value, fallback = 'false') => {
   return String(value).trim().toLowerCase()
 }
 
-// Hotfix acotado: RideStatusPage todavía contiene el copy histórico de
-// "llegada" dentro de la transición `in_progress`. La llegada real ahora se
-// persiste y anuncia mediante `arrived_at_pickup_at`, por lo que al comenzar el
-// viaje el mensaje correcto es "¡Tu viaje ha comenzado!". Transformamos las
-// dos cadenas exactas durante el build web/Android y fallamos si el archivo
-// cambia, evitando un reemplazo silencioso o accidental.
-const passengerTripStartedCopyHotfix = {
-  name: 'higo-passenger-trip-started-copy-hotfix',
-  enforce: 'pre',
-  transform(code, id) {
-    const normalizedId = id.replaceAll('\\', '/')
-    if (!normalizedId.endsWith('/src/pages/RideStatusPage.jsx')) return null
-
-    const replacements = [
-      [
-        'body: "🚗 ¡Tu Higo Driver ha llegado!",',
-        'body: "🚗 ¡Tu viaje ha comenzado!",',
-      ],
-      [
-        'toast.success("🔔 ¡Tu Higo Driver ha llegado!");',
-        'toast.success("🚗 ¡Tu viaje ha comenzado!");',
-      ],
-    ]
-
-    let transformed = code
-    for (const [legacyText, currentText] of replacements) {
-      const matches = transformed.split(legacyText).length - 1
-      if (matches !== 1) {
-        throw new Error(`[passenger-trip-started-copy-hotfix] Se esperaba 1 coincidencia de: ${legacyText}; encontradas: ${matches}`)
-      }
-      transformed = transformed.replace(legacyText, currentText)
-    }
-
-    return { code: transformed, map: null }
-  },
-}
+// Nota: antes había acá un hotfix de build que reemplazaba el copy histórico
+// de "llegada" en la transición `in_progress` de RideStatusPage por "¡Tu viaje
+// ha comenzado!". Ese arreglo ya está aplicado directamente en la fuente
+// (RideStatusPage.jsx), y además la llegada real al origen se detecta y anuncia
+// vía `arrived_at_pickup_at`, así que el hotfix se eliminó por redundante.
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   return {
-    plugins: [passengerTripStartedCopyHotfix, react(), tailwindcss()],
+    plugins: [react(), tailwindcss()],
     base: './',
     define: {
       'import.meta.env.VITE_SHOP_ENABLED': JSON.stringify(booleanFlag(env.VITE_SHOP_ENABLED)),
