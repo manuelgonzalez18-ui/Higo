@@ -6,6 +6,7 @@ Plataforma de movilidad + envíos de Venezuela. Stack React/Vite/Capacitor (clie
 
 - Procedimientos comunes — rollback, rotación de claves, investigación de crashes y suspensión de choferes: **[docs/OPERATIONS.md](./docs/OPERATIONS.md)**.
 - Rollout del hardening de membresías, viajes, despacho y analítica: **[docs/PLATFORM_HARDENING_ROLLOUT.md](./docs/PLATFORM_HARDENING_ROLLOUT.md)**.
+- Despacho equitativo por rondas — shadow mode, FCM dirigido, métricas y rollback: **[docs/FAIR_DISPATCH_ROLLOUT.md](./docs/FAIR_DISPATCH_ROLLOUT.md)**.
 - Reconciliación de cambios ejecutados manualmente con el historial de Supabase CLI: **[docs/SUPABASE_MIGRATION_HISTORY.md](./docs/SUPABASE_MIGRATION_HISTORY.md)**.
 
 ---

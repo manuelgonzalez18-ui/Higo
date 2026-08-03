@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { supabase } from '../services/supabase';
 import { listDirectedRideOffers } from '../services/rideApi';
@@ -13,6 +13,7 @@ const NEARBY_RADIUS_KM = 30;
 const DB_SYNC_MIN_MS = 10000;
 const DB_SYNC_MIN_METERS = 20;
 const NEARBY_POLL_MIN_MS = 30000;
+const OFFER_REFRESH_DEBOUNCE_MS = 150;
 
 export function useBackgroundLocation(profile, isOnline, activeRide, processRequests) {
     const [currentLoc, setCurrentLoc] = useState(null);
@@ -25,6 +26,7 @@ export function useBackgroundLocation(profile, isOnline, activeRide, processRequ
     const activeRideRef = useRef(activeRide);
     const lastDbSyncRef = useRef({ t: 0, lat: null, lng: null });
     const lastNearbyPollRef = useRef(0);
+    const seenDirectedOfferIdsRef = useRef(new Set());
 
     useEffect(() => {
         profileRef.current = profile;
@@ -61,13 +63,34 @@ export function useBackgroundLocation(profile, isOnline, activeRide, processRequ
         return true;
     };
 
+    const applyDirectedOffers = useCallback((offers) => {
+        const activeOffers = Array.isArray(offers) ? offers : [];
+        const activeIds = new Set(
+            activeOffers
+                .map((offer) => offer.offerId)
+                .filter((offerId) => offerId != null)
+                .map(String),
+        );
+        const unseenOffers = activeOffers.filter((offer) => {
+            if (offer.offerId == null) return false;
+            return !seenDirectedOfferIdsRef.current.has(String(offer.offerId));
+        });
+
+        seenDirectedOfferIdsRef.current = activeIds;
+        processRequests(activeOffers, true);
+        if (unseenOffers.length > 0) processRequests(unseenOffers, false);
+    }, [processRequests]);
+
     const pollRequests = async ({ latitude, longitude, currentProfile }) => {
         if (activeRideRef.current || !shouldPollNearby() || !processRequests) return;
 
         try {
             if (FEATURES.directedRideOffers) {
                 const offers = await listDirectedRideOffers(20);
-                processRequests(offers || [], false);
+                // Directed offers are authoritative. Replace the local list so
+                // expired/withdrawn offers disappear even if Realtime was lost,
+                // while still alerting for offer IDs not seen before.
+                applyDirectedOffers(offers || []);
                 return;
             }
 
@@ -86,6 +109,55 @@ export function useBackgroundLocation(profile, isOnline, activeRide, processRequ
             console.warn('[driver-location] ride polling failed:', error?.message || error);
         }
     };
+
+    // Realtime is the primary delivery path for progressive offers while the
+    // 30-second poll remains a safety net. Every INSERT/UPDATE refreshes the
+    // authoritative active-offer list, which also removes withdrawn offers as
+    // soon as another driver accepts the ride.
+    useEffect(() => {
+        if (!FEATURES.directedRideOffers
+            || !isOnline
+            || !profile?.id
+            || !processRequests) {
+            return undefined;
+        }
+
+        let stopped = false;
+        let refreshTimer = null;
+
+        const refreshOffers = async () => {
+            if (stopped || activeRideRef.current) return;
+            try {
+                const offers = await listDirectedRideOffers(20);
+                if (!stopped) applyDirectedOffers(offers || []);
+            } catch (error) {
+                console.warn('[driver-offers] realtime refresh failed:', error?.message || error);
+            }
+        };
+
+        const scheduleRefresh = () => {
+            if (refreshTimer) clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(refreshOffers, OFFER_REFRESH_DEBOUNCE_MS);
+        };
+
+        const channel = supabase
+            .channel(`driver-ride-offers:${profile.id}`)
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'ride_offers',
+                filter: `driver_id=eq.${profile.id}`,
+            }, scheduleRefresh)
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') scheduleRefresh();
+            });
+
+        return () => {
+            stopped = true;
+            if (refreshTimer) clearTimeout(refreshTimer);
+            supabase.removeChannel(channel);
+        };
+    }, [applyDirectedOffers, isOnline, profile?.id, processRequests]);
 
     useEffect(() => {
         let watcherId;
