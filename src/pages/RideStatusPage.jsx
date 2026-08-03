@@ -532,8 +532,26 @@ const RideStatusPage = () => {
                 )}
             </div>
 
-            {/* Simulated Overlay Removed */}
-
+            {/* Banner de llegada al origen: verde y prominente. Solo mientras el
+                conductor ya marcó llegada (arrived_at_pickup_at) y el viaje aún
+                no arranca (status 'accepted'). Al iniciar el viaje desaparece. */}
+            {ride?.arrived_at_pickup_at && ride?.status === 'accepted' && (
+                <div className="absolute top-24 left-4 right-4 z-20 flex justify-center animate-in fade-in slide-in-from-top-4 duration-300 pointer-events-none">
+                    <div className="bg-emerald-500 text-white rounded-2xl px-4 py-3 shadow-2xl shadow-emerald-500/40 flex items-center gap-3 max-w-md w-full">
+                        <span className="material-symbols-outlined text-3xl shrink-0">directions_car</span>
+                        <div className="min-w-0">
+                            <p className="font-extrabold leading-tight text-[15px]">
+                                {isDelivery ? '¡El conductor llegó a recolectar!' : '¡Tu Higo Driver llegó!'}
+                            </p>
+                            <p className="text-xs text-white/90 leading-snug">
+                                {isDelivery
+                                    ? 'Te espera en el punto de recolección · 3 min de espera sin costo'
+                                    : 'Te espera en el punto de encuentro · 3 min de espera sin costo'}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Bottom Sheet - Driver Details */}
             <div ref={bottomSheetRef} className={`absolute bottom-0 left-0 right-0 bg-[#1A1F2E] rounded-t-[32px] p-6 pb-8 transition-transform duration-300 z-30 ${showDriverDetails ? 'translate-y-0' : 'translate-y-[85%]'}`}>
