@@ -86,6 +86,13 @@ jobs:
       - name: Test ride pricing
         run: node --test tests/ridePricing.test.mjs
 
+      # Suite de vitest (pricing, geoUtils, shopMoney). Antes no corría en CI:
+      # la config de vitest se rompió y los 44 tests dejaron de ejecutarse sin
+      # que nada lo detectara, porque el Quality Gate solo corría los dos
+      # node --test de arriba.
+      - name: Vitest suite
+        run: npx vitest run
+
       - name: Production build
         env:
           VITE_SHOP_ENABLED: 'false'
