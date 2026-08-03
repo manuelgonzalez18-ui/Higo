@@ -172,7 +172,8 @@ const RideStatusPage = () => {
                     } catch (e) {
                         console.error("Notification Error:", e);
                     }
-                    toast.success(arrivalBody);
+                    // Sin toast: el aviso visual lo da el banner de llegada
+                    // (evita el choque de dos mensajes a la vez).
                 }
 
                 if (prevStatus !== newStatus) {
@@ -245,7 +246,8 @@ const RideStatusPage = () => {
                             } catch (e) {
                                 console.error("Notification Error:", e);
                             }
-                            toast.success("🚗 ¡Tu viaje ha comenzado! Vas rumbo a tu destino.");
+                            // Sin toast: el aviso visual lo da el banner de viaje
+                            // iniciado (mismo estilo que el de llegada).
                         }
                     }
                 }
@@ -547,6 +549,24 @@ const RideStatusPage = () => {
                                 {isDelivery
                                     ? 'Te espera en el punto de recolección · 3 min de espera sin costo'
                                     : 'Te espera en el punto de encuentro · 3 min de espera sin costo'}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Banner de viaje iniciado: mismo estilo nativo que el de llegada.
+                Aparece cuando el viaje arranca (status 'in_progress'). */}
+            {ride?.status === 'in_progress' && (
+                <div className="absolute top-24 left-4 right-4 z-20 flex justify-center animate-in fade-in slide-in-from-top-4 duration-300 pointer-events-none">
+                    <div className="bg-blue-600 text-white rounded-2xl px-4 py-3 shadow-2xl shadow-blue-500/40 flex items-center gap-3 max-w-md w-full">
+                        <span className="material-symbols-outlined text-3xl shrink-0">{isDelivery ? 'local_shipping' : 'directions_car'}</span>
+                        <div className="min-w-0">
+                            <p className="font-extrabold leading-tight text-[15px]">
+                                {isDelivery ? '¡Tu paquete va en camino!' : '¡Tu viaje ha comenzado!'}
+                            </p>
+                            <p className="text-xs text-white/90 leading-snug">
+                                {isDelivery ? 'El conductor se dirige al destino de entrega' : 'Vas rumbo a tu destino'}
                             </p>
                         </div>
                     </div>
