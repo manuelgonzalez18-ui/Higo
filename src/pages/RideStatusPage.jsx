@@ -10,16 +10,16 @@ import { useFabLift } from '../hooks/useFabLift';
 const RideStatusPage = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    // Sube la burbuja de soporte por encima de la tarjeta inferior del viaje.
-    // Usamos el método por rect.top (igual que el driver, que quedó perfecto) —
-    // NO offsetHeight, porque el sheet vive en un h-screen (100vh) que en móvil
-    // es más alto que el viewport visible y dejaba la burbuja a media tarjeta.
-    // Como la tarjeta del pasajero es más baja que la del driver, damos un gap
-    // mayor para que quede despejada sobre el mapa, no al ras del borde.
     const bottomSheetRef = useRef(null);
-    useFabLift(bottomSheetRef, true, { gap: 72 });
     const [ride, setRide] = useState(null);
     const [driver, setDriver] = useState(null);
+    // Sube la burbuja de soporte por encima de la tarjeta inferior del viaje.
+    // Método por rect.top (igual que el driver, que quedó perfecto) con gap mayor
+    // porque la tarjeta del pasajero es más baja. IMPORTANTE: se activa con
+    // !!ride — RideStatusPage hace `if (!ride) return <Loading>` antes de
+    // renderizar el sheet, así que sin este gate el efecto corría con ref=null
+    // (sheet aún no montado) y nunca medía la tarjeta (bug: la burbuja no subía).
+    useFabLift(bottomSheetRef, !!ride, { gap: 72 });
     const [rating, setRating] = useState(0);
     const [feedback, setFeedback] = useState("");
     const [submitted, setSubmitted] = useState(false);
