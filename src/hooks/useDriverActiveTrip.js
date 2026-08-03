@@ -149,24 +149,51 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
 
     useEffect(() => {
         if (!activeRide?.id) return;
+        const rideId = activeRide.id;
+
+        const handleCancelledByPassenger = () => {
+            navigator.vibrate?.([1000, 500, 1000]);
+            speak('El viaje fue cancelado por el pasajero.');
+            toast.error('El pasajero canceló el viaje.');
+            closeRide();
+        };
+
         const channel = supabase
-            .channel(`ride-state:${activeRide.id}`)
+            .channel(`ride-state:${rideId}`)
             .on('postgres_changes', {
                 event: 'UPDATE',
                 schema: 'public',
                 table: 'rides',
-                filter: `id=eq.${activeRide.id}`,
+                filter: `id=eq.${rideId}`,
             }, (payload) => {
                 setActiveRide((current) => current ? { ...current, ...payload.new } : payload.new);
                 if (payload.new.status === 'cancelled') {
-                    navigator.vibrate?.([1000, 500, 1000]);
-                    speak('El viaje fue cancelado por el pasajero.');
-                    toast.error('El pasajero canceló el viaje.');
-                    closeRide();
+                    handleCancelledByPassenger();
                 }
             })
             .subscribe();
-        return () => supabase.removeChannel(channel);
+
+        // Red de seguridad: si el conductor estaba en segundo plano cuando el
+        // pasajero canceló, el evento de realtime pudo perderse (no se reenvía).
+        // Al volver al frente re-consultamos el estado real y cerramos el viaje
+        // si ya fue cancelado, para que no quede pegado en un viaje muerto.
+        const resyncOnForeground = async () => {
+            if (document.visibilityState !== 'visible') return;
+            const { data } = await supabase
+                .from('rides')
+                .select('status')
+                .eq('id', rideId)
+                .single();
+            if (data?.status === 'cancelled') {
+                handleCancelledByPassenger();
+            }
+        };
+        document.addEventListener('visibilitychange', resyncOnForeground);
+
+        return () => {
+            supabase.removeChannel(channel);
+            document.removeEventListener('visibilitychange', resyncOnForeground);
+        };
     }, [activeRide?.id, speak]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const closeRide = useCallback(() => {
