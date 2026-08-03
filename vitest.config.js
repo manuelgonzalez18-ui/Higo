@@ -12,8 +12,17 @@
 import { defineConfig, mergeConfig } from 'vitest/config';
 import viteConfig from './vite.config.js';
 
+// vite.config.js exporta una FUNCIÓN (recibe { command, mode } para leer las
+// env vars con loadEnv). mergeConfig no sabe fusionar un callback y aborta con
+// "Cannot merge config in form of callback", dejando la suite sin correr. Lo
+// resolvemos acá invocándolo con el entorno de test para obtener el objeto de
+// configuración real antes de fusionar.
+const resolvedViteConfig = typeof viteConfig === 'function'
+    ? viteConfig({ command: 'serve', mode: 'test' })
+    : viteConfig;
+
 export default mergeConfig(
-    viteConfig,
+    resolvedViteConfig,
     defineConfig({
         test: {
             globals: true,
