@@ -537,7 +537,7 @@ const RideStatusPage = () => {
                 no arranca (status 'accepted'). Al iniciar el viaje desaparece. */}
             {ride?.arrived_at_pickup_at && ride?.status === 'accepted' && (
                 <div className="absolute top-24 left-4 right-4 z-20 flex justify-center animate-in fade-in slide-in-from-top-4 duration-300 pointer-events-none">
-                    <div className="bg-emerald-500 text-white rounded-2xl px-4 py-3 shadow-2xl shadow-emerald-500/40 flex items-center gap-3 max-w-md w-full">
+                    <div className="bg-blue-600 text-white rounded-2xl px-4 py-3 shadow-2xl shadow-blue-500/40 flex items-center gap-3 max-w-md w-full">
                         <span className="material-symbols-outlined text-3xl shrink-0">directions_car</span>
                         <div className="min-w-0">
                             <p className="font-extrabold leading-tight text-[15px]">
