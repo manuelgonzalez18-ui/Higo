@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => {
     base: './',
     define: {
       'import.meta.env.VITE_SHOP_ENABLED': JSON.stringify(booleanFlag(env.VITE_SHOP_ENABLED)),
-      'import.meta.env.VITE_SERVER_SIDE_RIDE_PRICING': JSON.stringify(booleanFlag(env.VITE_SERVER_SIDE_RIDE_PRICING)),
+      'import.meta.env.VITE_SERVER_SIDE_RIDE_PRICING': JSON.stringify(booleanFlag(env.VITE_SERVER_SIDE_RIDE_PRICING, 'true')),
       'import.meta.env.VITE_SERVER_SIDE_RIDE_STATE': JSON.stringify(booleanFlag(env.VITE_SERVER_SIDE_RIDE_STATE)),
       'import.meta.env.VITE_UNIFIED_MEMBERSHIP_CHECKOUT': JSON.stringify(booleanFlag(env.VITE_UNIFIED_MEMBERSHIP_CHECKOUT)),
       'import.meta.env.VITE_DIRECTED_RIDE_OFFERS': JSON.stringify(booleanFlag(env.VITE_DIRECTED_RIDE_OFFERS)),
