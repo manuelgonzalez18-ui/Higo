@@ -118,3 +118,5 @@ export const overrideAdminRideStatus = async ({ rideId, targetStatus, reason }) 
           git add src/App.jsx src/components/AdminNav.jsx src/services/adminApi.js .github/workflows/one-shot-admin-rides-integration.yml
           git commit -m 'feat(admin): integrate Higo Viajes navigation and APIs'
           git push origin HEAD:agent/admin-rides-operations
+
+# Second push intentionally triggers this workflow after the file already exists on the branch.
