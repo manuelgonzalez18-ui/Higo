@@ -10,6 +10,7 @@ const ITEMS = [
     { to: '/admin/driver-applications', label: 'Solicitudes drivers', icon: 'assignment_ind', group: 'Principal', permissions: ['manage_drivers'] },
     { to: '/admin/drivers', label: 'Drivers y membresías', icon: 'badge', group: 'Principal', permissions: ['manage_memberships', 'manage_drivers'] },
     { to: '/admin/analytics', label: 'Analítica', icon: 'monitoring', group: 'Principal', permissions: ['view_analytics'] },
+    { to: '/admin/rides', label: 'Viajes', icon: 'route', group: 'Operación', permissions: ['manage_operations'], hardReload: true },
     { to: '/admin/deliveries', label: 'Envíos', icon: 'inventory_2', group: 'Operación', permissions: ['manage_operations'] },
     { to: '/admin/disputes', label: 'Disputas', icon: 'report', group: 'Operación', permissions: ['manage_disputes'] },
     { to: '/admin/support', label: 'Soporte', icon: 'support_agent', group: 'Operación', permissions: ['manage_support'], badge: 'support' },
@@ -65,13 +66,18 @@ export default function AdminNav() {
                     {items.map(item => {
                         const active = pathname === item.to;
                         const badge = item.badge === 'support' ? supportUnread : 0;
-                        return (
-                            <Link key={item.to} to={item.to} onClick={() => setOpen(false)}
-                                className={`relative flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-colors ${active ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
+                        const className = `relative flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-colors ${active ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'}`;
+                        const content = (
+                            <>
                                 <span className="material-symbols-outlined text-[18px]">{item.icon}</span>
                                 <span>{item.label}</span>
                                 {badge > 0 && <span className="min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center">{badge > 99 ? '99+' : badge}</span>}
-                            </Link>
+                            </>
+                        );
+                        return item.hardReload ? (
+                            <a key={item.to} href={`/#${item.to}`} onClick={() => setOpen(false)} className={className}>{content}</a>
+                        ) : (
+                            <Link key={item.to} to={item.to} onClick={() => setOpen(false)} className={className}>{content}</Link>
                         );
                     })}
                 </div>

@@ -10,7 +10,14 @@
 
 <body>
   <div id="root"></div>
-  <script type="module" src="/src/main.jsx"></script>
+  <script type="module">
+    const route = window.location.hash.split('?')[0];
+    if (route === '#/admin/rides') {
+      import('/src/adminRidesEntry.jsx');
+    } else {
+      import('/src/main.jsx');
+    }
+  </script>
 </body>
 
 </html>

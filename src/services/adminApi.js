@@ -10,6 +10,46 @@ export const getAdminDashboardMetrics = async () => unwrap(await supabase.rpc('a
 export const getAdminAnalytics = async (days = 30) => unwrap(await supabase.rpc('admin_business_analytics', { p_days: days }));
 export const getAdminPlatformFunnel = async (days = 30) => unwrap(await supabase.rpc('admin_platform_funnel', { p_days: days }));
 
+export const listAdminRides = async ({
+    statusBucket = 'active',
+    dateFrom = null,
+    dateTo = null,
+    query = '',
+    vehicleType = '',
+    hasPromo = null,
+    hasIncident = null,
+    limit = 50,
+    cursor = null,
+} = {}) => unwrap(await supabase.rpc('admin_list_rides', {
+    p_status_bucket: statusBucket,
+    p_date_from: dateFrom,
+    p_date_to: dateTo,
+    p_query: query || null,
+    p_vehicle_type: vehicleType || null,
+    p_has_promo: hasPromo,
+    p_has_incident: hasIncident,
+    p_limit: limit,
+    p_cursor_created_at: cursor?.createdAt || null,
+    p_cursor_id: cursor?.id || null,
+}));
+
+export const getAdminRideDetail = async (rideId) => unwrap(await supabase.rpc('admin_get_ride_detail', {
+    p_ride_id: Number(rideId),
+}));
+
+export const getAdminRideMetrics = async ({ dateFrom = null, dateTo = null } = {}) =>
+    unwrap(await supabase.rpc('admin_ride_operations_metrics', {
+        p_date_from: dateFrom,
+        p_date_to: dateTo,
+    }));
+
+export const overrideAdminRideStatus = async ({ rideId, targetStatus, reason }) =>
+    unwrap(await supabase.rpc('admin_override_ride_status', {
+        p_ride_id: Number(rideId),
+        p_target_status: targetStatus,
+        p_reason: reason,
+    }));
+
 export const listMembershipPlans = async () => unwrap(await supabase
     .from('driver_membership_plans')
     .select('*')
