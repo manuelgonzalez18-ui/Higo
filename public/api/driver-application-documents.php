@@ -13,6 +13,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     da_send(405, ['ok' => false, 'error' => 'method_not_allowed']);
 }
 
+$contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+if ($contentLength > 41943040 || ($contentLength > 0 && empty($_POST) && empty($_FILES))) {
+    da_send(413, ['ok' => false, 'error' => 'request_too_large']);
+}
+
 $token = trim((string) ($_POST['token'] ?? ''));
 if (!preg_match('/^[A-Za-z0-9_-]{40,64}$/', $token)) {
     da_send(401, ['ok' => false, 'error' => 'invalid_or_expired_token']);
@@ -20,6 +25,7 @@ if (!preg_match('/^[A-Za-z0-9_-]{40,64}$/', $token)) {
 $tokenHash = hash('sha256', $token);
 
 $allowedFields = [
+    'profile_photo' => 'profile_photo',
     'identity' => 'identity',
     'driver_license' => 'driver_license',
     'vehicle_registration' => 'vehicle_registration',
@@ -29,7 +35,7 @@ $allowedFields = [
     'payment_details' => 'payment_details',
     'other' => 'other',
 ];
-$requiredTypes = ['identity', 'driver_license', 'vehicle_registration', 'rcv', 'vehicle_photo'];
+$requiredTypes = ['profile_photo', 'identity', 'driver_license', 'vehicle_registration', 'rcv', 'vehicle_photo'];
 $allowedMime = [
     'image/jpeg' => 'jpg',
     'image/png' => 'png',
@@ -57,11 +63,11 @@ foreach ($allowedFields as $field => $documentType) {
     if (!isset($allowedMime[$mime])) {
         da_send(422, ['ok' => false, 'error' => 'invalid_file_type', 'detail' => $field]);
     }
-    if ($field === 'vehicle_photo' && $mime === 'application/pdf') {
+    if (in_array($field, ['profile_photo', 'vehicle_photo'], true) && $mime === 'application/pdf') {
         da_send(422, ['ok' => false, 'error' => 'invalid_file_type', 'detail' => $field]);
     }
     $totalSize += $size;
-    if ($totalSize > 31457280) da_send(422, ['ok' => false, 'error' => 'total_upload_too_large']);
+    if ($totalSize > 31457280) da_send(413, ['ok' => false, 'error' => 'total_upload_too_large']);
     $presentTypes[$documentType] = true;
     $prepared[] = [
         'field' => $field,
