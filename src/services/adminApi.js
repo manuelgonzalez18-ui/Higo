@@ -126,10 +126,30 @@ const DRIVER_APPLICATION_ERRORS = {
 };
 
 const friendlyAdminError = (result, status) => {
-    const raw = String(result.detail || result.error || '');
+    const detail = String(result.detail || '').trim();
+    const raw = String(detail || result.error || '');
+
+    if (result.error === 'profile_insert_failed') {
+        const lower = detail.toLowerCase();
+        if (lower.includes('license_plate') || lower.includes('placa')) {
+            return 'Ya existe un driver registrado con esa placa. Verifica la flota antes de continuar.';
+        }
+        if (lower.includes('phone') || lower.includes('teléfono') || lower.includes('telefono')) {
+            return 'Ya existe un perfil registrado con ese número de teléfono.';
+        }
+        if (lower.includes('email')) {
+            return 'Ya existe un perfil registrado con ese correo electrónico.';
+        }
+    }
+
     const matched = Object.entries(DRIVER_APPLICATION_ERRORS)
         .find(([code]) => raw.includes(code) || result.error === code);
-    return matched?.[1] || raw || `Solicitud administrativa fallida (HTTP ${status}).`;
+    if (matched) {
+        return detail && result.error === 'profile_insert_failed'
+            ? `${matched[1]} Detalle: ${detail.slice(0, 180)}`
+            : matched[1];
+    }
+    return raw || `Solicitud administrativa fallida (HTTP ${status}).`;
 };
 
 const postAdminApi = async (path, payload) => {
