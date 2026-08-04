@@ -14,15 +14,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
 }
 
 $contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
-if ($contentLength > 41943040 || ($contentLength > 0 && empty($_POST) && empty($_FILES))) {
+if ($contentLength > 52428800) {
     da_send(413, ['ok' => false, 'error' => 'request_too_large']);
 }
-
-$token = trim((string) ($_POST['token'] ?? ''));
-if (!preg_match('/^[A-Za-z0-9_-]{40,64}$/', $token)) {
-    da_send(401, ['ok' => false, 'error' => 'invalid_or_expired_token']);
-}
-$tokenHash = hash('sha256', $token);
 
 $allowedFields = [
     'profile_photo' => 'profile_photo',
@@ -42,44 +36,114 @@ $allowedMime = [
     'image/webp' => 'webp',
     'application/pdf' => 'pdf',
 ];
-$totalSize = 0;
+
+$contentType = strtolower((string) ($_SERVER['CONTENT_TYPE'] ?? ''));
+$jsonMode = str_contains($contentType, 'application/json');
+$token = '';
 $prepared = [];
 $presentTypes = [];
+$totalSize = 0;
 $finfo = new finfo(FILEINFO_MIME_TYPE);
 
-foreach ($allowedFields as $field => $documentType) {
-    if (!isset($_FILES[$field]) || !is_array($_FILES[$field])) continue;
-    $file = $_FILES[$field];
-    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) continue;
-    if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
-        da_send(422, ['ok' => false, 'error' => 'upload_failed', 'detail' => $field]);
+if ($jsonMode) {
+    $raw = file_get_contents('php://input');
+    $payload = is_string($raw) && $raw !== '' ? json_decode($raw, true) : null;
+    if (!is_array($payload)) {
+        da_send(400, ['ok' => false, 'error' => 'invalid_json']);
     }
-    $tmp = (string) ($file['tmp_name'] ?? '');
-    $size = (int) ($file['size'] ?? 0);
-    if (!is_uploaded_file($tmp) || $size <= 0 || $size > 8388608) {
-        da_send(422, ['ok' => false, 'error' => 'invalid_file_size', 'detail' => $field]);
+    $token = trim((string) ($payload['token'] ?? ''));
+    $files = $payload['files'] ?? null;
+    if (!is_array($files)) {
+        da_send(422, ['ok' => false, 'error' => 'no_documents']);
     }
-    $mime = (string) $finfo->file($tmp);
-    if (!isset($allowedMime[$mime])) {
-        da_send(422, ['ok' => false, 'error' => 'invalid_file_type', 'detail' => $field]);
+
+    foreach ($allowedFields as $field => $documentType) {
+        $entry = $files[$field] ?? null;
+        if (!is_array($entry)) continue;
+
+        $encoded = (string) ($entry['data_base64'] ?? '');
+        $binary = $encoded !== '' ? base64_decode($encoded, true) : false;
+        if (!is_string($binary) || $binary === '') {
+            da_send(422, ['ok' => false, 'error' => 'upload_failed', 'detail' => $field]);
+        }
+
+        $size = strlen($binary);
+        $declaredSize = (int) ($entry['size'] ?? $size);
+        if ($size <= 0 || $size > 8388608 || $declaredSize !== $size) {
+            da_send(422, ['ok' => false, 'error' => 'invalid_file_size', 'detail' => $field]);
+        }
+
+        $mime = (string) $finfo->buffer($binary);
+        if (!isset($allowedMime[$mime])) {
+            da_send(422, ['ok' => false, 'error' => 'invalid_file_type', 'detail' => $field]);
+        }
+        if (in_array($field, ['profile_photo', 'vehicle_photo'], true) && $mime === 'application/pdf') {
+            da_send(422, ['ok' => false, 'error' => 'invalid_file_type', 'detail' => $field]);
+        }
+
+        $totalSize += $size;
+        if ($totalSize > 31457280) {
+            da_send(413, ['ok' => false, 'error' => 'total_upload_too_large']);
+        }
+
+        $presentTypes[$documentType] = true;
+        $prepared[] = [
+            'field' => $field,
+            'document_type' => $documentType,
+            'binary' => $binary,
+            'size' => $size,
+            'mime' => $mime,
+            'extension' => $allowedMime[$mime],
+            'name' => substr(basename((string) ($entry['name'] ?? $field)), 0, 180),
+        ];
     }
-    if (in_array($field, ['profile_photo', 'vehicle_photo'], true) && $mime === 'application/pdf') {
-        da_send(422, ['ok' => false, 'error' => 'invalid_file_type', 'detail' => $field]);
+} else {
+    // PHP may expose text fields while suppressing file uploads when file_uploads
+    // is disabled. Multipart remains supported for conventional PHP hosting, but
+    // Higo Driver uses JSON transport in production so the Node-hosted site does
+    // not depend on $_FILES.
+    if ($contentLength > 0 && empty($_POST) && empty($_FILES)) {
+        da_send(413, ['ok' => false, 'error' => 'request_too_large']);
     }
-    $totalSize += $size;
-    if ($totalSize > 31457280) da_send(413, ['ok' => false, 'error' => 'total_upload_too_large']);
-    $presentTypes[$documentType] = true;
-    $prepared[] = [
-        'field' => $field,
-        'document_type' => $documentType,
-        'tmp' => $tmp,
-        'size' => $size,
-        'mime' => $mime,
-        'extension' => $allowedMime[$mime],
-        'name' => substr(basename((string) ($file['name'] ?? $field)), 0, 180),
-    ];
+
+    $token = trim((string) ($_POST['token'] ?? ''));
+    foreach ($allowedFields as $field => $documentType) {
+        if (!isset($_FILES[$field]) || !is_array($_FILES[$field])) continue;
+        $file = $_FILES[$field];
+        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) continue;
+        if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+            da_send(422, ['ok' => false, 'error' => 'upload_failed', 'detail' => $field]);
+        }
+        $tmp = (string) ($file['tmp_name'] ?? '');
+        $size = (int) ($file['size'] ?? 0);
+        if (!is_uploaded_file($tmp) || $size <= 0 || $size > 8388608) {
+            da_send(422, ['ok' => false, 'error' => 'invalid_file_size', 'detail' => $field]);
+        }
+        $mime = (string) $finfo->file($tmp);
+        if (!isset($allowedMime[$mime])) {
+            da_send(422, ['ok' => false, 'error' => 'invalid_file_type', 'detail' => $field]);
+        }
+        if (in_array($field, ['profile_photo', 'vehicle_photo'], true) && $mime === 'application/pdf') {
+            da_send(422, ['ok' => false, 'error' => 'invalid_file_type', 'detail' => $field]);
+        }
+        $totalSize += $size;
+        if ($totalSize > 31457280) da_send(413, ['ok' => false, 'error' => 'total_upload_too_large']);
+        $presentTypes[$documentType] = true;
+        $prepared[] = [
+            'field' => $field,
+            'document_type' => $documentType,
+            'tmp' => $tmp,
+            'size' => $size,
+            'mime' => $mime,
+            'extension' => $allowedMime[$mime],
+            'name' => substr(basename((string) ($file['name'] ?? $field)), 0, 180),
+        ];
+    }
 }
 
+if (!preg_match('/^[A-Za-z0-9_-]{40,64}$/', $token)) {
+    da_send(401, ['ok' => false, 'error' => 'invalid_or_expired_token']);
+}
 if (!$prepared) da_send(422, ['ok' => false, 'error' => 'no_documents']);
 foreach ($requiredTypes as $requiredType) {
     if (empty($presentTypes[$requiredType])) {
@@ -87,6 +151,7 @@ foreach ($requiredTypes as $requiredType) {
     }
 }
 
+$tokenHash = hash('sha256', $token);
 [$claimStatus, $claimBody] = bl_http_post(
     $cfg['_supabase_url'] . '/rest/v1/rpc/higo_claim_driver_application_upload_token',
     (string) json_encode(['p_token_hash' => $tokenHash]),
@@ -109,8 +174,8 @@ $uploaded = [];
 try {
     foreach ($prepared as $file) {
         $objectPath = $applicationCode . '/' . $file['document_type'] . '/' . bin2hex(random_bytes(16)) . '.' . $file['extension'];
-        $binary = file_get_contents($file['tmp']);
-        if ($binary === false) throw new RuntimeException('file_read_failed:' . $file['field']);
+        $binary = isset($file['binary']) ? (string) $file['binary'] : file_get_contents((string) $file['tmp']);
+        if (!is_string($binary) || $binary === '') throw new RuntimeException('file_read_failed:' . $file['field']);
 
         [$storageStatus, $storageBody] = bl_http_post(
             $cfg['_supabase_url'] . '/storage/v1/object/driver-applications/' . $objectPath,
