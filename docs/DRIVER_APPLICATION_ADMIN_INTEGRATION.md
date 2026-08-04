@@ -74,6 +74,26 @@ En `/Private/smtp-config.php`, agregar:
 
 El valor debe ser exactamente el mismo en ambos hostings.
 
+## SMTP autenticado para correos administrativos
+
+Los correos generados desde el panel administrativo —cambios de estado, solicitud de documentos, correcciones, aprobación, rechazo y bienvenida— se envían mediante SMTP autenticado. No se utiliza `mail()`, porque el servidor local puede aceptar un mensaje sin entregarlo y producir un falso `email_sent = true`.
+
+En `/private/higo-banesco.php` de `higoapp.com`, agregar las credenciales del buzón real:
+
+```php
+'DRIVER_SMTP_HOST' => 'smtp.hostinger.com',
+'DRIVER_SMTP_PORT' => 465,
+'DRIVER_SMTP_USERNAME' => 'admin@higodriver.com',
+'DRIVER_SMTP_PASSWORD' => 'CONTRASEÑA_REAL_DEL_BUZON',
+'DRIVER_SMTP_FROM_EMAIL' => 'admin@higodriver.com',
+'DRIVER_SMTP_FROM_NAME' => 'Higo Driver',
+'DRIVER_SMTP_EHLO' => 'higoapp.com',
+```
+
+También se admite el puerto `587` con STARTTLS. El remitente debe coincidir con el buzón autenticado para evitar rechazos de Hostinger. Nunca versionar ni compartir la contraseña.
+
+Cuando la configuración falta, la autenticación falla o el servidor SMTP rechaza el mensaje, el endpoint mantiene el cambio administrativo pero devuelve `email_sent = false` y registra un error con el prefijo `[driver-email]` sin exponer credenciales.
+
 ## Orden seguro de despliegue
 
 1. Fusionar y desplegar Higo App.
@@ -82,11 +102,12 @@ El valor debe ser exactamente el mismo en ambos hostings.
 4. Configurar `DRIVER_APPLICATION_INGEST_SECRET` en higoapp.com.
 5. Confirmar que `https://higoapp.com/api/driver-applications-ingest.php` responde `method_not_allowed` al abrirlo por GET. Esto confirma que el endpoint existe sin revelar información.
 6. Configurar `higo_app_ingest_secret` en higodriver.com.
-7. Fusionar y desplegar Higo Driver.
-8. Purgar caché de Hostinger.
-9. Realizar un único pre-registro de prueba.
-10. Confirmar que aparece en `#/admin/driver-applications`.
-11. Probar el flujo completo con archivos de prueba no sensibles:
+7. Configurar `DRIVER_SMTP_*` en higoapp.com para los correos administrativos.
+8. Fusionar y desplegar Higo Driver.
+9. Purgar caché de Hostinger.
+10. Realizar un único pre-registro de prueba.
+11. Confirmar que aparece en `#/admin/driver-applications`.
+12. Probar el flujo completo con archivos de prueba no sensibles:
     - iniciar revisión;
     - solicitar documentos;
     - cargar los cinco requisitos principales;

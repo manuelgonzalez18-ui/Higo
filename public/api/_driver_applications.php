@@ -105,16 +105,180 @@ function da_fetch_application(array $cfg, string $applicationCode): ?array {
     return isset($rows[0]) && is_array($rows[0]) ? $rows[0] : null;
 }
 
+/**
+ * Envía correos administrativos de Higo Driver mediante SMTP autenticado.
+ *
+ * La configuración vive en el mismo archivo privado que usa banesco-core.php:
+ * DRIVER_SMTP_HOST, DRIVER_SMTP_PORT, DRIVER_SMTP_USERNAME,
+ * DRIVER_SMTP_PASSWORD, DRIVER_SMTP_FROM_EMAIL y DRIVER_SMTP_FROM_NAME.
+ * No se usa mail(): en el hosting puede aceptar el mensaje localmente sin
+ * entregarlo y producir falsos positivos en email_sent.
+ */
 function da_send_email(string $to, string $subject, string $html, string $replyTo = 'admin@higoapp.com'): bool {
-    $safeTo = str_replace(["\r", "\n", "\0"], '', $to);
-    $safeReply = str_replace(["\r", "\n", "\0"], '', $replyTo);
-    if (!filter_var($safeTo, FILTER_VALIDATE_EMAIL)) return false;
-    $encodedSubject = '=?UTF-8?B?' . base64_encode($subject) . '?=';
-    $headers = "From: Higo Driver <noreply@higoapp.com>\r\n"
-        . 'Reply-To: ' . $safeReply . "\r\n"
-        . "MIME-Version: 1.0\r\n"
-        . "Content-Type: text/html; charset=UTF-8\r\n";
-    return @mail($safeTo, $encodedSubject, $html, $headers);
+    try {
+        $cfg = bl_load_config();
+    } catch (Throwable $e) {
+        error_log('[driver-email] private config unavailable: ' . $e->getMessage());
+        return false;
+    }
+
+    $host = trim((string) ($cfg['DRIVER_SMTP_HOST'] ?? ''));
+    $port = (int) ($cfg['DRIVER_SMTP_PORT'] ?? 465);
+    $username = trim((string) ($cfg['DRIVER_SMTP_USERNAME'] ?? ''));
+    $password = (string) ($cfg['DRIVER_SMTP_PASSWORD'] ?? '');
+    $from = trim((string) ($cfg['DRIVER_SMTP_FROM_EMAIL'] ?? $username));
+    $fromName = trim((string) ($cfg['DRIVER_SMTP_FROM_NAME'] ?? 'Higo Driver'));
+    $ehlo = trim((string) ($cfg['DRIVER_SMTP_EHLO'] ?? 'higoapp.com'));
+
+    $safeTo = str_replace(["\r", "\n", "\0"], '', trim($to));
+    $safeReply = str_replace(["\r", "\n", "\0"], '', trim($replyTo));
+    $safeFrom = str_replace(["\r", "\n", "\0"], '', $from);
+    $safeFromName = str_replace(["\r", "\n", "\0"], '', $fromName);
+    $safeSubject = str_replace(["\r", "\n", "\0"], ' ', $subject);
+
+    if ($host === '' || $username === '' || $password === '') {
+        error_log('[driver-email] SMTP config incomplete');
+        return false;
+    }
+    if (!in_array($port, [465, 587], true)) {
+        error_log('[driver-email] unsupported SMTP port: ' . $port);
+        return false;
+    }
+    if (!filter_var($safeTo, FILTER_VALIDATE_EMAIL)
+        || !filter_var($safeFrom, FILTER_VALIDATE_EMAIL)
+        || !filter_var($safeReply, FILTER_VALIDATE_EMAIL)) {
+        error_log('[driver-email] invalid email address');
+        return false;
+    }
+
+    $transport = $port === 465 ? 'ssl://' : 'tcp://';
+    $context = stream_context_create(['ssl' => [
+        'verify_peer' => true,
+        'verify_peer_name' => true,
+        'SNI_enabled' => true,
+        'peer_name' => $host,
+    ]]);
+    $socket = @stream_socket_client(
+        $transport . $host . ':' . $port,
+        $errno,
+        $errstr,
+        15,
+        STREAM_CLIENT_CONNECT,
+        $context
+    );
+    if (!$socket) {
+        error_log('[driver-email] SMTP connection failed ' . $errno . ': ' . $errstr);
+        return false;
+    }
+    stream_set_timeout($socket, 30);
+
+    $read = static function ($stream): string {
+        $output = '';
+        while (($line = fgets($stream, 2048)) !== false) {
+            $output .= $line;
+            if (isset($line[3]) && $line[3] === ' ') break;
+        }
+        return $output;
+    };
+    $write = static function ($stream, string $command): bool {
+        return fwrite($stream, $command . "\r\n") !== false;
+    };
+    $expect = static function (string $response, array $codes, string $stage): bool {
+        foreach ($codes as $code) {
+            if (str_starts_with($response, $code)) return true;
+        }
+        error_log('[driver-email] SMTP ' . $stage . ' failed: ' . trim($response));
+        return false;
+    };
+    $abort = static function ($stream): void {
+        if (is_resource($stream)) fclose($stream);
+    };
+
+    if (!$expect($read($socket), ['220'], 'greeting')) { $abort($socket); return false; }
+    if (!$write($socket, 'EHLO ' . ($ehlo !== '' ? $ehlo : 'higoapp.com'))
+        || !$expect($read($socket), ['250'], 'EHLO')) {
+        $abort($socket);
+        return false;
+    }
+
+    if ($port === 587) {
+        if (!$write($socket, 'STARTTLS') || !$expect($read($socket), ['220'], 'STARTTLS')) {
+            $abort($socket);
+            return false;
+        }
+        if (!@stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+            error_log('[driver-email] SMTP TLS handshake failed');
+            $abort($socket);
+            return false;
+        }
+        if (!$write($socket, 'EHLO ' . ($ehlo !== '' ? $ehlo : 'higoapp.com'))
+            || !$expect($read($socket), ['250'], 'EHLO after STARTTLS')) {
+            $abort($socket);
+            return false;
+        }
+    }
+
+    if (!$write($socket, 'AUTH LOGIN') || !$expect($read($socket), ['334'], 'AUTH LOGIN')) {
+        $abort($socket);
+        return false;
+    }
+    if (!$write($socket, base64_encode($username)) || !$expect($read($socket), ['334'], 'AUTH username')) {
+        $abort($socket);
+        return false;
+    }
+    if (!$write($socket, base64_encode($password)) || !$expect($read($socket), ['235'], 'AUTH password')) {
+        $abort($socket);
+        return false;
+    }
+    if (!$write($socket, 'MAIL FROM:<' . $safeFrom . '>') || !$expect($read($socket), ['250'], 'MAIL FROM')) {
+        $abort($socket);
+        return false;
+    }
+    if (!$write($socket, 'RCPT TO:<' . $safeTo . '>') || !$expect($read($socket), ['250', '251'], 'RCPT TO')) {
+        $abort($socket);
+        return false;
+    }
+    if (!$write($socket, 'DATA') || !$expect($read($socket), ['354'], 'DATA')) {
+        $abort($socket);
+        return false;
+    }
+
+    $plainSource = preg_replace('/<(br|\/p|\/div|\/li|\/tr)\b[^>]*>/i', "\n", $html) ?? $html;
+    $plain = html_entity_decode(strip_tags($plainSource), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $plain = trim((string) preg_replace('/\n{3,}/', "\n\n", $plain));
+    $boundary = '=_higo_' . bin2hex(random_bytes(12));
+    $encodedSubject = '=?UTF-8?B?' . base64_encode($safeSubject) . '?=';
+    $encodedFromName = '=?UTF-8?B?' . base64_encode($safeFromName) . '?=';
+
+    $message = 'Date: ' . gmdate('D, d M Y H:i:s O') . "\r\n";
+    $message .= 'Message-ID: <' . bin2hex(random_bytes(16)) . '@higoapp.com>' . "\r\n";
+    $message .= 'Subject: ' . $encodedSubject . "\r\n";
+    $message .= 'To: <' . $safeTo . ">\r\n";
+    $message .= 'From: ' . $encodedFromName . ' <' . $safeFrom . ">\r\n";
+    $message .= 'Reply-To: <' . $safeReply . ">\r\n";
+    $message .= "MIME-Version: 1.0\r\n";
+    $message .= 'Content-Type: multipart/alternative; boundary="' . $boundary . "\"\r\n\r\n";
+    $message .= '--' . $boundary . "\r\n";
+    $message .= "Content-Type: text/plain; charset=UTF-8\r\n";
+    $message .= "Content-Transfer-Encoding: base64\r\n\r\n";
+    $message .= chunk_split(base64_encode($plain), 76, "\r\n");
+    $message .= '--' . $boundary . "\r\n";
+    $message .= "Content-Type: text/html; charset=UTF-8\r\n";
+    $message .= "Content-Transfer-Encoding: base64\r\n\r\n";
+    $message .= chunk_split(base64_encode($html), 76, "\r\n");
+    $message .= '--' . $boundary . "--\r\n";
+    $message = preg_replace('/(^|\r\n)\./', '$1..', $message) ?? $message;
+
+    if (fwrite($socket, $message . "\r\n.\r\n") === false
+        || !$expect($read($socket), ['250'], 'message delivery')) {
+        $abort($socket);
+        return false;
+    }
+
+    $write($socket, 'QUIT');
+    $read($socket);
+    fclose($socket);
+    return true;
 }
 
 function da_email_shell(string $title, string $bodyHtml): string {
