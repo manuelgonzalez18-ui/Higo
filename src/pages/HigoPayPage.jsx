@@ -122,7 +122,7 @@ export default function HigoPayPage() {
     const currentMethod = PAYMENT_METHODS.find((method) => method.id === paymentType);
     const isPagoMovil = currentMethod?.mode === 'pm';
     const needsBankSelector = paymentType === 'pm_otros' || paymentType === 'tf_otros';
-    const referenceMaxLength = isPagoMovil ? 6 : 12;
+    const referenceMaxLength = isPagoMovil ? undefined : 12;
     const monthlyEarnings = useMemo(
         () => rides.reduce((sum, ride) => sum + Number(ride.price || 0), 0),
         [rides],
@@ -598,6 +598,14 @@ export default function HigoPayPage() {
                       onChange={(event) => setReference(isPagoMovil
                           ? normalizeBanescoReference(event.target.value)
                           : normalizeTransferReference(event.target.value))}
+                      onPaste={(event) => {
+                          const pasted = event.clipboardData?.getData('text') || '';
+                          if (!pasted) return;
+                          event.preventDefault();
+                          setReference(isPagoMovil
+                              ? normalizeBanescoReference(pasted)
+                              : normalizeTransferReference(pasted));
+                      }}
                       inputMode="numeric"
                       maxLength={referenceMaxLength}
                       placeholder={isPagoMovil ? 'Ej. 229907' : ''}

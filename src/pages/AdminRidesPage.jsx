@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AdminNav from '../components/AdminNav';
 import { toast } from '../components/Toast';
 import { supabase } from '../services/supabase';
+import { resolveEffectiveRideMultiplier } from '../utils/pricingPresentation';
 import {
     getAdminRideDetail,
     getAdminRideMetrics,
@@ -418,6 +419,7 @@ export default function AdminRidesPage() {
                             const ride = detail.ride;
                             const pricing = detail.pricing || {};
                             const snapshot = pricing.snapshot || {};
+                            const multiplier = resolveEffectiveRideMultiplier({ pricing, snapshot });
                             const route = detail.route || {};
                             const mapUrl = route.pickupLat != null && route.pickupLng != null && route.dropoffLat != null && route.dropoffLng != null
                                 ? `https://www.google.com/maps/dir/?api=1&origin=${route.pickupLat},${route.pickupLng}&destination=${route.dropoffLat},${route.dropoffLng}`
@@ -464,7 +466,7 @@ export default function AdminRidesPage() {
 
                                     <div className="grid xl:grid-cols-2 gap-4">
                                         <InfoBlock title="Desglose del precio" tone="text-emerald-300">
-                                            <Row label="Tarifa base" value={money(pricing.baseAmount ?? snapshot.base)} /><Row label="Distancia" value={money(pricing.distanceAmount ?? snapshot.distanceAmount)} /><Row label="Tiempo" value={money(pricing.timeAmount ?? snapshot.timeAmount)} /><Row label="Paradas" value={money(pricing.stopsAmount ?? snapshot.stopsAmount)} /><Row label="Extras" value={money(pricing.extrasAmount ?? snapshot.extrasAmount)} /><Row label="Espera" value={`${money(ride.wait_fee)} · ${ride.wait_seconds || 0} s`} /><Row label="Multiplicador" value={`${Number(pricing.multiplier ?? snapshot.surgeMultiplier ?? 1).toFixed(3)} · ${pricing.multiplierReason ?? snapshot.multiplierReason ?? 'tarifa_normal'}`} /><Row label="Descuento" value={money(pricing.discountAmount)} /><Row label="Mínimo" value={money(pricing.minimumFare ?? snapshot.minimumFare)} /><Row label="Total" value={money(pricing.price)} /><Row label="Modelo" value={`${pricing.pricingModel || 'legacy'} · v${pricing.pricingVersion || '—'}`} mono />
+                                            <Row label="Tarifa base" value={money(pricing.baseAmount ?? snapshot.base)} /><Row label="Distancia" value={money(pricing.distanceAmount ?? snapshot.distanceAmount)} /><Row label="Tiempo" value={money(pricing.timeAmount ?? snapshot.timeAmount)} /><Row label="Paradas" value={money(pricing.stopsAmount ?? snapshot.stopsAmount)} /><Row label="Extras" value={money(pricing.extrasAmount ?? snapshot.extrasAmount)} /><Row label="Espera" value={`${money(ride.wait_fee)} · ${ride.wait_seconds || 0} s`} /><Row label="Multiplicador" value={`${multiplier.value.toFixed(3)} · ${multiplier.reason}`} /><Row label="Descuento" value={money(pricing.discountAmount)} /><Row label="Mínimo" value={money(pricing.minimumFare ?? snapshot.minimumFare)} /><Row label="Total" value={money(pricing.price)} /><Row label="Modelo" value={`${pricing.pricingModel || 'legacy'} · v${pricing.pricingVersion || '—'}`} mono />
                                         </InfoBlock>
                                         <InfoBlock title="Pago y promoción" tone="text-amber-300">
                                             <Row label="Método" value={detail.payment?.method} /><Row label="Referencia" value={detail.payment?.reference} mono /><Row label="Confirma pasajero" value={detail.payment?.confirmedByPassenger ? 'Sí' : 'No'} /><Row label="Confirma driver" value={detail.payment?.confirmedByDriver ? 'Sí' : 'No'} /><Row label="Confirmado" value={fmtDate(detail.payment?.confirmedAt)} /><Row label="Disputa" value={detail.payment?.hasDispute ? 'Revisión necesaria' : 'Sin señal'} /><Row label="Promoción" value={detail.promo?.code || 'Sin promoción'} /><Row label="Descuento aplicado" value={money(pricing.discountAmount)} />
