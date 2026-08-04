@@ -65,7 +65,7 @@ begin
         raise exception 'same upload token was claimed twice';
     end if;
 
-    v_completed := public.higo_complete_driver_application_upload(repeat('1', 64), v_claim_id, 5);
+    v_completed := public.higo_complete_driver_application_upload(repeat('1', 64), v_claim_id, 6);
     if v_completed->>'status' <> 'documents_submitted' then
         raise exception 'document completion did not update application status';
     end if;
@@ -99,15 +99,15 @@ insert into public.driver_application_documents(
 select
     '20000000-0000-4000-8000-000000000002'::uuid,
     document_type,
-    document_type || '.pdf',
-    case when document_type = 'vehicle_photo' then 'image/jpeg' else 'application/pdf' end,
+    document_type || case when document_type in ('profile_photo','vehicle_photo') then '.jpg' else '.pdf' end,
+    case when document_type in ('profile_photo','vehicle_photo') then 'image/jpeg' else 'application/pdf' end,
     1000,
     'test/' || document_type || '/' || gen_random_uuid()::text,
     'approved',
     '10000000-0000-4000-8000-000000000001'::uuid,
     now()
 from unnest(array[
-    'identity','driver_license','vehicle_registration','rcv','vehicle_photo'
+    'profile_photo','identity','driver_license','vehicle_registration','rcv','vehicle_photo'
 ]) as document_type;
 
 do $$
