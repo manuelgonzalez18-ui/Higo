@@ -4,9 +4,10 @@ import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('Higo Viajes exposes a protected admin entry, navigation and operational UI', async () => {
-    const [index, entry, guard, nav, page, api] = await Promise.all([
+test('Higo Viajes exposes a protected bundled admin entry, navigation and operational UI', async () => {
+    const [index, boot, entry, guard, nav, page, api] = await Promise.all([
         read('index.html'),
+        read('src/entry.jsx'),
         read('src/adminRidesEntry.jsx'),
         read('src/components/AdminGuard.jsx'),
         read('src/components/AdminNav.jsx'),
@@ -14,8 +15,11 @@ test('Higo Viajes exposes a protected admin entry, navigation and operational UI
         read('src/services/adminApi.js'),
     ]);
 
-    assert.match(index, /#\/admin\/rides/);
-    assert.match(index, /adminRidesEntry\.jsx/);
+    assert.match(index, /src="\/src\/entry\.jsx"/);
+    assert.match(boot, /#\/admin\/rides/);
+    assert.match(boot, /import\('\.\/adminRidesEntry\.jsx'\)/);
+    assert.match(boot, /import\('\.\/main\.jsx'\)/);
+    assert.match(boot, /showBootError/);
     assert.match(entry, /path="\/admin\/rides"/);
     assert.match(entry, /AdminGuard><AdminRidesPage/);
     assert.match(guard, /\['\/admin\/rides', \['manage_operations'\]\]/);
