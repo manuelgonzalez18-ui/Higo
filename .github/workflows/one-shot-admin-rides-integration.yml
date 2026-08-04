@@ -1,0 +1,120 @@
+name: One-shot integrate Higo Viajes
+
+on:
+  push:
+    branches:
+      - agent/admin-rides-operations
+    paths:
+      - '.github/workflows/one-shot-admin-rides-integration.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Patch routes, navigation and admin service
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              file = Path(path)
+              text = file.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, found {count}: {old!r}')
+              file.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace_once(
+              'src/App.jsx',
+              "const AdminFraudPage          = lazy(() => import('./pages/AdminFraudPage'));\nconst AdminDeliveriesPage     = lazy(() => import('./pages/AdminDeliveriesPage'));",
+              "const AdminFraudPage          = lazy(() => import('./pages/AdminFraudPage'));\nconst AdminRidesPage          = lazy(() => import('./pages/AdminRidesPage'));\nconst AdminDeliveriesPage     = lazy(() => import('./pages/AdminDeliveriesPage'));",
+          )
+          replace_once(
+              'src/App.jsx',
+              "        <Route path=\"/admin/fraud\" element={<AdminGuard><AdminFraudPage /></AdminGuard>} />\n        <Route path=\"/admin/deliveries\" element={<AdminGuard><AdminDeliveriesPage /></AdminGuard>} />",
+              "        <Route path=\"/admin/fraud\" element={<AdminGuard><AdminFraudPage /></AdminGuard>} />\n        <Route path=\"/admin/rides\" element={<AdminGuard><AdminRidesPage /></AdminGuard>} />\n        <Route path=\"/admin/deliveries\" element={<AdminGuard><AdminDeliveriesPage /></AdminGuard>} />",
+          )
+          replace_once(
+              'src/components/AdminNav.jsx',
+              "    { to: '/admin/deliveries', label: 'Envíos', icon: 'inventory_2', group: 'Operación', permissions: ['manage_operations'] },",
+              "    { to: '/admin/rides', label: 'Viajes', icon: 'route', group: 'Operación', permissions: ['manage_operations'] },\n    { to: '/admin/deliveries', label: 'Envíos', icon: 'inventory_2', group: 'Operación', permissions: ['manage_operations'] },",
+          )
+          replace_once(
+              'src/services/adminApi.js',
+              "export const getAdminPlatformFunnel = async (days = 30) => unwrap(await supabase.rpc('admin_platform_funnel', { p_days: days }));\n",
+              """export const getAdminPlatformFunnel = async (days = 30) => unwrap(await supabase.rpc('admin_platform_funnel', { p_days: days }));
+
+export const listAdminRides = async ({
+    statusBucket = 'active',
+    dateFrom = null,
+    dateTo = null,
+    query = '',
+    vehicleType = '',
+    hasPromo = null,
+    hasIncident = null,
+    limit = 50,
+    cursor = null,
+} = {}) => unwrap(await supabase.rpc('admin_list_rides', {
+    p_status_bucket: statusBucket,
+    p_date_from: dateFrom,
+    p_date_to: dateTo,
+    p_query: query || null,
+    p_vehicle_type: vehicleType || null,
+    p_has_promo: hasPromo,
+    p_has_incident: hasIncident,
+    p_limit: limit,
+    p_cursor_created_at: cursor?.createdAt || null,
+    p_cursor_id: cursor?.id || null,
+}));
+
+export const getAdminRideDetail = async (rideId) => unwrap(await supabase.rpc('admin_get_ride_detail', {
+    p_ride_id: Number(rideId),
+}));
+
+export const getAdminRideMetrics = async ({ dateFrom = null, dateTo = null } = {}) =>
+    unwrap(await supabase.rpc('admin_ride_operations_metrics', {
+        p_date_from: dateFrom,
+        p_date_to: dateTo,
+    }));
+
+export const overrideAdminRideStatus = async ({ rideId, targetStatus, reason }) =>
+    unwrap(await supabase.rpc('admin_override_ride_status', {
+        p_ride_id: Number(rideId),
+        p_target_status: targetStatus,
+        p_reason: reason,
+    }));
+""",
+          )
+          PY
+
+      - name: Verify integration markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "AdminRidesPage" src/App.jsx
+          grep -Fq 'path="/admin/rides"' src/App.jsx
+          grep -Fq "to: '/admin/rides'" src/components/AdminNav.jsx
+          grep -Fq "admin_list_rides" src/services/adminApi.js
+          grep -Fq "admin_override_ride_status" src/services/adminApi.js
+
+      - name: Commit integrated module
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/one-shot-admin-rides-integration.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/App.jsx src/components/AdminNav.jsx src/services/adminApi.js .github/workflows/one-shot-admin-rides-integration.yml
+          git commit -m 'feat(admin): integrate Higo Viajes navigation and APIs'
+          git push origin HEAD:agent/admin-rides-operations
