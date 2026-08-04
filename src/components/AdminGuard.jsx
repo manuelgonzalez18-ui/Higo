@@ -17,6 +17,7 @@ const ROUTE_PERMISSIONS = [
     ['/admin/zones', ['manage_zones']],
     ['/admin/promos', ['manage_promos']],
     ['/admin/disputes', ['manage_disputes']],
+    ['/admin/rides', ['manage_operations']],
     ['/admin/deliveries', ['manage_operations']],
     ['/admin/support', ['manage_support']],
     ['/admin/fraud', ['manage_operations']],
