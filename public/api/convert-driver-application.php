@@ -132,9 +132,9 @@ $profilePayload = json_encode([[
     'suspension_reason' => 'pending_membership',
 ]], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 [$profileStatus, $profileBody] = bl_http_post(
-    $cfg['_supabase_url'] . '/rest/v1/profiles',
+    $cfg['_supabase_url'] . '/rest/v1/profiles?on_conflict=id',
     (string) $profilePayload,
-    da_service_headers($cfg, ['Prefer: return=minimal'])
+    da_service_headers($cfg, ['Prefer: resolution=merge-duplicates,return=minimal'])
 );
 if ($profileStatus < 200 || $profileStatus >= 300) {
     cv_delete_avatar($cfg, $avatarPath);
