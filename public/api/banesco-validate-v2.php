@@ -196,7 +196,9 @@ if (!is_array($input)) {
 
 $planId = trim((string) ($input['plan_id'] ?? ''));
 $paymentType = trim((string) ($input['payment_type'] ?? 'pm_banesco'));
-$reference = trim((string) ($input['reference'] ?? ''));
+$referenceRaw = (string) ($input['reference'] ?? '');
+$referenceDigits = preg_replace('/\D+/', '', $referenceRaw);
+$reference = is_string($referenceDigits) ? substr($referenceDigits, -6) : '';
 $amountReported = $input['amount'] ?? null;
 $phoneRaw = trim((string) ($input['phone'] ?? ''));
 $date = trim((string) ($input['date'] ?? date('Y-m-d')));
@@ -204,7 +206,7 @@ $bank = trim((string) ($input['bank'] ?? ''));
 
 $errors = [];
 if ($planId !== '' && !preg_match('/^[0-9a-fA-F-]{36}$/', $planId)) $errors[] = 'plan_id inválido.';
-if (!preg_match('/^\d{1,12}$/', $reference)) $errors[] = 'La referencia debe tener entre 1 y 12 dígitos.';
+if (!preg_match('/^\d{6}$/', $reference)) $errors[] = 'La referencia debe contener los últimos 6 dígitos.';
 if (!is_numeric($amountReported) || (float) $amountReported <= 0) $errors[] = 'Monto inválido.';
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) $errors[] = 'Fecha inválida.';
 if (!preg_match('/^\d{4}$/', $bank)) $errors[] = 'Banco inválido.';

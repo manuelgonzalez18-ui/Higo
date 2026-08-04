@@ -7,6 +7,7 @@ import { validateBanescoPayment, VENEZUELAN_BANKS } from '../services/banesco';
 import { getOfficialBcvRate } from '../services/bcv';
 import { listDriverCheckoutPlans } from '../services/membershipApi';
 import { apiUrl } from '../utils/apiUrl';
+import { normalizeBanescoReference, normalizeTransferReference } from '../utils/paymentReference';
 import { useDriverMembership } from '../hooks/useDriverMembership';
 
 const RECEIVER = Object.freeze({
@@ -121,7 +122,7 @@ export default function HigoPayPage() {
     const currentMethod = PAYMENT_METHODS.find((method) => method.id === paymentType);
     const isPagoMovil = currentMethod?.mode === 'pm';
     const needsBankSelector = paymentType === 'pm_otros' || paymentType === 'tf_otros';
-    const referenceMaxLength = isPagoMovil ? 8 : 12;
+    const referenceMaxLength = isPagoMovil ? 6 : 12;
     const monthlyEarnings = useMemo(
         () => rides.reduce((sum, ride) => sum + Number(ride.price || 0), 0),
         [rides],
@@ -344,7 +345,7 @@ export default function HigoPayPage() {
 
     const handlePagoMovil = async () => {
         if (!selectedPlan) throw new Error('Seleccioná un plan de membresía.');
-        if (!/^\d{1,8}$/.test(reference)) throw new Error('La referencia debe ser numérica, de hasta 8 dígitos.');
+        if (!/^\d{6}$/.test(reference)) throw new Error('Ingresa los últimos 6 dígitos de la referencia.');
         if (!phone) throw new Error('Ingresá el teléfono emisor.');
         const paidAmount = Number(amount);
         if (!(paidAmount > 0)) throw new Error('Monto inválido.');
@@ -591,7 +592,19 @@ export default function HigoPayPage() {
                     {needsBankSelector && <FormField label="Banco origen"><select value={bank} onChange={(event) => setBank(event.target.value)} className="w-full bg-[#0F1014] border border-white/10 rounded-xl px-4 py-3 text-sm">{VENEZUELAN_BANKS.filter((item) => item.code !== '0134').map((item) => <option key={item.code} value={item.code}>{item.code} · {item.name}</option>)}</select></FormField>}
 
                     <div className="grid grid-cols-2 gap-3">
-                        <FormField label="Referencia"><input value={reference} onChange={(event) => setReference(event.target.value.replace(/\D/g, '').slice(0, referenceMaxLength))} inputMode="numeric" required className="w-full bg-[#0F1014] border border-white/10 rounded-xl px-4 py-3 text-sm font-mono" /></FormField>
+                        <FormField label={isPagoMovil ? 'Referencia · Últimos 6 dígitos' : 'Referencia'}>
+                  <input
+                      value={reference}
+                      onChange={(event) => setReference(isPagoMovil
+                          ? normalizeBanescoReference(event.target.value)
+                          : normalizeTransferReference(event.target.value))}
+                      inputMode="numeric"
+                      maxLength={referenceMaxLength}
+                      placeholder={isPagoMovil ? 'Ej. 229907' : ''}
+                      required
+                      className="w-full bg-[#0F1014] border border-white/10 rounded-xl px-4 py-3 text-sm font-mono"
+                  />
+              </FormField>
                         <FormField label="Fecha"><input type="date" value={date} onChange={(event) => setDate(event.target.value)} max={today()} required className="w-full bg-[#0F1014] border border-white/10 rounded-xl px-4 py-3 text-sm" /></FormField>
                     </div>
 
