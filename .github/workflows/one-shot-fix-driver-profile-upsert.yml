@@ -88,3 +88,5 @@ jobs:
           git add public/api/convert-driver-application.php public/api/welcome-driver-v2.php src/services/adminApi.js .github/workflows/one-shot-fix-driver-profile-upsert.yml
           git commit -m 'fix(driver): upsert profile after auth provisioning'
           git push origin HEAD:main
+
+# Triggered explicitly after PR merge because repository automation ignored the merge-created workflow event.
