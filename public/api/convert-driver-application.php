@@ -112,7 +112,7 @@ if ($publishedAvatar === null) {
 $avatarUrl = $publishedAvatar['url'];
 $avatarPath = $publishedAvatar['path'];
 
-$profilePayload = json_encode([[
+$profileData = [
     'id' => $userId,
     'full_name' => $fullName,
     'email' => $email,
@@ -130,17 +130,41 @@ $profilePayload = json_encode([[
     'last_payment_date' => null,
     'suspended_at' => gmdate('c'),
     'suspension_reason' => 'pending_membership',
-]], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-[$profileStatus, $profileBody] = bl_http_post(
-    $cfg['_supabase_url'] . '/rest/v1/profiles?on_conflict=id',
-    (string) $profilePayload,
-    da_service_headers($cfg, ['Prefer: resolution=merge-duplicates,return=minimal'])
-);
+];
+
+$writeProfile = static function (array $data) use ($cfg): array {
+    return bl_http_post(
+        $cfg['_supabase_url'] . '/rest/v1/profiles?on_conflict=id',
+        (string) json_encode([$data], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+        da_service_headers($cfg, ['Prefer: resolution=merge-duplicates,return=minimal'])
+    );
+};
+
+[$profileStatus, $profileBody] = $writeProfile($profileData);
+$profileError = cv_postgrest_error($profileBody);
+
+// Some historical Higo schemas only allowed active/inactive in the profile
+// subscription check. Keep the operational suspension fields and retry with
+// the legacy-compatible inactive value only when that exact check is reported.
+if (($profileStatus < 200 || $profileStatus >= 300)
+    && ($profileError['code'] ?? '') === '23514'
+    && str_contains(strtolower((string) ($profileError['message'] ?? '')), 'subscription_status')) {
+    $profileData['subscription_status'] = 'inactive';
+    [$profileStatus, $profileBody] = $writeProfile($profileData);
+    $profileError = cv_postgrest_error($profileBody);
+}
+
 if ($profileStatus < 200 || $profileStatus >= 300) {
     cv_delete_avatar($cfg, $avatarPath);
     cv_delete_auth_user($cfg, $userId);
     cv_release_claim($cfg, $callerJwt, $code, $claimId);
-    da_send(502, ['ok' => false, 'error' => 'profile_insert_failed', 'detail' => substr($profileBody, 0, 250)]);
+    da_send(502, [
+        'ok' => false,
+        'error' => 'profile_insert_failed',
+        'detail' => (string) ($profileError['message'] ?? 'profile_insert_failed'),
+        'db_code' => (string) ($profileError['code'] ?? ''),
+        'db_hint' => (string) ($profileError['hint'] ?? ''),
+    ]);
 }
 
 [$completeStatus, $completeBody] = bl_http_post(
@@ -193,6 +217,25 @@ da_send(200, [
     'avatar_url' => $avatarUrl,
     'membership_required' => true,
 ]);
+
+/** @return array{code:string,message:string,details:string,hint:string} */
+function cv_postgrest_error(string $body): array {
+    $decoded = json_decode($body, true);
+    if (!is_array($decoded)) {
+        return [
+            'code' => '',
+            'message' => trim(substr($body, 0, 500)),
+            'details' => '',
+            'hint' => '',
+        ];
+    }
+    return [
+        'code' => (string) ($decoded['code'] ?? ''),
+        'message' => (string) ($decoded['message'] ?? $decoded['error'] ?? 'database_error'),
+        'details' => (string) ($decoded['details'] ?? ''),
+        'hint' => (string) ($decoded['hint'] ?? ''),
+    ];
+}
 
 function cv_fetch_approved_profile_photo(array $cfg, string $applicationId): ?array {
     if (!preg_match('/^[0-9a-f-]{36}$/i', $applicationId)) return null;
