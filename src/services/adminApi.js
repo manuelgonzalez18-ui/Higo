@@ -112,11 +112,13 @@ const adminApiEndpoint = (path) => {
 };
 
 const DRIVER_APPLICATION_ERRORS = {
-    required_documents_not_approved: 'Debes aprobar la cédula, licencia, circulación, RCV y fotografía del vehículo antes de aprobar la solicitud.',
+    required_documents_not_approved: 'Debes aprobar la foto de perfil, cédula, licencia, circulación, RCV y fotografía del vehículo antes de aprobar la solicitud.',
     status_reason_required: 'Indica una observación o motivo para realizar este cambio.',
     conversion_in_progress: 'Otro proceso ya está registrando este driver. Espera unos minutos y actualiza la solicitud.',
     conversion_claim_failed: 'No se pudo reservar la solicitud para crear la cuenta. Actualiza e intenta nuevamente.',
     application_not_approved: 'La solicitud debe estar aprobada antes de registrar al driver.',
+    approved_profile_photo_required: 'Debes aprobar la foto de perfil del conductor antes de registrar su cuenta.',
+    profile_photo_publish_failed: 'No se pudo publicar de forma segura la foto de perfil. Revisa el archivo e intenta nuevamente.',
     auth_create_failed: 'No se pudo crear la cuenta. Comprueba si el correo ya está registrado en Higo.',
     profile_insert_failed: 'La cuenta no pudo completar el perfil de driver; el alta fue revertida.',
     conversion_finalize_failed: 'No se pudo finalizar el registro de forma segura; el alta fue revertida.',
@@ -173,9 +175,8 @@ export const reviewDriverApplicationDocument = async ({ applicationCode, documen
         notes,
     });
 
-export const convertDriverApplication = async ({ applicationCode, avatarUrl = '', paymentQrUrl = '' }) =>
+export const convertDriverApplication = async ({ applicationCode, paymentQrUrl = '' }) =>
     postAdminApi('convert-driver-application.php', {
         application_code: applicationCode,
-        avatar_url: avatarUrl,
         payment_qr_url: paymentQrUrl,
     });
