@@ -16,6 +16,10 @@
     Require all denied
 </FilesMatch>
 
+<Files ".user.ini">
+    Require all denied
+</Files>
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteBase /
@@ -52,38 +56,13 @@
     </FilesMatch>
 
     # ── Security headers ──────────────────────────────────────────────
-    # Fase 7 paso 1. Meta: securityheaders.com da A o A+.
-
-    # HSTS: 1 año, incluye subdominios. preload requiere submission
-    # manual a hstspreload.org — recomendado pero opcional.
     Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
-
-    # No permitir MIME sniffing — el browser respeta el Content-Type.
     Header always set X-Content-Type-Options "nosniff"
-
-    # Anti-clickjacking. SAMEORIGIN porque Capacitor WebView puede
-    # cargar la app en sí misma; DENY rompería el iframe interno.
     Header always set X-Frame-Options "SAMEORIGIN"
-
-    # Referrer: solo origin (no path) cuando se cruza a otro dominio.
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
-
-    # Permisos: limitar APIs sensibles a "mi propio origen" — geo/cam/
-    # mic se piden desde la app, no desde iframes embebidos.
     Header always set Permissions-Policy "geolocation=(self), camera=(self), microphone=(self), payment=(), usb=(), magnetometer=(), gyroscope=()"
-
-    # Cross-Origin policies (defensa contra Spectre/leaks).
     Header always set Cross-Origin-Opener-Policy "same-origin-allow-popups"
     Header always set Cross-Origin-Resource-Policy "same-site"
-
-    # Content Security Policy. Allowlist explícito de los origenes
-    # detectados en el bundle (Supabase, Firebase APIs, Gemini, Google
-    # Maps) + dolarapi (BCV) + fonts.gstatic (Material Symbols).
-    #
-    # 'unsafe-inline' en script-src/style-src es necesario por Vite
-    # (inyecta inline scripts del runtime) y Tailwind (inyecta inline
-    # styles). Tightening con hashes/nonces queda para una fase
-    # posterior — no rompe nada hoy.
     Header always set Content-Security-Policy "default-src 'self'; \
 script-src 'self' 'unsafe-inline' 'unsafe-eval' https://maps.googleapis.com https://apis.google.com https://www.gstatic.com https://*.googleapis.com; \
 style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
@@ -98,3 +77,7 @@ base-uri 'self'; \
 form-action 'self'; \
 frame-ancestors 'self';"
 </IfModule>
+
+# El onboarding documental permite hasta 30 MB en total. Se deja margen para
+# los encabezados multipart y para la transferencia servidor a servidor.
+LimitRequestBody 41943040
