@@ -119,4 +119,4 @@ export const overrideAdminRideStatus = async ({ rideId, targetStatus, reason }) 
           git commit -m 'feat(admin): integrate Higo Viajes navigation and APIs'
           git push origin HEAD:agent/admin-rides-operations
 
-# Second push intentionally triggers this workflow after the file already exists on the branch.
+# Third push after PR creation triggers branch automation in repositories that defer new workflows until a PR exists.
