@@ -1,0 +1,179 @@
+name: One-shot fix admin rides entry
+
+on:
+  push:
+    branches: [agent/fix-admin-rides-blank-page]
+    paths:
+      - '.github/workflows/one-shot-fix-admin-rides-entry.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Integrate Higo Viajes into the main application entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          index = Path('index.html')
+          text = index.read_text(encoding='utf-8')
+          old_index = '''  <script type="module">
+            const route = window.location.hash.split('?')[0];
+            if (route === '#/admin/rides') {
+              import('/src/adminRidesEntry.jsx');
+            } else {
+              import('/src/main.jsx');
+            }
+          </script>'''
+          if text.count(old_index) != 1:
+              raise SystemExit(f'index.html: expected custom entry once, found {text.count(old_index)}')
+          index.write_text(
+              text.replace(old_index, '  <script type="module" src="/src/main.jsx"></script>', 1),
+              encoding='utf-8',
+          )
+
+          app = Path('src/App.jsx')
+          text = app.read_text(encoding='utf-8')
+          import_anchor = "const AdminDeliveriesPage     = lazy(() => import('./pages/AdminDeliveriesPage'));"
+          import_line = "const AdminRidesPage          = lazy(() => import('./pages/AdminRidesPage'));"
+          if import_line not in text:
+              if text.count(import_anchor) != 1:
+                  raise SystemExit('src/App.jsx: deliveries import anchor not found exactly once')
+              text = text.replace(import_anchor, import_line + '\n' + import_anchor, 1)
+
+          route_anchor = '<Route path="/admin/deliveries" element={<AdminGuard><AdminDeliveriesPage /></AdminGuard>} />'
+          route_line = '<Route path="/admin/rides" element={<AdminGuard><AdminRidesPage /></AdminGuard>} />'
+          if route_line not in text:
+              if text.count(route_anchor) != 1:
+                  raise SystemExit('src/App.jsx: deliveries route anchor not found exactly once')
+              text = text.replace(route_anchor, route_line + '\n        ' + route_anchor, 1)
+          app.write_text(text, encoding='utf-8')
+
+          nav = Path('src/components/AdminNav.jsx')
+          text = nav.read_text(encoding='utf-8')
+          old_item = "{ to: '/admin/rides', label: 'Viajes', icon: 'route', group: 'Operación', permissions: ['manage_operations'], hardReload: true },"
+          new_item = "{ to: '/admin/rides', label: 'Viajes', icon: 'route', group: 'Operación', permissions: ['manage_operations'] },"
+          if text.count(old_item) != 1:
+              raise SystemExit('src/components/AdminNav.jsx: rides hardReload item not found exactly once')
+          text = text.replace(old_item, new_item, 1)
+
+          old_render = '''                        const className = `relative flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-colors ${active ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'}`;
+                        const content = (
+                            <>
+                                <span className="material-symbols-outlined text-[18px]">{item.icon}</span>
+                                <span>{item.label}</span>
+                                {badge > 0 && <span className="min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center">{badge > 99 ? '99+' : badge}</span>}
+                            </>
+                        );
+                        return item.hardReload ? (
+                            <a key={item.to} href={`/#${item.to}`} onClick={() => setOpen(false)} className={className}>{content}</a>
+                        ) : (
+                            <Link key={item.to} to={item.to} onClick={() => setOpen(false)} className={className}>{content}</Link>
+                        );'''
+          new_render = '''                        return (
+                            <Link key={item.to} to={item.to} onClick={() => setOpen(false)}
+                                className={`relative flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-colors ${active ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
+                                <span className="material-symbols-outlined text-[18px]">{item.icon}</span>
+                                <span>{item.label}</span>
+                                {badge > 0 && <span className="min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center">{badge > 99 ? '99+' : badge}</span>}
+                            </Link>
+                        );'''
+          if text.count(old_render) != 1:
+              raise SystemExit(f'src/components/AdminNav.jsx: hard reload render block count={text.count(old_render)}')
+          nav.write_text(text.replace(old_render, new_render, 1), encoding='utf-8')
+
+          entry = Path('src/adminRidesEntry.jsx')
+          if not entry.exists():
+              raise SystemExit('src/adminRidesEntry.jsx: expected temporary entry file')
+          entry.unlink()
+
+          test = Path('tests/adminRides.test.mjs')
+          test.write_text("""import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
+
+test('Higo Viajes is integrated into the protected main admin application', async () => {
+    const [index, app, guard, nav, page, api] = await Promise.all([
+        read('index.html'),
+        read('src/App.jsx'),
+        read('src/components/AdminGuard.jsx'),
+        read('src/components/AdminNav.jsx'),
+        read('src/pages/AdminRidesPage.jsx'),
+        read('src/services/adminApi.js'),
+    ]);
+
+    assert.match(index, /src=\"\\/src\\/main\\.jsx\"/);
+    assert.doesNotMatch(index, /adminRidesEntry/);
+    assert.match(app, /AdminRidesPage\\s*=\\s*lazy/);
+    assert.match(app, /path=\"\\/admin\\/rides\" element=\\{<AdminGuard><AdminRidesPage/);
+    assert.match(guard, /\\['\\/admin\\/rides', \\['manage_operations'\\]\\]/);
+    assert.match(nav, /to: '\\/admin\\/rides'/);
+    assert.match(nav, /label: 'Viajes'/);
+    assert.doesNotMatch(nav, /hardReload/);
+    assert.match(page, /Higo Viajes/);
+    assert.match(page, /Exportar CSV/);
+    assert.match(page, /admin-rides-operations/);
+    assert.match(page, /Despacho progresivo/);
+    assert.match(page, /Override administrativo auditado/);
+    assert.match(api, /admin_list_rides/);
+    assert.match(api, /admin_get_ride_detail/);
+    assert.match(api, /admin_ride_operations_metrics/);
+    assert.match(api, /admin_override_ride_status/);
+});
+
+test('Higo Viajes migration is permissioned, paginated and auditable', async () => {
+    const sql = await read('supabase/migrations/20260804173000_admin_rides_operations.sql');
+
+    for (const required of [
+        'admin_list_rides',
+        'admin_get_ride_detail',
+        'admin_ride_operations_metrics',
+        'admin_override_ride_status',
+        \"higo_assert_admin('manage_operations'\",
+        \"coalesce(r.service_type, 'ride') <> 'delivery'\",
+        'ride_offers',
+        'ride_state_events',
+        'admin_audit_log',
+        'p_cursor_created_at',
+        'transactedVolume',
+    ]) {
+        assert.ok(sql.includes(required), `missing ${required}`);
+    }
+
+    assert.match(sql, /grant execute on function public\\.admin_list_rides[\\s\\S]*to authenticated;/);
+    assert.match(sql, /notify pgrst, 'reload schema';/);
+});
+""", encoding='utf-8')
+          PY
+
+      - name: Validate build and tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          node --test tests/adminRides.test.mjs
+
+      - name: Remove workflow and push the repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/one-shot-fix-admin-rides-entry.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(admin): load Higo Viajes through the main app entry'
+          git push origin HEAD:agent/fix-admin-rides-blank-page
