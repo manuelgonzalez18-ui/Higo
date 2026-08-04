@@ -1,0 +1,90 @@
+name: One-shot fix driver profile upsert
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-shot-fix-driver-profile-upsert.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Apply exact profile upsert fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              Path('public/api/convert-driver-application.php'): [
+                  (
+                      "$cfg['_supabase_url'] . '/rest/v1/profiles',",
+                      "$cfg['_supabase_url'] . '/rest/v1/profiles?on_conflict=id',",
+                  ),
+                  (
+                      "da_service_headers($cfg, ['Prefer: return=minimal'])",
+                      "da_service_headers($cfg, ['Prefer: resolution=merge-duplicates,return=minimal'])",
+                  ),
+              ],
+              Path('public/api/welcome-driver-v2.php'): [
+                  (
+                      "$supaUrl . '/rest/v1/profiles',",
+                      "$supaUrl . '/rest/v1/profiles?on_conflict=id',",
+                  ),
+                  (
+                      "'Prefer: return=minimal',\n    ]\n);\n\nif ($profileStatus < 200 || $profileStatus >= 300)",
+                      "'Prefer: resolution=merge-duplicates,return=minimal',\n    ]\n);\n\nif ($profileStatus < 200 || $profileStatus >= 300)",
+                  ),
+              ],
+          }
+
+          for path, pairs in replacements.items():
+              text = path.read_text(encoding='utf-8')
+              for old, new in pairs:
+                  count = text.count(old)
+                  if count != 1:
+                      raise SystemExit(f'{path}: expected exactly one match for {old!r}, found {count}')
+                  text = text.replace(old, new, 1)
+              path.write_text(text, encoding='utf-8')
+
+          admin = Path('src/services/adminApi.js')
+          text = admin.read_text(encoding='utf-8')
+          old = """const friendlyAdminError = (result, status) => {\n    const raw = String(result.detail || result.error || '');\n    const matched = Object.entries(DRIVER_APPLICATION_ERRORS)\n        .find(([code]) => raw.includes(code) || result.error === code);\n    return matched?.[1] || raw || `Solicitud administrativa fallida (HTTP ${status}).`;\n};"""
+          new = """const friendlyAdminError = (result, status) => {\n    const detail = String(result.detail || '').trim();\n    const raw = String(detail || result.error || '');\n\n    if (result.error === 'profile_insert_failed') {\n        const lower = detail.toLowerCase();\n        if (lower.includes('license_plate') || lower.includes('placa')) {\n            return 'Ya existe un driver registrado con esa placa. Verifica la flota antes de continuar.';\n        }\n        if (lower.includes('phone') || lower.includes('teléfono') || lower.includes('telefono')) {\n            return 'Ya existe un perfil registrado con ese número de teléfono.';\n        }\n        if (lower.includes('email')) {\n            return 'Ya existe un perfil registrado con ese correo electrónico.';\n        }\n    }\n\n    const matched = Object.entries(DRIVER_APPLICATION_ERRORS)\n        .find(([code]) => raw.includes(code) || result.error === code);\n    if (matched) {\n        return detail && result.error === 'profile_insert_failed'\n            ? `${matched[1]} Detalle: ${detail.slice(0, 180)}`\n            : matched[1];\n    }\n    return raw || `Solicitud administrativa fallida (HTTP ${status}).`;\n};"""
+          if text.count(old) != 1:
+              raise SystemExit('src/services/adminApi.js: friendlyAdminError block did not match exactly once')
+          admin.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Validate PHP and exact protections
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l public/api/convert-driver-application.php
+          php -l public/api/welcome-driver-v2.php
+          grep -Fq "/rest/v1/profiles?on_conflict=id" public/api/convert-driver-application.php
+          grep -Fq "Prefer: resolution=merge-duplicates,return=minimal" public/api/convert-driver-application.php
+          grep -Fq "/rest/v1/profiles?on_conflict=id" public/api/welcome-driver-v2.php
+          grep -Fq "Prefer: resolution=merge-duplicates,return=minimal" public/api/welcome-driver-v2.php
+
+      - name: Remove one-shot workflow and push fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/one-shot-fix-driver-profile-upsert.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/api/convert-driver-application.php public/api/welcome-driver-v2.php src/services/adminApi.js .github/workflows/one-shot-fix-driver-profile-upsert.yml
+          git commit -m 'fix(driver): upsert profile after auth provisioning'
+          git push origin HEAD:main
