@@ -218,7 +218,7 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
 
         try {
             let accepted;
-            if (FEATURES.serverSideRideState) {
+            if (FEATURES.serverSideRideState || ride.offerId || ride.offer_id) {
                 accepted = await acceptRide(ride.id);
             } else {
                 const { data, error } = await supabase
@@ -242,8 +242,9 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
             setArrivalTime(null);
             speak(`Viaje aceptado. Navegando a ${ride.pickup}`);
         } catch (error) {
-            if (/unavailable|ride_unavailable/i.test(error?.message || '')) {
-                toast.error('Este viaje ya fue tomado por otro conductor.');
+            const errorText = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
+            if (/unavailable|ride_unavailable|invalid_ride_transition|offer.*expired|active offer|42501/i.test(errorText)) {
+                toast.error('Esta solicitud ya no está disponible.');
                 setRequests?.((current) => current.filter((item) => item.id !== ride.id));
             } else {
                 toast.error(`No se pudo aceptar el viaje: ${error?.message || error}`);

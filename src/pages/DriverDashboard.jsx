@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, getUserProfile } from '../services/supabase';
+import { acceptRide as acceptRideRequest, areDirectedRideOffersEnabled, listDirectedRideOffers } from '../services/rideApi';
+import { FEATURES } from '../config/features';
 import { useNavigate } from 'react-router-dom';
 import InteractiveMap from '../components/InteractiveMap';
 import { useDriverMembership } from '../hooks/useDriverMembership';
@@ -17,6 +19,7 @@ import ErrorBoundary from '../components/ErrorBoundary';
 
 // Utilities
 import { getDistanceFromLatLonInKm } from '../utils/geoUtils';
+import { isDriverRideRequestAvailable } from '../utils/driverRideOffer';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { startLoopingRequestAlert, stopLoopingRequestAlert } from '../services/notificationService';
 import { Capacitor } from '@capacitor/core';
@@ -176,6 +179,8 @@ const DriverDashboard = () => {
         if (driverVehicleType === 'camioneta') driverVehicleType = 'van';
 
         const checkRide = (ride) => {
+            if (!isDriverRideRequestAvailable(ride)) return false;
+
             const rideType = ride.ride_type ? ride.ride_type.toLowerCase() : 'standard';
 
             let isMatch = false;
@@ -305,10 +310,7 @@ const DriverDashboard = () => {
                             try {
                                 const { data: { user } } = await supabase.auth.getUser();
                                 if (user) {
-                                    await supabase.from('rides')
-                                        .update({ status: 'accepted', driver_id: user.id })
-                                        .eq('id', rideId)
-                                        .eq('status', 'requested');
+                                    await acceptRideRequest(rideId);
                                     window.location.reload();
                                 }
                             } catch (e) { console.error("Accept fail:", e); }
@@ -337,10 +339,7 @@ const DriverDashboard = () => {
                     try {
                         const { data: { user } } = await supabase.auth.getUser();
                         if (user) {
-                            await supabase.from('rides')
-                                .update({ status: 'accepted', driver_id: user.id })
-                                .eq('id', rideId)
-                                .eq('status', 'requested');
+                            await acceptRideRequest(rideId);
 
                             toast.success("¡Viaje aceptado desde notificación!");
                             window.location.reload();
@@ -388,69 +387,133 @@ const DriverDashboard = () => {
         return () => supabase.removeChannel(channel);
     }, [profile?.id]);
 
-    // Realtime listener for incoming trip requests
+    // Realtime listener for incoming trip requests. Production dispatch is
+    // directed: a driver must only hydrate active rows from ride_offers. The
+    // legacy rides channel remains as a guarded rollback path.
     useEffect(() => {
         let channel;
+        let reconcileTimer;
+        let disposed = false;
+        let reconcileRequests = null;
 
-        if (!isOnline) {
+        if (!isOnline || !profile?.id) {
             setRequests([]);
             setSubscriptionStatus('DISCONNECTED');
-            return;
+            return undefined;
         }
+
+        const resyncWhenVisible = () => {
+            if (document.visibilityState === 'visible') void reconcileRequests?.();
+        };
 
         const setupRealtime = async () => {
             setSubscriptionStatus('CONNECTING');
 
-            const fetchExistingRequests = async () => {
+            let directedOffersEnabled = FEATURES.directedRideOffers;
+            try {
+                directedOffersEnabled = await areDirectedRideOffersEnabled();
+            } catch (error) {
+                console.warn('[driver-offers] runtime flag unavailable; using build flag:', error);
+            }
+            if (disposed) return;
+
+            if (directedOffersEnabled) {
+                const reconcileDirectedOffers = async () => {
+                    try {
+                        const offers = await listDirectedRideOffers(20);
+                        if (!disposed) processRequests(offers, true);
+                    } catch (error) {
+                        if (!disposed) {
+                            console.warn('[driver-offers] reconciliation failed:', error);
+                            setRequests([]);
+                        }
+                    }
+                };
+                reconcileRequests = reconcileDirectedOffers;
+
+                await reconcileDirectedOffers();
+                if (disposed) return;
+
+                channel = supabase
+                    .channel(`driver-ride-offers:${profile.id}`)
+                    .on('postgres_changes', {
+                        event: '*',
+                        schema: 'public',
+                        table: 'ride_offers',
+                        filter: `driver_id=eq.${profile.id}`,
+                    }, () => void reconcileDirectedOffers())
+                    .subscribe((status) => {
+                        setSubscriptionStatus(status);
+                        if (status === 'SUBSCRIBED') void reconcileDirectedOffers();
+                    });
+
+                // Expirations do not emit UPDATE events, so reconcile against the
+                // server periodically and whenever the app returns to foreground.
+                reconcileTimer = window.setInterval(reconcileDirectedOffers, 5000);
+                return;
+            }
+
+            const fetchLegacyRequests = async () => {
                 const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-                const { data } = await supabase
+                const { data, error } = await supabase
                     .from('rides')
                     .select('*')
                     .eq('status', 'requested')
+                    .is('driver_id', null)
                     .gte('created_at', tenMinAgo)
                     .order('created_at', { ascending: false })
                     .limit(20);
 
-                if (data) {
-                    processRequests(data, true);
+                if (error) {
+                    console.warn('[driver-rides] legacy reconciliation failed:', error);
+                    if (!disposed) setRequests([]);
+                    return;
                 }
+                if (!disposed) processRequests(data || [], true);
             };
+            reconcileRequests = fetchLegacyRequests;
 
             channel = supabase
                 .channel('public:rides')
                 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'rides' }, (payload) => {
-                    if (payload.new.status === 'requested') {
+                    if (isDriverRideRequestAvailable(payload.new)) {
                         processRequests([payload.new], false);
                     }
                 })
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rides' }, (payload) => {
-                    if (payload.new.status !== 'requested') {
-                        setRequests(prev => prev.filter(r => r.id !== payload.new.id));
+                    if (!isDriverRideRequestAvailable(payload.new)) {
+                        setRequests((current) => current.filter((ride) => ride.id !== payload.new.id));
+                    } else {
+                        processRequests([payload.new], false);
                     }
                 })
                 .subscribe((status) => {
                     setSubscriptionStatus(status);
-                    if (status === 'SUBSCRIBED') {
-                        fetchExistingRequests();
-                    }
+                    if (status === 'SUBSCRIBED') void fetchLegacyRequests();
                 });
         };
 
-        setupRealtime();
+        window.addEventListener('focus', resyncWhenVisible);
+        document.addEventListener('visibilitychange', resyncWhenVisible);
+        void setupRealtime();
 
         return () => {
+            disposed = true;
+            window.removeEventListener('focus', resyncWhenVisible);
+            document.removeEventListener('visibilitychange', resyncWhenVisible);
+            if (reconcileTimer) window.clearInterval(reconcileTimer);
             if (channel) supabase.removeChannel(channel);
         };
-    }, [isOnline, profile, processRequests]);
+    }, [isOnline, profile?.id, processRequests]);
 
-    // Expire requests older than 5 mins
+    // Remove an offer as soon as its real server deadline passes. This is a
+    // local UX guard; the five-second server reconciliation remains authoritative.
     useEffect(() => {
-        if (!isOnline) return;
-        const id = setInterval(() => {
-            const cutoff = Date.now() - 5 * 60 * 1000;
-            setRequests(prev => prev.filter(r => new Date(r.created_at).getTime() > cutoff));
-        }, 60000);
-        return () => clearInterval(id);
+        if (!isOnline) return undefined;
+        const id = window.setInterval(() => {
+            setRequests((current) => current.filter((ride) => isDriverRideRequestAvailable(ride)));
+        }, 1000);
+        return () => window.clearInterval(id);
     }, [isOnline]);
 
     // Monitor sound loops when requests list transitions to empty

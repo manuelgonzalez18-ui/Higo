@@ -7,8 +7,8 @@ android {
         applicationId "com.higoapp.ve"
         minSdkVersion 23
         targetSdkVersion 35
-        versionCode 48
-        versionName "1.5.16"
+        versionCode 49
+        versionName "1.5.17"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'

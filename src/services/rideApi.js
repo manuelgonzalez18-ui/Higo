@@ -139,6 +139,11 @@ export const listDirectedRideOffers = async (limit = 20) => {
     }));
 };
 
+export const areDirectedRideOffersEnabled = async () => {
+    const value = unwrap(await supabase.rpc('higo_directed_offers_enabled'));
+    return value === true || value === 'true' || value === 1;
+};
+
 export const acceptRide = async (rideId) => {
     const result = unwrap(await supabase.rpc('driver_accept_ride_v2', { p_ride_id: rideId }));
     trackEventLater('ride.accepted', { entityType: 'ride', entityId: rideId });

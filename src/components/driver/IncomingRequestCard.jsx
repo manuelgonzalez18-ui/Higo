@@ -1,24 +1,41 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { resolveRideRequestDeadline, secondsUntilRideRequestDeadline } from '../../utils/driverRideOffer';
 import { stopLoopingRequestAlert } from '../../services/notificationService';
 
 const IncomingRequestCard = ({ request, onAccept, onDecline }) => {
-    const [timeLeft, setTimeLeft] = useState(25);
+    const onDeclineRef = useRef(onDecline);
+    const [deadlineMs, setDeadlineMs] = useState(() => resolveRideRequestDeadline(request));
+    const [initialSeconds, setInitialSeconds] = useState(() => (
+        secondsUntilRideRequestDeadline(resolveRideRequestDeadline(request)) || 25
+    ));
+    const [timeLeft, setTimeLeft] = useState(initialSeconds);
 
     useEffect(() => {
-        setTimeLeft(25);
-        const timer = setInterval(() => {
-            setTimeLeft((prev) => {
-                if (prev <= 1) {
-                    clearInterval(timer);
-                    onDecline(request.id);
-                    return 0;
-                }
-                return prev - 1;
-            });
-        }, 1000);
+        onDeclineRef.current = onDecline;
+    }, [onDecline]);
 
-        return () => clearInterval(timer);
-    }, [request.id, onDecline]);
+    useEffect(() => {
+        const deadline = resolveRideRequestDeadline(request);
+        const initial = secondsUntilRideRequestDeadline(deadline);
+        setDeadlineMs(deadline);
+        setInitialSeconds(Math.max(1, initial));
+        setTimeLeft(initial);
+
+        let expired = false;
+        const tick = () => {
+            const remaining = secondsUntilRideRequestDeadline(deadline);
+            setTimeLeft(remaining);
+            if (remaining <= 0 && !expired) {
+                expired = true;
+                stopLoopingRequestAlert();
+                onDeclineRef.current?.(request.id);
+            }
+        };
+
+        tick();
+        const timer = window.setInterval(tick, 250);
+        return () => window.clearInterval(timer);
+    }, [request.id, request.expiresAt, request.expires_at, request.offer_expires_at]);
 
     if (!request) return null;
 
@@ -26,7 +43,7 @@ const IncomingRequestCard = ({ request, onAccept, onDecline }) => {
     const priceFormatted = parseFloat(request.price).toFixed(2);
     
     // Calculate progress percentage
-    const progressWidth = `${(timeLeft / 25) * 100}%`;
+    const progressWidth = `${Math.max(0, Math.min(100, (timeLeft / Math.max(1, initialSeconds)) * 100))}%`;
 
     return (
         <div className="bg-[#0F172A]/95 backdrop-blur-md rounded-[32px] p-6 shadow-2xl border border-white/10 relative overflow-hidden animate-in slide-in-from-bottom-20 fade-in duration-300">
