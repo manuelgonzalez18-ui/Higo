@@ -1,0 +1,73 @@
+name: Apply driver Realtime polling fix
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/apply-driver-realtime-polling-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply exact native driver connectivity fix
+        run: python scripts/apply_driver_realtime_polling_fix.py
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
+
+      - name: Run focused driver connectivity regressions
+        run: >-
+          node --test
+          tests/nativeDriverChatGhostRegression.test.mjs
+          tests/driverGhostOfferRegression.test.mjs
+          tests/routeWaypoints.test.mjs
+          tests/passengerRideVoice.test.mjs
+
+      - name: Validate migrations, tests and production build
+        env:
+          VITE_SHOP_ENABLED: 'false'
+          VITE_SERVER_SIDE_RIDE_PRICING: 'true'
+          VITE_SERVER_SIDE_RIDE_STATE: 'true'
+          VITE_UNIFIED_MEMBERSHIP_CHECKOUT: 'true'
+          VITE_DIRECTED_RIDE_OFFERS: 'true'
+        run: npm run check
+
+      - name: Verify release contract
+        run: |
+          grep -q "current === 'SUBSCRIBED' ? current : 'POLLING'" src/pages/DriverDashboard.jsx
+          grep -q "subscriptionStatus === 'POLLING'" src/pages/DriverDashboard.jsx
+          grep -q 'versionCode 53' android/app/build.gradle
+          grep -q 'versionName "1.5.21"' android/app/build.gradle
+
+      - name: Commit validated correction to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/pages/DriverDashboard.jsx \
+            android/app/build.gradle \
+            tests/nativeDriverChatGhostRegression.test.mjs \
+            tests/driverGhostOfferRegression.test.mjs \
+            tests/routeWaypoints.test.mjs \
+            tests/passengerRideVoice.test.mjs
+          git commit -m "fix(driver): keep online state with Realtime polling fallback"
+          git push origin HEAD:main
