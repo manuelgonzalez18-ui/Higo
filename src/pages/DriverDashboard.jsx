@@ -415,7 +415,12 @@ const DriverDashboard = () => {
 
             let directedOffersEnabled = FEATURES.directedRideOffers;
             try {
-                directedOffersEnabled = await areDirectedRideOffersEnabled();
+                directedOffersEnabled = await Promise.race([
+                    areDirectedRideOffersEnabled(),
+                    new Promise((_, reject) => {
+                        window.setTimeout(() => reject(new Error('directed offers flag timeout')), 5000);
+                    }),
+                ]);
             } catch (error) {
                 console.warn('[driver-offers] runtime flag unavailable; using build flag:', error);
             }
@@ -425,7 +430,12 @@ const DriverDashboard = () => {
                 const reconcileDirectedOffers = async () => {
                     try {
                         const offers = await listDirectedRideOffers(20);
-                        if (!disposed) processRequests(offers, true, true);
+                        if (!disposed) {
+                            processRequests(offers, true, true);
+                            setSubscriptionStatus((current) => (
+                                current === 'SUBSCRIBED' ? current : 'POLLING'
+                            ));
+                        }
                     } catch (error) {
                         if (!disposed) {
                             console.warn('[driver-offers] reconciliation failed:', error);
@@ -447,8 +457,22 @@ const DriverDashboard = () => {
                         filter: `driver_id=eq.${profile.id}`,
                     }, () => void reconcileDirectedOffers())
                     .subscribe((status) => {
+                        if (status === 'SUBSCRIBED') {
+                            setSubscriptionStatus('SUBSCRIBED');
+                            void reconcileDirectedOffers();
+                            return;
+                        }
+                        if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
+                            setSubscriptionStatus('POLLING');
+                            return;
+                        }
+                        if (status === 'CONNECTING') {
+                            setSubscriptionStatus((current) => (
+                                current === 'POLLING' ? current : 'CONNECTING'
+                            ));
+                            return;
+                        }
                         setSubscriptionStatus(status);
-                        if (status === 'SUBSCRIBED') void reconcileDirectedOffers();
                     });
 
                 // Expirations do not emit UPDATE events, so reconcile against the
@@ -473,7 +497,12 @@ const DriverDashboard = () => {
                     if (!disposed) setRequests([]);
                     return;
                 }
-                if (!disposed) processRequests(data || [], true);
+                if (!disposed) {
+                    processRequests(data || [], true);
+                    setSubscriptionStatus((current) => (
+                        current === 'SUBSCRIBED' ? current : 'POLLING'
+                    ));
+                }
             };
             reconcileRequests = fetchLegacyRequests;
 
@@ -492,8 +521,22 @@ const DriverDashboard = () => {
                     }
                 })
                 .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        setSubscriptionStatus('SUBSCRIBED');
+                        void fetchLegacyRequests();
+                        return;
+                    }
+                    if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
+                        setSubscriptionStatus('POLLING');
+                        return;
+                    }
+                    if (status === 'CONNECTING') {
+                        setSubscriptionStatus((current) => (
+                            current === 'POLLING' ? current : 'CONNECTING'
+                        ));
+                        return;
+                    }
                     setSubscriptionStatus(status);
-                    if (status === 'SUBSCRIBED') void fetchLegacyRequests();
                 });
         };
 
@@ -632,10 +675,10 @@ const DriverDashboard = () => {
                 <div className="p-4 flex justify-between items-start pointer-events-auto">
                     {!activeRide && (
                         <div className="bg-[#0F172A]/90 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-3 shadow-lg transition-all duration-300">
-                            <div className={`w-2.5 h-2.5 rounded-full ${isOnline && subscriptionStatus === 'SUBSCRIBED' ? 'bg-emerald-500 animate-pulse' : isOnline ? 'bg-amber-500 animate-pulse' : 'bg-red-500'}`}></div>
+                            <div className={`w-2.5 h-2.5 rounded-full ${isOnline && (subscriptionStatus === 'SUBSCRIBED' || subscriptionStatus === 'POLLING') ? 'bg-emerald-500 animate-pulse' : isOnline ? 'bg-amber-500 animate-pulse' : 'bg-red-500'}`}></div>
                             <span className="font-bold text-xs tracking-wider uppercase">
                                 {!isOnline ? 'Desconectado' :
-                                    subscriptionStatus === 'SUBSCRIBED' ? 'En línea' :
+                                    (subscriptionStatus === 'SUBSCRIBED' || subscriptionStatus === 'POLLING') ? 'En línea' :
                                         subscriptionStatus === 'CONNECTING' ? 'Conectando...' :
                                             'Reconectando...'}
                             </span>

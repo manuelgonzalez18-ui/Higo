@@ -62,3 +62,12 @@ test('motorcycle cards require a current directed offer and server vehicle match
     assert.match(migration, /higo_canonical_vehicle_type\(p\.vehicle_type\)/);
     assert.match(migration, /higo_canonical_vehicle_type\(r\.ride_type\)/);
 });
+
+
+test('driver remains online when Realtime falls back to RPC polling', async () => {
+    const dashboard = await read('src/pages/DriverDashboard.jsx');
+    assert.match(dashboard, /current === 'SUBSCRIBED' \? current : 'POLLING'/);
+    assert.match(dashboard, /\['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'\]/);
+    assert.match(dashboard, /subscriptionStatus === 'POLLING'/);
+    assert.match(dashboard, /directed offers flag timeout/);
+});
