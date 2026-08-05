@@ -6,6 +6,7 @@ on:
       - src/utils/routeWaypoints.js
       - tests/routeWaypoints.test.mjs
       - scripts/apply_route_waypoints_fix.py
+      - scripts/apply_route_waypoints_fix_v2.py
       - .github/workflows/apply-route-waypoints-fix.yml
   push:
     branches:
@@ -29,7 +30,7 @@ jobs:
           fetch-depth: 0
 
       - name: Apply exact route integration
-        run: python scripts/apply_route_waypoints_fix.py
+        run: python scripts/apply_route_waypoints_fix_v2.py
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -71,6 +72,7 @@ jobs:
             android/app/build.gradle
           git rm -f \
             .github/workflows/apply-route-waypoints-fix.yml \
-            scripts/apply_route_waypoints_fix.py
+            scripts/apply_route_waypoints_fix.py \
+            scripts/apply_route_waypoints_fix_v2.py
           git commit -m "fix(routes): draw and price trips through intermediate stops"
           git push origin HEAD:main
