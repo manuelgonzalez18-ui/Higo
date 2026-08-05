@@ -1,4 +1,4 @@
-name: Build Higo 1.5.21 AAB
+name: Build Higo 1.5.22 AAB
 
 on:
   push:
@@ -7,10 +7,13 @@ on:
     paths:
       - src/App.jsx
       - src/components/ChatWidget.jsx
+      - src/pages/ConfirmTripPage.jsx
+      - src/pages/RideStatusPage.jsx
       - src/pages/DriverDashboard.jsx
       - src/hooks/useBackgroundLocation.js
       - src/services/rideApi.js
       - src/utils/driverRideOffer.js
+      - src/utils/passengerRideVoice.js
       - supabase/migrations/20260805123500_driver_presence_and_offer_hardening.sql
       - tests/nativeDriverChatGhostRegression.test.mjs
       - tests/driverGhostOfferRegression.test.mjs
@@ -36,9 +39,9 @@ jobs:
 
       - name: Verify Android release version
         run: |
-          grep -q 'versionCode 53' android/app/build.gradle
-          grep -q 'versionName "1.5.21"' android/app/build.gradle
-          echo "Building Higo 1.5.21 (53) from $(git rev-parse --short HEAD)"
+          grep -q 'versionCode 54' android/app/build.gradle
+          grep -q 'versionName "1.5.22"' android/app/build.gradle
+          echo "Building Higo 1.5.22 (54) from $(git rev-parse --short HEAD)"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -58,8 +61,8 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps --no-audit --no-fund
 
-      - name: Run driver, chat, route and passenger regressions
-        run: node --test tests/nativeDriverChatGhostRegression.test.mjs tests/driverGhostOfferRegression.test.mjs tests/routeWaypoints.test.mjs tests/passengerRideVoice.test.mjs
+      - name: Run delivery voice, driver, chat and route regressions
+        run: node --test tests/passengerRideVoice.test.mjs tests/nativeDriverChatGhostRegression.test.mjs tests/driverGhostOfferRegression.test.mjs tests/routeWaypoints.test.mjs
 
       - name: Build web bundle with production ride flags
         env:
@@ -111,25 +114,25 @@ jobs:
 
       - name: Prepare release artifacts
         run: |
-          cp android/app/build/outputs/bundle/release/app-release.aab higo-1.5.21-53-release.aab
-          cp android/app/build/outputs/apk/release/app-release.apk higo-1.5.21-53-release.apk
-          sha256sum higo-1.5.21-53-release.aab higo-1.5.21-53-release.apk > SHA256SUMS.txt
-          ls -lh higo-1.5.21-53-release.aab higo-1.5.21-53-release.apk SHA256SUMS.txt
+          cp android/app/build/outputs/bundle/release/app-release.aab higo-1.5.22-54-release.aab
+          cp android/app/build/outputs/apk/release/app-release.apk higo-1.5.22-54-release.apk
+          sha256sum higo-1.5.22-54-release.aab higo-1.5.22-54-release.apk > SHA256SUMS.txt
+          ls -lh higo-1.5.22-54-release.aab higo-1.5.22-54-release.apk SHA256SUMS.txt
 
       - name: Upload Play Store AAB
         uses: actions/upload-artifact@v4
         with:
-          name: higo-1.5.21-53-aab
+          name: higo-1.5.22-54-aab
           path: |
-            higo-1.5.21-53-release.aab
+            higo-1.5.22-54-release.aab
             SHA256SUMS.txt
           retention-days: 30
 
       - name: Upload device APK
         uses: actions/upload-artifact@v4
         with:
-          name: higo-1.5.21-53-apk
+          name: higo-1.5.22-54-apk
           path: |
-            higo-1.5.21-53-release.apk
+            higo-1.5.22-54-release.apk
             SHA256SUMS.txt
           retention-days: 30
