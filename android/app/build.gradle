@@ -7,7 +7,7 @@ android {
         applicationId "com.higoapp.ve"
         minSdkVersion 23
         targetSdkVersion 35
-        // Higo 1.5.22: Higo Envíos voice milestones.
+        // Higo 1.5.22: release with Higo Envíos voice milestones.
         versionCode 54
         versionName "1.5.22"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
