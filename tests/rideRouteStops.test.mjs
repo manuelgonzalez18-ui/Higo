@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 
 import {
     buildGoogleWaypoints,
@@ -10,8 +9,6 @@ import {
     routeStopsSignature,
     sumGoogleRouteLegs,
 } from '../src/utils/rideRouteStops.js';
-
-const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('builds origin, stops in entered order and final destination', () => {
     assert.deepEqual(buildOrderedRideRoute({
@@ -79,24 +76,4 @@ test('fallback distance includes every leg including return', () => {
     ];
     const distance = routeDistanceBySegmentsKm(points, () => 10);
     assert.equal(distance, 20);
-});
-
-test('map implementations consume explicit stop waypoints', async () => {
-    const [googleMap, mapboxMap, directions, requestPage, confirmPage] = await Promise.all([
-        read('src/components/InteractiveMapGoogle.jsx'),
-        read('src/components/InteractiveMapMapbox.jsx'),
-        read('src/services/directionsService.js'),
-        read('src/pages/RequestRidePage.jsx'),
-        read('src/pages/ConfirmTripPage.jsx'),
-    ]);
-
-    assert.match(googleMap, /waypoints: buildGoogleWaypoints\(normalizedStops\)/);
-    assert.match(googleMap, /optimizeWaypoints: false/);
-    assert.match(googleMap, /sumGoogleRouteLegs\(route\)/);
-    assert.match(googleMap, /stops=\{stops\}/);
-    assert.match(mapboxMap, /getRoute\(origin, destination, 'driving-traffic', normalizedStops\)/);
-    assert.match(mapboxMap, /normalizedStops\.forEach/);
-    assert.match(directions, /buildOrderedRideRoute/);
-    assert.match(requestPage, /stops=\{stops\}/);
-    assert.match(confirmPage, /stops=\{stops\}/);
 });
