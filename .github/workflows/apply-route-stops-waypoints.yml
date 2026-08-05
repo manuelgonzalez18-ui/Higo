@@ -34,11 +34,36 @@ jobs:
           from pathlib import Path
           path = Path('scripts/apply_route_stops_waypoints.py')
           source = path.read_text(encoding='utf-8')
-          needle = '    // Vehicle Rates: viven en DB",\n'
-          replacement = '    // Vehicle Rates: viven en DB""",\n'
-          if source.count(needle) != 2:
-              raise SystemExit(f'route patch delimiter count={source.count(needle)}')
-          path.write_text(source.replace(needle, replacement), encoding='utf-8')
+
+          delimiter = '    // Vehicle Rates: viven en DB",\n'
+          if source.count(delimiter) != 2:
+              raise SystemExit(f'route patch delimiter count={source.count(delimiter)}')
+          source = source.replace(delimiter, '    // Vehicle Rates: viven en DB""",\n')
+
+          duplicate_block = '''replace_once(
+              "src/services/directionsService.js",
+              "        return haversineFallback(origin, destination);\\n",
+              "        return haversineFallback(origin, destination, stops);\\n",
+          )
+          '''
+          if source.count(duplicate_block) != 2:
+              raise SystemExit(f'fallback patch block count={source.count(duplicate_block)}')
+          replacement_block = '''directions_path = Path("src/services/directionsService.js")
+          directions_source = directions_path.read_text(encoding="utf-8")
+          fallback_needle = "        return haversineFallback(origin, destination);\\n"
+          if directions_source.count(fallback_needle) != 2:
+              raise SystemExit(f"directions fallback count={directions_source.count(fallback_needle)}")
+          directions_path.write_text(
+              directions_source.replace(
+                  fallback_needle,
+                  "        return haversineFallback(origin, destination, stops);\\n",
+              ),
+              encoding="utf-8",
+          )
+          '''
+          source = source.replace(duplicate_block, replacement_block, 1)
+          source = source.replace(duplicate_block, '', 1)
+          path.write_text(source, encoding='utf-8')
           PY
           python scripts/apply_route_stops_waypoints.py
 
