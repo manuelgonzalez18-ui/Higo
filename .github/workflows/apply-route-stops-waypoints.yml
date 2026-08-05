@@ -29,7 +29,18 @@ jobs:
           fetch-depth: 0
 
       - name: Apply exact route-stop integration
-        run: python scripts/apply_route_stops_waypoints.py
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/apply_route_stops_waypoints.py')
+          source = path.read_text(encoding='utf-8')
+          needle = '    // Vehicle Rates: viven en DB",\n'
+          replacement = '    // Vehicle Rates: viven en DB""",\n'
+          if source.count(needle) != 2:
+              raise SystemExit(f'route patch delimiter count={source.count(needle)}')
+          path.write_text(source.replace(needle, replacement), encoding='utf-8')
+          PY
+          python scripts/apply_route_stops_waypoints.py
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
