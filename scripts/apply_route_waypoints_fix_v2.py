@@ -30,3 +30,12 @@ if text.count(old) != 2:
 service.write_text(text.replace(old, '        return haversineFallback(origin, destination, waypoints);'), encoding='utf-8')
 
 runpy.run_path(str(path), run_name='__main__')
+
+for test_path in (
+    Path('tests/driverGhostOfferRegression.test.mjs'),
+    Path('tests/passengerRideVoice.test.mjs'),
+):
+    test_source = test_path.read_text(encoding='utf-8')
+    test_source = test_source.replace('/versionCode 50/', '/versionCode 51/')
+    test_source = test_source.replace('/versionName "1\\.5\\.18"/', '/versionName "1\\.5\\.19"/')
+    test_path.write_text(test_source, encoding='utf-8')
