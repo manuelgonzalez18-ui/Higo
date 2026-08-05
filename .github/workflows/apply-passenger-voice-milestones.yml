@@ -61,6 +61,7 @@ jobs:
           grep -q "announcePassengerRideState(data)" src/pages/RideStatusPage.jsx
           grep -q 'versionCode 50' android/app/build.gradle
           grep -q 'versionName "1.5.18"' android/app/build.gradle
+          grep -q 'versionCode 50' tests/driverGhostOfferRegression.test.mjs
           test -f tests/passengerRideVoice.test.mjs
 
       - name: Commit validated integration to main
@@ -72,6 +73,7 @@ jobs:
             src/pages/ConfirmTripPage.jsx \
             src/pages/RideStatusPage.jsx \
             android/app/build.gradle \
+            tests/driverGhostOfferRegression.test.mjs \
             tests/passengerRideVoice.test.mjs
           git rm -f \
             .github/workflows/apply-passenger-voice-milestones.yml \
