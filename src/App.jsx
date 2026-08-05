@@ -85,6 +85,7 @@ function ShopHomeSelector() {
 import { useEffect, useState } from 'react';
 import { initGlobalAudio } from './services/notificationService';
 import { ensureFcmRegistration, subscribeForegroundMessages } from './services/pushNotifications';
+import { getDirectedRideOfferForRide } from './services/rideApi';
 import DriverRequestCard from './components/DriverRequestCard';
 import { supabase } from './services/supabase';
 import { useGeolocation } from './hooks/useGeolocation';
@@ -427,19 +428,38 @@ const App = () => {
     const unsub = subscribeForegroundMessages((payload) => {
       const { title } = payload.notification || {};
       const data = payload.data || {};
+      const isRideRequest = data.type === 'ride_request'
+        || title?.includes('Nuevo Viaje')
+        || title?.includes('Request');
 
-      if (data.type === 'ride_request' || title?.includes('Nuevo Viaje') || title?.includes('Request')) {
-        setIncomingRequest({
-          price: data.price || '1.5',
-          distance: data.distance || '1.9 km',
-          duration: data.duration || '15 min',
-          pickupLocation: data.pickupLocation || 'Ubicación Actual',
-          pickupAddress: data.pickupAddress || 'Downtown District',
-          dropoffLocation: data.dropoffLocation || 'Centro Comercial Flamingo',
-          dropoffAddress: data.dropoffAddress || 'Entrada Principal',
-          ...data
-        });
-        if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);
+      if (isRideRequest) {
+        const rideId = data.rideId || data.ride_id || data.id || null;
+        if (!rideId || window.location.hash.startsWith('#/driver')) return;
+
+        void (async () => {
+          try {
+            const offer = await getDirectedRideOfferForRide(rideId);
+            if (!offer) {
+              console.warn('[ride-push] ignored stale or non-directed offer:', rideId);
+              return;
+            }
+
+            setIncomingRequest({
+              price: offer.price ?? offer.estimated_price ?? data.price ?? '1.5',
+              distance: offer.distanceKm ?? data.distance ?? '',
+              duration: data.duration || '',
+              pickupLocation: offer.pickup ?? offer.pickup_address ?? data.pickupLocation ?? 'Ubicación del pasajero',
+              pickupAddress: offer.pickup_address ?? data.pickupAddress ?? '',
+              dropoffLocation: offer.dropoff ?? offer.dropoff_address ?? data.dropoffLocation ?? 'Destino',
+              dropoffAddress: offer.dropoff_address ?? data.dropoffAddress ?? '',
+              ...data,
+              ...offer,
+            });
+            if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);
+          } catch (error) {
+            console.warn('[ride-push] directed-offer validation failed:', error);
+          }
+        })();
       } else if (title && navigator.vibrate) {
         navigator.vibrate([200, 100, 200]);
       }

@@ -27,6 +27,12 @@ export const isDriverRideRequestAvailable = (request = {}, nowMs = Date.now()) =
     return true;
 };
 
+export const hasActiveDirectedRideOffer = (request = {}, nowMs = Date.now()) => {
+    const offerId = request.offerId ?? request.offer_id ?? null;
+    if (offerId == null || String(offerId).trim() === '') return false;
+    return isDriverRideRequestAvailable(request, nowMs);
+};
+
 export const resolveRideRequestDeadline = (
     request = {},
     nowMs = Date.now(),
