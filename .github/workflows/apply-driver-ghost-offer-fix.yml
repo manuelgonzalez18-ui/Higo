@@ -84,7 +84,7 @@ jobs:
             src/services/rideApi.js \
             android/app/build.gradle \
             tests/driverGhostOfferRegression.test.mjs
-          git rm \
+          git rm -f \
             .github/workflows/apply-driver-ghost-offer-fix.yml \
             scripts/apply_driver_ghost_offer_fix.py \
             scripts/apply_driver_ghost_offer_fix_v2.py
