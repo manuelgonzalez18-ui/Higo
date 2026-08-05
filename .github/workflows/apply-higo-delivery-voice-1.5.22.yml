@@ -1,0 +1,78 @@
+name: Apply Higo Envíos voice 1.5.22
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/apply-higo-delivery-voice-1.5.22.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply exact Higo Envíos voice contract
+        run: python scripts/apply_higo_delivery_voice_1_5_22.py
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
+
+      - name: Run voice and ride regressions
+        run: >-
+          node --test
+          tests/passengerRideVoice.test.mjs
+          tests/nativeDriverChatGhostRegression.test.mjs
+          tests/driverGhostOfferRegression.test.mjs
+          tests/routeWaypoints.test.mjs
+
+      - name: Validate migrations, tests and production build
+        env:
+          VITE_SHOP_ENABLED: 'false'
+          VITE_SERVER_SIDE_RIDE_PRICING: 'true'
+          VITE_SERVER_SIDE_RIDE_STATE: 'true'
+          VITE_UNIFIED_MEMBERSHIP_CHECKOUT: 'true'
+          VITE_DIRECTED_RIDE_OFFERS: 'true'
+        run: npm run check
+
+      - name: Verify delivery voice release contract
+        run: |
+          grep -q "delivery_searching: 'Buscando Higo Driver'" src/utils/passengerRideVoice.js
+          grep -q "delivery_accepted: 'Higo Driver Encontrado'" src/utils/passengerRideVoice.js
+          grep -q "delivery_picked_up: 'Tu envío ha sido Recogido'" src/utils/passengerRideVoice.js
+          grep -q "delivery_completed: 'Tu Envío ha sido entregado'" src/utils/passengerRideVoice.js
+          grep -q "milestone: isDelivery ? 'delivery_searching' : 'searching'" src/pages/ConfirmTripPage.jsx
+          grep -q 'versionCode 54' android/app/build.gradle
+          grep -q 'versionName "1.5.22"' android/app/build.gradle
+
+      - name: Commit validated correction to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/utils/passengerRideVoice.js \
+            src/pages/ConfirmTripPage.jsx \
+            src/pages/RideStatusPage.jsx \
+            tests/passengerRideVoice.test.mjs \
+            tests/driverGhostOfferRegression.test.mjs \
+            tests/nativeDriverChatGhostRegression.test.mjs \
+            tests/routeWaypoints.test.mjs \
+            android/app/build.gradle
+          git commit -m "feat(delivery): announce Higo Envíos milestones by voice"
+          git push origin HEAD:main
