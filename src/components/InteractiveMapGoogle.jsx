@@ -5,6 +5,7 @@ import { supabase } from '../services/supabase';
 // Import Realistic Icons
 import { MotoIcon, StandardIcon, VanIcon, PassengerPin, DestinationPin } from '../assets/markers';
 import { resolveVehicleMarkerRotation } from '../utils/vehicleMarkerRotation';
+import { normalizeRouteWaypoints } from '../utils/routeWaypoints';
 
 // Fallback Center
 const HIGUEROTE_CENTER = { lat: 10.4850, lng: -66.0950 };
@@ -50,7 +51,7 @@ const getIconForType = (type) => {
 };
 
 
-const Directions = ({ origin, destination, onRouteData, routeColor }) => {
+const Directions = ({ origin, destination, waypoints = [], onRouteData, routeColor }) => {
     const map = useMap();
     const routesLibrary = useMapsLibrary('routes');
     const [directionsService, setDirectionsService] = useState(null);
@@ -80,20 +81,25 @@ const Directions = ({ origin, destination, onRouteData, routeColor }) => {
         if (isSameLoc) return;
 
         directionsService.route({
-            origin: origin,
-            destination: destination,
+            origin,
+            destination,
+            waypoints: normalizeRouteWaypoints(waypoints).map((stop) => ({
+                location: { lat: stop.lat, lng: stop.lng },
+                stopover: true,
+            })),
+            optimizeWaypoints: false,
             travelMode: 'DRIVING',
             provideRouteAlternatives: false
         }).then(response => {
             directionsRenderer.setDirections(response);
             setRoutes(response.routes);
 
-            // Extract ETA data from the first leg
-            const leg = response.routes[0]?.legs[0];
+            const legs = response.routes[0]?.legs || [];
+            const firstLeg = legs[0];
             const overviewPath = response.routes[0]?.overview_path || [];
 
-            if (leg && onRouteData) {
-                const nextStep = leg.steps?.[0];
+            if (firstLeg && onRouteData) {
+                const nextStep = firstLeg.steps?.[0];
                 let nextHeading = 0;
                 if (nextStep) {
                     const s = nextStep.start_location;
@@ -119,21 +125,25 @@ const Directions = ({ origin, destination, onRouteData, routeColor }) => {
                         .trim();
                 };
 
-                const stepsForNav = (leg.steps || []).map(step => ({
+                const stepsForNav = legs.flatMap((leg, legIndex) => (leg.steps || []).map(step => ({
                     instruction:     stripHtml(step.instructions),
                     htmlInstruction: step.instructions,
                     distance:        step.distance,
                     duration:        step.duration,
                     maneuver:        step.maneuver,
+                    legIndex,
                     start_location:  { lat: step.start_location.lat(), lng: step.start_location.lng() },
                     end_location:    { lat: step.end_location.lat(),   lng: step.end_location.lng() },
-                }));
+                })));
+                const totalDistance = legs.reduce((sum, leg) => sum + Number(leg.distance?.value || 0), 0);
+                const totalDuration = legs.reduce((sum, leg) => sum + Number(leg.duration?.value || 0), 0);
+                const finalLeg = legs[legs.length - 1];
 
                 onRouteData({
-                    duration: leg.duration,
-                    distance: leg.distance,
-                    end_location: leg.end_location,
-                    start_location: leg.start_location,
+                    duration: { value: totalDuration, text: `${Math.max(1, Math.round(totalDuration / 60))} min` },
+                    distance: { value: totalDistance, text: `${(totalDistance / 1000).toFixed(1)} km` },
+                    end_location: finalLeg.end_location,
+                    start_location: firstLeg.start_location,
                     overviewPath: overviewPath.map(p => ({ lat: p.lat(), lng: p.lng() })),
                     steps: stepsForNav,
                     next_step: nextStep ? {
@@ -145,7 +155,7 @@ const Directions = ({ origin, destination, onRouteData, routeColor }) => {
             }
         }).catch(e => console.error("Directions request failed", e));
 
-    }, [directionsService, directionsRenderer, origin, destination]);
+    }, [directionsService, directionsRenderer, origin, destination, waypoints, onRouteData, routeColor]);
 
     return null;
 };
@@ -576,6 +586,15 @@ const MapContent = ({
                 </AnimatedVehicleMarker>
             )}
 
+            {/* Intermediate stop markers */}
+            {normalizeRouteWaypoints(markersProp).map((stop, index) => (
+                <AdvancedMarker key={stop.id} position={{ lat: stop.lat, lng: stop.lng }} zIndex={45}>
+                    <div className="w-9 h-9 rounded-full bg-amber-500 text-black border-2 border-white shadow-xl flex items-center justify-center font-black text-sm" title={stop.address}>
+                        {index + 1}
+                    </div>
+                </AdvancedMarker>
+            ))}
+
             {/* Destination Marker */}
             {destination && !showPin && isValidCoordinate(destination) && (
                 <AdvancedMarker position={destination}>
@@ -610,6 +629,7 @@ const MapContent = ({
                 <Directions
                     origin={origin}
                     destination={destination}
+                    waypoints={markersProp}
                     onRouteData={setRouteInfo}
                     routeColor={routeColor}
                 />

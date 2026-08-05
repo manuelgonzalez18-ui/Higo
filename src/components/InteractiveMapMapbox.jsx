@@ -33,6 +33,7 @@ import { supabase } from '../services/supabase';
 import { calculateBearing } from '../utils/geoUtils';
 import { getRoute } from '../services/directionsService';
 import { reportError } from '../utils/reportError';
+import { normalizeRouteWaypoints } from '../utils/routeWaypoints';
 
 const MAPBOX_TOKEN = (typeof import.meta !== 'undefined'
     && import.meta.env?.VITE_MAPBOX_TOKEN) || '';
@@ -166,6 +167,7 @@ const InteractiveMapMapbox = ({
     const destinationMarkerRef = useRef(null);
     const driverMarkerRef = useRef(null);
     const fleetMarkersRef = useRef({}); // driverId → marker
+    const stopMarkersRef = useRef([]);
     const routeReqIdRef = useRef(0);
     const onRouteDataRef = useRef(onRouteData);
 
@@ -230,6 +232,8 @@ const InteractiveMapMapbox = ({
             destinationMarkerRef.current = null;
             driverMarkerRef.current = null;
             fleetMarkersRef.current = {};
+            stopMarkersRef.current.forEach((marker) => marker.remove());
+            stopMarkersRef.current = [];
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -325,14 +329,14 @@ const InteractiveMapMapbox = ({
         if (!map || !origin?.lat || !destination?.lat) return;
         // Esperar a que el style esté cargado antes de fit.
         const fit = () => {
-            const bounds = new mapboxgl.LngLatBounds()
-                .extend([origin.lng, origin.lat])
-                .extend([destination.lng, destination.lat]);
+            const bounds = new mapboxgl.LngLatBounds().extend([origin.lng, origin.lat]);
+            normalizeRouteWaypoints(markersProp).forEach((stop) => bounds.extend([stop.lng, stop.lat]));
+            bounds.extend([destination.lng, destination.lat]);
             map.fitBounds(bounds, { padding: 80, duration: 700, maxZoom: 15 });
         };
         if (map.isStyleLoaded()) fit();
         else map.once('style.load', fit);
-    }, [origin?.lat, origin?.lng, destination?.lat, destination?.lng]);
+    }, [origin?.lat, origin?.lng, destination?.lat, destination?.lng, markersProp]);
 
     // ─── 7. Calcular y dibujar la ruta ─────────────────────────────
     useEffect(() => {
@@ -350,7 +354,7 @@ const InteractiveMapMapbox = ({
         const reqId = ++routeReqIdRef.current;
 
         const runRoute = async () => {
-            const data = await getRoute(origin, destination);
+            const data = await getRoute(origin, destination, 'driving-traffic', markersProp);
             if (reqId !== routeReqIdRef.current) return; // race: descartar
             if (!map.getSource(ROUTE_SOURCE_ID)) return; // unmounted
 
@@ -374,9 +378,29 @@ const InteractiveMapMapbox = ({
 
         if (map.isStyleLoaded()) runRoute();
         else map.once('style.load', runRoute);
-    }, [origin?.lat, origin?.lng, destination?.lat, destination?.lng, routeColor]);
+    }, [origin?.lat, origin?.lng, destination?.lat, destination?.lng, routeColor, markersProp]);
 
-    // ─── 8. Sync flota de drivers (markersProp / markers) ──────────
+    // ─── 8. Sync numbered intermediate stops ──────────────────
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
+        stopMarkersRef.current.forEach((marker) => marker.remove());
+        stopMarkersRef.current = normalizeRouteWaypoints(markersProp).map((stop, index) => {
+            const element = document.createElement('div');
+            element.textContent = String(index + 1);
+            element.title = stop.address;
+            element.style.cssText = 'width:30px;height:30px;border-radius:9999px;background:#f59e0b;color:#111827;border:2px solid white;display:flex;align-items:center;justify-content:center;font-weight:900;box-shadow:0 5px 14px rgba(0,0,0,.45)';
+            return new mapboxgl.Marker({ element, anchor: 'center' })
+                .setLngLat([stop.lng, stop.lat])
+                .addTo(map);
+        });
+        return () => {
+            stopMarkersRef.current.forEach((marker) => marker.remove());
+            stopMarkersRef.current = [];
+        };
+    }, [markersProp]);
+
+    // ─── 9. Sync flota de drivers (markersProp / markers) ──────────
     const driverList = markersProp || markers || [];
     useEffect(() => {
         const map = mapRef.current;

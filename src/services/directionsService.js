@@ -16,6 +16,7 @@
 
 import { getDistanceFromLatLonInKm } from '../utils/geoUtils';
 import { reportError } from '../utils/reportError';
+import { normalizeRouteWaypoints, routePoints } from '../utils/routeWaypoints';
 
 const MAPBOX_TOKEN = (typeof import.meta !== 'undefined'
     && import.meta.env?.VITE_MAPBOX_TOKEN) || '';
@@ -30,8 +31,9 @@ const fmtMin = (seconds) => {
     return `${Math.floor(min / 60)} h ${min % 60} min`;
 };
 
-const haversineFallback = (origin, destination) => {
-    const km = getDistanceFromLatLonInKm(origin.lat, origin.lng, destination.lat, destination.lng);
+const haversineFallback = (origin, destination, waypoints = []) => {
+    const points = routePoints(origin, destination, waypoints);
+    const km = points.slice(0, -1).reduce((sum, point, index) => sum + getDistanceFromLatLonInKm(point.lat, point.lng, points[index + 1].lat, points[index + 1].lng), 0);
     const meters = km * 1000;
     // Estimación de duración: 30 km/h urbano (Higuerote tiene tráfico bajo
     // pero calles angostas). Suficientemente realista para pricing fallback.
@@ -39,7 +41,7 @@ const haversineFallback = (origin, destination) => {
     return {
         distance: { value: meters, text: fmtKm(meters) },
         duration: { value: seconds, text: fmtMin(seconds) },
-        polyline: [[origin.lng, origin.lat], [destination.lng, destination.lat]],
+        polyline: points.map((point) => [point.lng, point.lat]),
         degraded: true,
     };
 };
@@ -52,9 +54,9 @@ const haversineFallback = (origin, destination) => {
  * @param {string} [profile]  'driving-traffic' | 'driving' | 'walking' | 'cycling'
  * @returns {Promise<{distance, duration, polyline, degraded?}>}
  */
-export const getRoute = async (origin, destination, profile = 'driving-traffic') => {
+export const getRoute = async (origin, destination, profile = 'driving-traffic', waypoints = []) => {
     if (!origin?.lat || !destination?.lat) {
-        return haversineFallback(origin || {}, destination || {});
+        return haversineFallback(origin || {}, destination || {}, waypoints);
     }
     if (!MAPBOX_TOKEN) {
         // Sin token = fallback silencioso. Reportamos UNA vez para que el
@@ -62,11 +64,14 @@ export const getRoute = async (origin, destination, profile = 'driving-traffic')
         reportError(new Error('Mapbox token missing — falling back to Haversine'), {
             source: 'directionsService',
         });
-        return haversineFallback(origin, destination);
+        return haversineFallback(origin, destination, waypoints);
     }
 
+    const coordinates = routePoints(origin, destination, normalizeRouteWaypoints(waypoints))
+        .map((point) => `${point.lng},${point.lat}`)
+        .join(';');
     const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/`
-        + `${origin.lng},${origin.lat};${destination.lng},${destination.lat}`
+        + coordinates
         + `?geometries=geojson&overview=full&language=es&access_token=${encodeURIComponent(MAPBOX_TOKEN)}`;
 
     try {
@@ -96,7 +101,7 @@ export const getRoute = async (origin, destination, profile = 'driving-traffic')
             source: 'directionsService.getRoute',
             origin, destination, profile,
         });
-        return haversineFallback(origin, destination);
+        return haversineFallback(origin, destination, waypoints);
     }
 };
 
