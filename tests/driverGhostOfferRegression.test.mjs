@@ -58,6 +58,6 @@ test('driver dashboard consumes directed offers and preserves a guarded legacy f
     assert.match(card, /onDeclineRef/);
     assert.match(hook, /ride\.offerId \|\| ride\.offer_id/);
     assert.match(api, /higo_directed_offers_enabled/);
-    assert.match(gradle, /versionCode 51/);
-    assert.match(gradle, /versionName "1\.5\.19"/);
+    assert.match(gradle, /versionCode 52/);
+    assert.match(gradle, /versionName "1\.5\.20"/);
 });
