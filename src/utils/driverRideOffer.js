@@ -1,3 +1,5 @@
+// Contrato de disponibilidad para Higo Driver 1.5.17: solo ofertas activas,
+// no asignadas y dentro de la vigencia emitida por el despacho progresivo.
 const asTimestamp = (value) => {
     if (!value) return null;
     const timestamp = new Date(value).getTime();
