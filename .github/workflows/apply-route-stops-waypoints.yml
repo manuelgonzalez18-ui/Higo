@@ -1,0 +1,76 @@
+name: Apply route stops and waypoints
+
+on:
+  pull_request:
+    paths:
+      - src/utils/rideRouteStops.js
+      - tests/rideRouteStops.test.mjs
+      - scripts/apply_route_stops_waypoints.py
+      - .github/workflows/apply-route-stops-waypoints.yml
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/apply-route-stops-waypoints.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'push' && 'main' || github.head_ref }}
+          fetch-depth: 0
+
+      - name: Apply exact route-stop integration
+        run: python scripts/apply_route_stops_waypoints.py
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
+
+      - name: Run route-stop regression
+        run: node --test tests/rideRouteStops.test.mjs
+
+      - name: Validate full application and production build
+        env:
+          VITE_SHOP_ENABLED: 'false'
+          VITE_SERVER_SIDE_RIDE_PRICING: 'true'
+          VITE_SERVER_SIDE_RIDE_STATE: 'true'
+          VITE_UNIFIED_MEMBERSHIP_CHECKOUT: 'true'
+          VITE_DIRECTED_RIDE_OFFERS: 'true'
+        run: npm run check
+
+      - name: Verify route and release contract
+        run: |
+          grep -q "waypoints: buildGoogleWaypoints(normalizedStops)" src/components/InteractiveMapGoogle.jsx
+          grep -q "optimizeWaypoints: false" src/components/InteractiveMapGoogle.jsx
+          grep -q "sumGoogleRouteLegs(route)" src/components/InteractiveMapGoogle.jsx
+          grep -q "getRoute(origin, destination, 'driving-traffic', normalizedStops)" src/components/InteractiveMapMapbox.jsx
+          grep -q "stops={stops}" src/pages/RequestRidePage.jsx
+          grep -q "stops={stops}" src/pages/ConfirmTripPage.jsx
+          grep -q 'versionCode 51' android/app/build.gradle
+          grep -q 'versionName "1.5.19"' android/app/build.gradle
+          test -f .github/workflows/build-higo-1.5.19-aab.yml
+          test ! -f .github/workflows/build-higo-1.5.18-aab.yml
+
+      - name: Commit validated integration to main
+        if: github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git rm -f .github/workflows/apply-route-stops-waypoints.yml scripts/apply_route_stops_waypoints.py
+          git commit -m "fix(route): trazar y cotizar viajes pasando por las paradas"
+          git push origin HEAD:main
