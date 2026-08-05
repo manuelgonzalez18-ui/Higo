@@ -1,0 +1,92 @@
+name: Apply driver ghost offer fix
+
+on:
+  pull_request:
+    paths:
+      - src/utils/driverRideOffer.js
+      - scripts/apply_driver_ghost_offer_fix.py
+      - scripts/apply_driver_ghost_offer_fix_v2.py
+      - .github/workflows/apply-driver-ghost-offer-fix.yml
+      - .github/workflows/build-higo-1.5.17-aab.yml
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/apply-driver-ghost-offer-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'push' && 'main' || github.head_ref }}
+          fetch-depth: 0
+
+      - name: Apply exact source integrations
+        run: python scripts/apply_driver_ghost_offer_fix_v2.py
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
+
+      - name: Run focused ghost-offer regression
+        run: node --test tests/driverGhostOfferRegression.test.mjs
+
+      - name: Validate migrations, full tests and production build
+        env:
+          VITE_SHOP_ENABLED: 'false'
+          VITE_SERVER_SIDE_RIDE_PRICING: 'true'
+          VITE_SERVER_SIDE_RIDE_STATE: 'true'
+          VITE_UNIFIED_MEMBERSHIP_CHECKOUT: 'true'
+          VITE_DIRECTED_RIDE_OFFERS: 'true'
+        run: npm run check
+
+      - name: Verify expected integration diff
+        run: |
+          git diff --exit-code -- src/utils/driverRideOffer.js
+          for path in \
+            src/pages/DriverDashboard.jsx \
+            src/components/driver/IncomingRequestCard.jsx \
+            src/hooks/useDriverActiveTrip.js \
+            src/services/rideApi.js \
+            android/app/build.gradle; do
+            if git diff --quiet -- "$path"; then
+              echo "::error::$path was not patched"
+              exit 1
+            fi
+          done
+          test -f tests/driverGhostOfferRegression.test.mjs
+          grep -q 'versionCode 49' android/app/build.gradle
+          grep -q 'versionName "1.5.17"' android/app/build.gradle
+          test "$(grep -c "await acceptRideRequest(rideId);" src/pages/DriverDashboard.jsx)" -eq 2
+
+      - name: Commit validated integration to main
+        if: github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/pages/DriverDashboard.jsx \
+            src/components/driver/IncomingRequestCard.jsx \
+            src/hooks/useDriverActiveTrip.js \
+            src/services/rideApi.js \
+            android/app/build.gradle \
+            tests/driverGhostOfferRegression.test.mjs
+          git rm \
+            .github/workflows/apply-driver-ghost-offer-fix.yml \
+            scripts/apply_driver_ghost_offer_fix.py \
+            scripts/apply_driver_ghost_offer_fix_v2.py
+          git commit -m "fix(driver): eliminar solicitudes fantasma y respetar ofertas dirigidas"
+          git push origin HEAD:main
