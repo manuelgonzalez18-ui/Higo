@@ -21,7 +21,7 @@ import ErrorBoundary from '../components/ErrorBoundary';
 import { getDistanceFromLatLonInKm } from '../utils/geoUtils';
 import { hasActiveDirectedRideOffer, isDriverRideRequestAvailable } from '../utils/driverRideOffer';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { startLoopingRequestAlert, stopLoopingRequestAlert } from '../services/notificationService';
+import { speakOperationalMessage, startLoopingRequestAlert, stopLoopingRequestAlert } from '../services/notificationService';
 import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 
@@ -39,6 +39,7 @@ const DriverDashboard = () => {
     const [loading, setLoading] = useState(true);
     const [subscriptionStatus, setSubscriptionStatus] = useState('DISCONNECTED');
     const membershipNotifiedRef = useRef(false);
+    const announcedRequestKeysRef = useRef(new Set());
 
     const { daysLeft: membershipDaysLeft, severity: membershipSeverity } = useDriverMembership(profile?.id);
 
@@ -107,19 +108,15 @@ const DriverDashboard = () => {
         }
     }, [membershipDaysLeft]);
 
-    // Native notifications play loop audio backup helper
+    // Immediate in-app alert plus native banner. Operational TTS does not
+    // depend on the optional turn-by-turn navigation voice setting.
     const notifyNewRequest = useCallback(async (ride) => {
         if (navigator.vibrate) navigator.vibrate([1000, 500, 1000, 500, 1000]);
-        speak("Nueva solicitud de viaje");
+        void speakOperationalMessage('Nueva solicitud de viaje disponible');
+        startLoopingRequestAlert();
 
         try {
-            const audio = new Audio('https://www.soundjay.com/buttons/beep-01a.mp3');
-            audio.volume = 1.0;
-            audio.play().catch(() => {});
-        } catch (e) { /* audio fallback */ }
-
-        try {
-            let distText = "";
+            let distText = '';
             if (lastLocationRef.current && ride.pickup_lat) {
                 const dist = getDistanceFromLatLonInKm(
                     lastLocationRef.current.latitude, lastLocationRef.current.longitude,
@@ -131,23 +128,23 @@ const DriverDashboard = () => {
             await LocalNotifications.schedule({
                 notifications: [
                     {
-                        title: "🚗 ¡Nueva solicitud Higo!",
+                        title: '🚗 ¡Nueva solicitud Higo!',
                         body: `$${ride.price} - ${ride.dropoff}${distText}`,
-                        id: new Date().getTime(),
-                        schedule: { at: new Date(Date.now() + 50) },
-                        channelId: 'higo_rides_v12',
+                        id: Math.floor(Date.now() % 2147483647),
+                        schedule: { at: new Date(Date.now() + 10) },
+                        channelId: 'higo_rides_v13_immediate',
                         actionTypeId: 'RIDE_REQUEST_ACTIONS',
-                        extra: { rideId: ride.id },
+                        extra: { rideId: ride.id, offerId: ride.offerId || ride.offer_id || null },
                         visibility: 1,
                         priority: 2,
                         sound: 'alert_sound.wav'
                     }
                 ]
             });
-        } catch (e) {
-            console.error("Local Notification fail:", e);
+        } catch (error) {
+            console.error('Local Notification fail:', error);
         }
-    }, [speak]);
+    }, []);
 
     // Handle parsing & filtering of requests
     const processRequests = useCallback((incomingRides, replace = false, requireDirectedOffer = false) => {
@@ -208,6 +205,15 @@ const DriverDashboard = () => {
 
         const filtered = newRides.filter(checkRide);
 
+        const requestAlertKey = (ride) => {
+            const offerId = ride.offerId ?? ride.offer_id ?? null;
+            return offerId == null ? `ride:${ride.id}` : `offer:${offerId}`;
+        };
+        const unseenRequests = filtered.filter(
+            (ride) => !announcedRequestKeysRef.current.has(requestAlertKey(ride)),
+        );
+        filtered.forEach((ride) => announcedRequestKeysRef.current.add(requestAlertKey(ride)));
+
         setRequests(prev => {
             if (replace) return filtered;
             const combined = [...filtered, ...prev];
@@ -215,18 +221,13 @@ const DriverDashboard = () => {
             return unique.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         });
 
-        if (!replace && filtered.length > 0) {
+        if (unseenRequests.length > 0) {
             LocalNotifications.checkPermissions().then(status => {
-                if (status.display !== 'granted') {
-                    LocalNotifications.requestPermissions();
-                }
+                if (status.display !== 'granted') void LocalNotifications.requestPermissions();
             });
-
-            speak("Nueva solicitud de viaje");
-            startLoopingRequestAlert();
-            notifyNewRequest(filtered[0]);
+            void notifyNewRequest(unseenRequests[0]);
         }
-    }, [profile, activeRide, notifyNewRequest, speak]);
+    }, [profile, activeRide, notifyNewRequest]);
 
     // Geolocation Hook orchestration
     const {
@@ -277,7 +278,7 @@ const DriverDashboard = () => {
                 if (perm.display !== 'granted') console.warn('Permissions denied');
 
                 await LocalNotifications.createChannel({
-                    id: 'higo_rides_v12',
+                    id: 'higo_rides_v13_immediate',
                     name: 'New Ride Requests (High Priority)',
                     importance: 5,
                     visibility: 1,
@@ -593,8 +594,13 @@ const DriverDashboard = () => {
                 ...current,
                 status: serverOnline ? 'online' : 'offline',
             } : current);
-            if (!serverOnline) setRequests([]);
-            speak(serverOnline ? "Conectado. Buscando solicitudes." : "Desconectado.");
+            if (!serverOnline) {
+                setRequests([]);
+                announcedRequestKeysRef.current.clear();
+            }
+            void speakOperationalMessage(serverOnline
+                ? 'Ahora estás disponible para recibir servicios'
+                : 'Ahora estás fuera de línea');
         } catch (error) {
             console.error('[driver-presence] status update failed:', error);
             toast.error(nextOnline

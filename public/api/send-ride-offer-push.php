@@ -276,25 +276,26 @@ $data = [
     'pickup_lat' => (string) ($ride['pickup_lat'] ?? ''),
     'pickup_lng' => (string) ($ride['pickup_lng'] ?? ''),
     'price' => $ride['price'] !== null ? (string) $ride['price'] : '',
+    'title' => $title,
+    'body' => $body,
     'click_action' => '/#/driver',
 ];
 
 $fcmPayload = [
     'message' => [
         'token' => $token,
-        'notification' => ['title' => $title, 'body' => $body],
         'data' => $data,
         'android' => [
             'priority' => 'HIGH',
-            'notification' => [
-                'channel_id' => 'ride_requests',
-                'sound' => 'default',
-                'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
-            ],
+            'ttl' => '20s',
+            'direct_boot_ok' => true,
         ],
         'webpush' => [
+            'headers' => ['Urgency' => 'high', 'TTL' => '20'],
             'fcm_options' => ['link' => '/#/driver'],
             'notification' => [
+                'title' => $title,
+                'body' => $body,
                 'icon' => '/higo-icon.svg',
                 'vibrate' => [500, 200, 500, 200, 500],
             ],

@@ -8,8 +8,8 @@ android {
         minSdkVersion 23
         targetSdkVersion 35
         // Higo 1.5.22: release with Higo Envíos voice milestones.
-        versionCode 54
-        versionName "1.5.22"
+        versionCode 55
+        versionName "1.5.23"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'

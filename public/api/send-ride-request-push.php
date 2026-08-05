@@ -301,24 +301,26 @@ foreach ($nearby as $driver) {
         ? $body . ' · a ' . number_format($driver['distance_km'], 1, '.', '') . ' km'
         : 'A ' . number_format($driver['distance_km'], 1, '.', '') . ' km';
 
+    $messageData = array_merge($dataPayload, [
+        'title' => $title,
+        'body' => $bodyForDriver,
+    ]);
     $fcmPayload = [
         'message' => [
-            'token'        => $token,
-            'notification' => ['title' => $title, 'body' => $bodyForDriver],
-            'data'         => $dataPayload,
-            'android'      => [
+            'token' => $token,
+            'data' => $messageData,
+            'android' => [
                 'priority' => 'HIGH',
-                'notification' => [
-                    'channel_id'   => 'ride_requests',
-                    'sound'        => 'default',
-                    'click_action' => 'FLUTTER_NOTIFICATION_CLICK', // no-op en Capacitor pero
-                                                                    // algunos ROMs lo respetan
-                ],
+                'ttl' => '30s',
+                'direct_boot_ok' => true,
             ],
             'webpush' => [
-                'fcm_options'  => ['link' => $clickAction],
+                'headers' => ['Urgency' => 'high', 'TTL' => '30'],
+                'fcm_options' => ['link' => $clickAction],
                 'notification' => [
-                    'icon'    => '/higo-icon.svg',
+                    'title' => $title,
+                    'body' => $bodyForDriver,
+                    'icon' => '/higo-icon.svg',
                     'vibrate' => [500, 200, 500, 200, 500],
                 ],
             ],

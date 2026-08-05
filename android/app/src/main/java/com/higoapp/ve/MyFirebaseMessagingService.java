@@ -1,127 +1,168 @@
 package com.higoapp.ve;
 
+import android.app.ActivityManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.media.AudioAttributes;
-import android.media.RingtoneManager;
-import android.os.Build;
 import android.net.Uri;
+import android.os.Build;
+
 import androidx.core.app.NotificationCompat;
 
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
 
+import java.util.List;
+
 public class MyFirebaseMessagingService extends FirebaseMessagingService {
+    private static final String RIDE_CHANNEL_ID = "higo_rides_v13_immediate";
+    private static final String CHAT_CHANNEL_ID = "higo_messages_v3_immediate";
 
     @Override
     public void onMessageReceived(RemoteMessage remoteMessage) {
         super.onMessageReceived(remoteMessage);
+        if (remoteMessage.getData().isEmpty()) return;
 
-        // Check if message contains data payload
-        if (remoteMessage.getData().size() > 0) {
-            String type = remoteMessage.getData().get("type");
-            // If it's a ride request, trigger full screen intent
-            if ("ride_request".equals(type) || remoteMessage.getData().containsKey("price")) { // Loose check for safety
-                showFullScreenNotification(remoteMessage);
-            }
+        String type = value(remoteMessage, "type");
+        if ("ride_message".equals(type)) {
+            // Realtime handles foreground chat instantly. Native push is the
+            // reliable background/killed path and must not duplicate it.
+            if (!isAppInForeground()) showChatNotification(remoteMessage);
+            return;
         }
-
-        // Also check notification payload if present (though data is preferred for
-        // background wake)
-        if (remoteMessage.getNotification() != null) {
-            // Check title or body if needed
+        if ("ride_request".equals(type) || remoteMessage.getData().containsKey("price")) {
+            showRideNotification(remoteMessage);
         }
     }
 
-    private void showFullScreenNotification(RemoteMessage remoteMessage) {
-        String channelId = "ride_requests_channel";
-        String title = remoteMessage.getData().get("title");
-        if (title == null)
-            title = "¡Solicitud de Viaje!";
-        String body = remoteMessage.getData().get("body");
-        if (body == null)
-            body = "Tienes una nueva solicitud de viaje.";
-
-        // rideId identifica la solicitud. Deriva un id de notificación y
-        // requestCode ESTABLES por viaje: antes se usaba notify(0) y
-        // requestCode 0/1 fijos, así que dos solicitudes casi simultáneas se
-        // pisaban (el driver solo veía/aceptaba la última) — evaluación
-        // profunda 2026-07-02, hallazgo 3.2. Con un id por rideId, cada
-        // solicitud es su propia notificación con sus propios extras.
-        String rideId = remoteMessage.getData().get("rideId");
-        if (rideId == null && remoteMessage.getData().containsKey("id")) {
-            rideId = remoteMessage.getData().get("id"); // Fallback
+    private String value(RemoteMessage message, String... keys) {
+        for (String key : keys) {
+            String candidate = message.getData().get(key);
+            if (candidate != null && !candidate.isEmpty()) return candidate;
         }
-        int notifId = (rideId != null && !rideId.isEmpty())
-                ? rideId.hashCode()
-                : (int) System.currentTimeMillis();
+        return null;
+    }
+
+    private Uri alertSoundUri() {
+        return Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + getPackageName() + "/" + R.raw.alert_sound);
+    }
+
+    private void ensureChannel(String id, String name, String description) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        NotificationChannel channel = new NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH);
+        channel.setDescription(description);
+        AudioAttributes attributes = new AudioAttributes.Builder()
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                .build();
+        channel.setSound(alertSoundUri(), attributes);
+        channel.enableVibration(true);
+        channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+        manager.createNotificationChannel(channel);
+    }
+
+    private void showRideNotification(RemoteMessage remoteMessage) {
+        ensureChannel(RIDE_CHANNEL_ID, "Solicitudes Higo", "Nuevas solicitudes de viaje y envíos");
+        String title = value(remoteMessage, "title");
+        if (title == null) title = "¡Solicitud de Viaje!";
+        String body = value(remoteMessage, "body");
+        if (body == null) body = "Tienes una nueva solicitud de viaje.";
+        String rideId = value(remoteMessage, "ride_id", "rideId", "id");
+        int notificationId = rideId != null ? rideId.hashCode() : (int) System.currentTimeMillis();
 
         Intent fullScreenIntent = new Intent(this, MainActivity.class);
-        fullScreenIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
-                Intent.FLAG_ACTIVITY_CLEAR_TOP |
-                Intent.FLAG_ACTIVITY_SINGLE_TOP);
-
-        // Pass data to activity if needed
+        fullScreenIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         for (String key : remoteMessage.getData().keySet()) {
             fullScreenIntent.putExtra(key, remoteMessage.getData().get(key));
         }
+        PendingIntent contentIntent = PendingIntent.getActivity(
+                this, notificationId, fullScreenIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
 
-        PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(this, notifId,
-                fullScreenIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
-        NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-
-        // Create Channel for O+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(channelId,
-                    "Solicitudes de Viaje",
-                    NotificationManager.IMPORTANCE_HIGH);
-
-            // Critical: Enable sound and vibration for heads-up
-            Uri defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-            AudioAttributes audioAttributes = new AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                    .build();
-            channel.setSound(defaultSoundUri, audioAttributes);
-            channel.enableVibration(true);
-            channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC); // Show on lock screen
-
-            notificationManager.createNotificationChannel(channel);
-        }
-
-        // Create "Accept" Action Intent (rideId/notifId ya calculados arriba)
         Intent acceptIntent = new Intent(Intent.ACTION_VIEW);
-        // Deep link format: higo://accept?rideId=123
-        // Fix #13: setPackage() vuelve el Intent EXPLÍCITO a esta app, así
-        // ninguna otra app puede registrar el scheme higo:// y secuestrar
-        // el botón "Aceptar" de la notificación (antes lo veía como intent
-        // implícito y podía declararse handler). El deep link es 100%
-        // intra-app (lo emite este service, lo consume DriverDashboard
-        // vía Capacitor App.addListener), así que no necesitamos App
-        // Links / assetlinks.json — basta con restringir el target.
-        acceptIntent.setData(Uri.parse("higo://accept?rideId=" + (rideId != null ? rideId : "")));
+        acceptIntent.setData(Uri.parse("higo://accept?rideId=" + Uri.encode(rideId != null ? rideId : "")));
         acceptIntent.setPackage(getPackageName());
         acceptIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent acceptPendingIntent = PendingIntent.getActivity(
+                this, notificationId + 1, acceptIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
 
-        PendingIntent acceptPendingIntent = PendingIntent.getActivity(this, notifId,
-                acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
-        NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(this, channelId)
-                .setSmallIcon(R.mipmap.ic_launcher) // Ensure this icon exists
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, RIDE_CHANNEL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setAutoCancel(true)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setCategory(NotificationCompat.CATEGORY_CALL) // Important for fullscreen behavior
-                .setFullScreenIntent(fullScreenPendingIntent, true) // THE KEY: High priority + intent = wake
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setFullScreenIntent(contentIntent, true)
+                .setContentIntent(contentIntent)
+                .setSound(alertSoundUri())
+                .setVibrate(new long[]{0, 1000, 500, 1000, 500, 1000})
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .addAction(android.R.drawable.ic_menu_add, "Aceptar Viaje", acceptPendingIntent); // Native Action
+                .addAction(android.R.drawable.ic_menu_add, "Aceptar Viaje", acceptPendingIntent);
 
-        notificationManager.notify(notifId, notificationBuilder.build());
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        manager.notify(notificationId, builder.build());
+    }
+
+    private void showChatNotification(RemoteMessage remoteMessage) {
+        ensureChannel(CHAT_CHANNEL_ID, "Mensajes del viaje", "Mensajes entre pasajero y conductor");
+        String title = value(remoteMessage, "title");
+        if (title == null) title = "Nuevo mensaje del viaje";
+        String body = value(remoteMessage, "body");
+        if (body == null) body = "Tienes un nuevo mensaje";
+        String rideId = value(remoteMessage, "ride_id", "rideId");
+        String messageId = value(remoteMessage, "message_id", "messageId");
+        int notificationId = messageId != null
+                ? messageId.hashCode()
+                : (rideId != null ? ("chat:" + rideId).hashCode() : (int) System.currentTimeMillis());
+
+        Intent openChatIntent = new Intent(Intent.ACTION_VIEW);
+        openChatIntent.setData(Uri.parse("higo://chat?rideId=" + Uri.encode(rideId != null ? rideId : "")));
+        openChatIntent.setPackage(getPackageName());
+        openChatIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        PendingIntent contentIntent = PendingIntent.getActivity(
+                this, notificationId, openChatIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHAT_CHANNEL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setContentIntent(contentIntent)
+                .setSound(alertSoundUri())
+                .setVibrate(new long[]{0, 180, 100, 180})
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
+
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        manager.notify(notificationId, builder.build());
+    }
+
+    private boolean isAppInForeground() {
+        ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+        if (manager == null) return false;
+        List<ActivityManager.RunningAppProcessInfo> processes = manager.getRunningAppProcesses();
+        if (processes == null) return false;
+        String packageName = getPackageName();
+        for (ActivityManager.RunningAppProcessInfo process : processes) {
+            if (packageName.equals(process.processName)
+                    && process.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND) {
+                return true;
+            }
+        }
+        return false;
     }
 }

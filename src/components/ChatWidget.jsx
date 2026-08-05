@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { supabase } from '../services/supabase';
 import { vibrateIntense, playAlertSound } from '../services/notificationService';
@@ -9,7 +10,7 @@ import { toast } from './Toast';
 // Android no permite cambiar el sonido de un canal ya creado. La versión v1
 // pudo quedar registrada sin sonido en teléfonos que instalaron builds
 // anteriores, por eso usamos un ID nuevo para forzar un canal audible.
-const CHAT_CHANNEL_ID = 'higo_messages_v2';
+const CHAT_CHANNEL_ID = 'higo_messages_v3_immediate';
 const MAX_MESSAGE_LENGTH = 1000;
 const ACTIVE_RIDE_STATUSES = ['requested', 'pending', 'accepted', 'arrived', 'driver_arrived', 'in_progress', 'arrived_at_dropoff'];
 
@@ -228,6 +229,42 @@ const ChatWidget = () => {
         };
     }, []);
 
+
+    useEffect(() => {
+        if (!Capacitor.isNativePlatform()) return undefined;
+        let appUrlListener = null;
+        let disposed = false;
+
+        const openChatFromUrl = (url) => {
+            if (!url || !url.startsWith('higo://chat')) return;
+            try {
+                const parsed = new URL(url);
+                const nextRideId = parsed.searchParams.get('rideId');
+                if (!nextRideId) return;
+                setRideId(nextRideId);
+                setIsOpen(true);
+            } catch (error) {
+                console.warn('[ride-chat] invalid push deep link:', error);
+            }
+        };
+
+        void (async () => {
+            try {
+                appUrlListener = await CapacitorApp.addListener('appUrlOpen', ({ url }) => openChatFromUrl(url));
+                const launch = await CapacitorApp.getLaunchUrl();
+                if (launch?.url) openChatFromUrl(launch.url);
+                if (disposed) appUrlListener?.remove?.();
+            } catch (error) {
+                console.warn('[ride-chat] app URL listener failed:', error);
+            }
+        })();
+
+        return () => {
+            disposed = true;
+            appUrlListener?.remove?.();
+        };
+    }, []);
+
     useEffect(() => {
         if (!rideId) return undefined;
 
@@ -249,10 +286,12 @@ const ChatWidget = () => {
             const preview = getMessagePreview(incoming.content);
             const chatIsOpen = isOpenRef.current;
 
-            // Mientras el chat está abierto emitimos el sonido directamente.
-            // Cuando está cerrado, Android espera a que el canal esté listo y
-            // luego muestra el banner con alert_sound.wav.
-            if (!Capacitor.isNativePlatform() || chatIsOpen) {
+            // Realtime must sound immediately anywhere in the foreground,
+            // not only while the chat panel is open. Background/killed delivery
+            // is covered by the native high-priority push below.
+            const appIsVisible = typeof document === 'undefined'
+                || document.visibilityState === 'visible';
+            if (!Capacitor.isNativePlatform() || appIsVisible) {
                 void playAlertSound();
                 vibrateIntense();
             }
@@ -279,7 +318,7 @@ const ChatWidget = () => {
                             title: 'Nuevo mensaje del viaje',
                             body: preview,
                             id: notificationId,
-                            schedule: { at: new Date(Date.now() + 150) },
+                            schedule: { at: new Date(Date.now() + 10) },
                             sound: 'alert_sound.wav',
                             channelId: CHAT_CHANNEL_ID,
                             extra: { rideId },
@@ -420,6 +459,25 @@ const ChatWidget = () => {
         // El INSERT devuelto mantiene el chat útil incluso si Realtime tarda o
         // se reconecta. mergeMessages evita duplicarlo cuando llegue el evento.
         setMessages((current) => mergeMessages(current, [data]));
+
+        // Wake the other participant when their app is backgrounded or closed.
+        // This is fire-and-forget so sending the chat message never waits on FCM.
+        void (async () => {
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session?.access_token || !data?.id) return;
+                await fetch('/api/send-ride-message-push.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${session.access_token}`,
+                    },
+                    body: JSON.stringify({ message_id: data.id, ride_id: rideId }),
+                });
+            } catch (pushError) {
+                console.warn('[ride-chat] background push failed:', pushError);
+            }
+        })();
     };
 
     if (!rideId) return null;
