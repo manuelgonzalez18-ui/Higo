@@ -6,6 +6,7 @@ import InteractiveMap from '../components/InteractiveMap';
 import { triggerEmergencyAlert } from '../utils/triggerEmergencyAlert';
 import { toast } from '../components/Toast';
 import { useFabLift } from '../hooks/useFabLift';
+import { announcePassengerRideState } from '../utils/passengerRideVoice';
 
 const RideStatusPage = () => {
     const { id } = useParams();
@@ -149,6 +150,7 @@ const RideStatusPage = () => {
                 statusRef.current = newStatus;
 
                 const isDel = payload.new.service_type === 'delivery' || !!payload.new.delivery_info;
+                if (!isDel) void announcePassengerRideState(payload.new);
 
                 // Llegada al origen: el conductor marca arrived_at_pickup_at pero
                 // el status NO cambia (sigue 'accepted'), así que se detecta aparte
@@ -344,6 +346,7 @@ const RideStatusPage = () => {
             
             const isDel = data.service_type === 'delivery' || !!data.delivery_info;
             arrivedPickupRef.current = !!data.arrived_at_pickup_at;
+            if (!isDel) void announcePassengerRideState(data);
             if (!statusRef.current) {
                 statusRef.current = data.status;
                 // If already completed on load, show modal

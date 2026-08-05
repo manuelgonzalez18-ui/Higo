@@ -7,6 +7,7 @@ import { FEATURES } from '../config/features';
 import { toast } from '../components/Toast';
 import { friendlyError } from '../utils/friendlyError';
 import { logger } from '../utils/logger';
+import { announcePassengerRideMilestone } from '../utils/passengerRideVoice';
 
 const VEHICLE_INFO = Object.freeze({
     moto: { title: 'Higo Moto', icon: 'two_wheeler', seats: '1 asiento' },
@@ -277,6 +278,9 @@ export default function ConfirmTripPage() {
             const rideId = creation?.rideId || creation?.id;
             if (!rideId) throw new Error('El servidor no devolvió el identificador del viaje.');
             await saveRecipientContact(session, rideId);
+            if (!isDelivery) {
+                void announcePassengerRideMilestone({ rideId, milestone: 'searching' });
+            }
             toast.success(creation?.idempotentReplay ? 'Solicitud recuperada correctamente.' : 'Solicitud enviada. Buscando conductores…');
             navigate(`/ride/${rideId}`, { replace: true });
         } catch (error) {
