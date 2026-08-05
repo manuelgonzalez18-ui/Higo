@@ -1,0 +1,75 @@
+name: Apply native driver chat and offer hotfix
+
+on:
+  push:
+    branches:
+      - agent/fix-native-online-chat-moto-ghost
+    paths:
+      - scripts/apply_native_online_chat_moto_ghost.py
+      - .github/workflows/apply-native-online-chat-moto-ghost.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout hotfix branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/fix-native-online-chat-moto-ghost
+          fetch-depth: 0
+
+      - name: Apply exact hotfix
+        run: python scripts/apply_native_online_chat_moto_ghost.py
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
+
+      - name: Run focused regressions
+        run: node --test tests/nativeDriverChatGhostRegression.test.mjs tests/driverGhostOfferRegression.test.mjs
+
+      - name: Validate full application and production build
+        env:
+          VITE_SHOP_ENABLED: 'false'
+          VITE_SERVER_SIDE_RIDE_PRICING: 'true'
+          VITE_SERVER_SIDE_RIDE_STATE: 'true'
+          VITE_UNIFIED_MEMBERSHIP_CHECKOUT: 'true'
+          VITE_DIRECTED_RIDE_OFFERS: 'true'
+        run: npm run check
+
+      - name: Verify hotfix contract
+        run: |
+          grep -q "driver_set_online_status" src/pages/DriverDashboard.jsx
+          grep -q "higo-open-chat" src/components/ChatWidget.jsx
+          grep -q "getDirectedRideOfferForRide" src/App.jsx
+          grep -q "hasActiveDirectedRideOffer" src/pages/DriverDashboard.jsx
+          test -f supabase/migrations/20260805123500_driver_presence_and_offer_hardening.sql
+
+      - name: Commit validated source changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/App.jsx \
+            src/components/ChatWidget.jsx \
+            src/pages/DriverDashboard.jsx \
+            src/services/rideApi.js \
+            src/utils/driverRideOffer.js \
+            supabase/migrations/20260805123500_driver_presence_and_offer_hardening.sql \
+            tests/nativeDriverChatGhostRegression.test.mjs
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit"
+            exit 0
+          fi
+          git commit -m "fix(driver): estabilizar presencia chat y ofertas de motos"
+          git push origin HEAD:agent/fix-native-online-chat-moto-ghost
