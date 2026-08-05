@@ -56,6 +56,6 @@ test('passenger screens integrate the centralized voice contract', async () => {
     assert.match(statusPage, /announcePassengerRideState/);
     assert.match(statusPage, /announcePassengerRideState\(payload\.new\)/);
     assert.match(statusPage, /announcePassengerRideState\(data\)/);
-    assert.match(gradle, /versionCode 51/);
-    assert.match(gradle, /versionName "1\.5\.19"/);
+    assert.match(gradle, /versionCode 52/);
+    assert.match(gradle, /versionName "1\.5\.20"/);
 });
