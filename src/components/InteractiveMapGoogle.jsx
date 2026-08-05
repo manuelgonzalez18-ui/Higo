@@ -4,6 +4,7 @@ import { supabase } from '../services/supabase';
 
 // Import Realistic Icons
 import { MotoIcon, StandardIcon, VanIcon, PassengerPin, DestinationPin } from '../assets/markers';
+import { resolveVehicleMarkerRotation } from '../utils/vehicleMarkerRotation';
 
 // Fallback Center
 const HIGUEROTE_CENTER = { lat: 10.4850, lng: -66.0950 };
@@ -14,13 +15,11 @@ const isValidCoordinate = (coord) => {
         typeof coord.lng === 'number' && !isNaN(coord.lng);
 };
 
-// Helper component to handle smooth rotation and asset offset (-90deg for car_top_view)
+// Directional top-down assets follow the GPS bearing. The motorcycle
+// illustration is a side profile and remains upright to avoid looking fallen.
 const VehicleIconWithHeading = ({ heading, type, isLarge }) => {
     const smoothHeading = useSmoothHeading(heading);
-
-    // Most car assets face EAST (90deg) by default. GPS is NORTH (0deg).
-    // We subtract 90 to align the asset with the map.
-    const rotationOffset = -90;
+    const rotation = resolveVehicleMarkerRotation({ heading: smoothHeading, type });
 
     return (
         <div
@@ -28,7 +27,7 @@ const VehicleIconWithHeading = ({ heading, type, isLarge }) => {
                 position: 'absolute',
                 top: '50%',
                 left: '50%',
-                transform: `translate(-50%, -50%) rotate(${smoothHeading + rotationOffset}deg)`,
+                transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
                 transition: 'transform 0.3s ease-out',
                 pointerEvents: 'none'
             }}

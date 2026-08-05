@@ -3,6 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { supabase } from '../services/supabase';
 import { vibrateIntense, playAlertSound } from '../services/notificationService';
+import { getRideMessageKey, isRideMessageAtOrAfter } from '../utils/rideMessageSync';
 import { toast } from './Toast';
 
 // Android no permite cambiar el sonido de un canal ya creado. La versión v1
@@ -50,6 +51,8 @@ const ChatWidget = () => {
     const messagesEndRef = useRef(null);
     const isOpenRef = useRef(false);
     const userIdRef = useRef(null);
+    const notifiedMessageKeysRef = useRef(new Set());
+    const notificationSetupPromiseRef = useRef(Promise.resolve());
 
     useEffect(() => {
         isOpenRef.current = isOpen;
@@ -96,6 +99,7 @@ const ChatWidget = () => {
         const fetchUser = async () => {
             const { data: { session } } = await supabase.auth.getSession();
             if (session?.user) {
+                userIdRef.current = session.user.id;
                 setUserId(session.user.id);
                 void resolveActiveRide(session.user.id);
                 return session.user.id;
@@ -103,6 +107,7 @@ const ChatWidget = () => {
 
             const { data: { user } } = await supabase.auth.getUser();
             const nextUserId = user?.id || null;
+            userIdRef.current = nextUserId;
             setUserId(nextUserId);
             if (nextUserId) void resolveActiveRide(nextUserId);
             return nextUserId;
@@ -112,6 +117,7 @@ const ChatWidget = () => {
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             const nextUserId = session?.user?.id || null;
+            userIdRef.current = nextUserId;
             setUserId(nextUserId);
             if (nextUserId) {
                 void resolveActiveRide(nextUserId);
@@ -207,7 +213,8 @@ const ChatWidget = () => {
             }
         };
 
-        void setupNotifications();
+        notificationSetupPromiseRef.current = setupNotifications();
+        void notificationSetupPromiseRef.current;
         return () => {
             disposed = true;
             actionListener?.remove?.();
@@ -218,6 +225,69 @@ const ChatWidget = () => {
         if (!rideId) return undefined;
 
         let cancelled = false;
+        const catchUpSince = new Date(Date.now() - 30000).toISOString();
+        notifiedMessageKeysRef.current = new Set();
+
+        const notifyIncomingMessage = (incoming) => {
+            if (!incoming || cancelled) return;
+
+            setMessages((current) => mergeMessages(current, [incoming]));
+
+            const messageKey = getRideMessageKey(incoming);
+            if (notifiedMessageKeysRef.current.has(messageKey)) return;
+            notifiedMessageKeysRef.current.add(messageKey);
+
+            if (incoming.sender_id === userIdRef.current) return;
+
+            const preview = getMessagePreview(incoming.content);
+            const chatIsOpen = isOpenRef.current;
+
+            // Mientras el chat está abierto emitimos el sonido directamente.
+            // Cuando está cerrado, Android espera a que el canal esté listo y
+            // luego muestra el banner con alert_sound.wav.
+            if (!Capacitor.isNativePlatform() || chatIsOpen) {
+                void playAlertSound();
+                vibrateIntense();
+            }
+
+            if (chatIsOpen) return;
+
+            setUnreadCount((current) => current + 1);
+            toast.info(`Nuevo mensaje del viaje: ${preview}`, {
+                duration: 6000,
+                action: {
+                    label: 'Abrir chat',
+                    onClick: () => setIsOpen(true),
+                },
+            });
+
+            if (!Capacitor.isNativePlatform()) return;
+
+            const notificationId = Math.floor(Date.now() % 2147483647);
+            const scheduleNativeNotification = async () => {
+                try {
+                    await notificationSetupPromiseRef.current;
+                    await LocalNotifications.schedule({
+                        notifications: [{
+                            title: 'Nuevo mensaje del viaje',
+                            body: preview,
+                            id: notificationId,
+                            schedule: { at: new Date(Date.now() + 150) },
+                            sound: 'alert_sound.wav',
+                            channelId: CHAT_CHANNEL_ID,
+                            extra: { rideId },
+                        }],
+                    });
+                } catch (error) {
+                    console.warn('[ride-chat] local notification failed:', error);
+                    // Si el permiso o canal nativo falla, todavía intentamos el
+                    // sonido interno para que el mensaje no llegue en silencio.
+                    void playAlertSound();
+                    vibrateIntense();
+                }
+            };
+            void scheduleNativeNotification();
+        };
 
         const fetchMessages = async () => {
             setIsLoading(true);
@@ -232,9 +302,34 @@ const ChatWidget = () => {
                 console.error('[ride-chat] fetch failed:', error);
                 toast.error('No se pudieron cargar los mensajes del viaje.');
             } else {
-                setMessages((current) => mergeMessages(current, data || []));
+                const history = data || [];
+                // Old history must never generate a fresh notification. Messages
+                // inside the startup grace window are intentionally left unseen
+                // so the catch-up pass can recover the first driver message.
+                history.forEach((message) => {
+                    if (!isRideMessageAtOrAfter(message, catchUpSince)) {
+                        notifiedMessageKeysRef.current.add(getRideMessageKey(message));
+                    }
+                });
+                setMessages((current) => mergeMessages(current, history));
             }
             setIsLoading(false);
+        };
+
+        const fetchCatchUpMessages = async () => {
+            const { data, error } = await supabase
+                .from('ride_messages')
+                .select('*')
+                .eq('ride_id', rideId)
+                .gte('created_at', catchUpSince)
+                .order('created_at', { ascending: true });
+
+            if (cancelled) return;
+            if (error) {
+                console.warn('[ride-chat] catch-up failed:', error);
+                return;
+            }
+            (data || []).forEach(notifyIncomingMessage);
         };
 
         void fetchMessages();
@@ -246,63 +341,29 @@ const ChatWidget = () => {
                 schema: 'public',
                 table: 'ride_messages',
                 filter: `ride_id=eq.${rideId}`,
-            }, (payload) => {
-                const incoming = payload.new;
-                setMessages((current) => mergeMessages(current, [incoming]));
-
-                if (incoming.sender_id === userIdRef.current) return;
-
-                const preview = getMessagePreview(incoming.content);
-                const chatIsOpen = isOpenRef.current;
-
-                // Mientras el chat está abierto emitimos el sonido directamente.
-                // Cuando está cerrado, Android usa el canal local v2 para mostrar
-                // el banner y reproducir alert_sound.wav sin duplicar el tono.
-                if (!Capacitor.isNativePlatform() || chatIsOpen) {
-                    void playAlertSound();
-                    vibrateIntense();
-                }
-
-                if (chatIsOpen) return;
-
-                setUnreadCount((current) => current + 1);
-                toast.info(`Nuevo mensaje del viaje: ${preview}`, {
-                    duration: 6000,
-                    action: {
-                        label: 'Abrir chat',
-                        onClick: () => setIsOpen(true),
-                    },
-                });
-
-                if (!Capacitor.isNativePlatform()) return;
-
-                const notificationId = Math.floor(Date.now() % 2147483647);
-                void LocalNotifications.schedule({
-                    notifications: [{
-                        title: 'Nuevo mensaje del viaje',
-                        body: preview,
-                        id: notificationId,
-                        schedule: { at: new Date(Date.now() + 150) },
-                        sound: 'alert_sound.wav',
-                        channelId: CHAT_CHANNEL_ID,
-                        extra: { rideId },
-                    }],
-                }).catch((error) => {
-                    console.warn('[ride-chat] local notification failed:', error);
-                    // Si el permiso o canal nativo falla, todavía intentamos el
-                    // sonido interno para que el mensaje no llegue en silencio.
-                    void playAlertSound();
-                    vibrateIntense();
-                });
-            })
+            }, (payload) => notifyIncomingMessage(payload.new))
             .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    // The query closes the gap between the initial SELECT and the
+                    // moment Realtime starts delivering INSERT events.
+                    void fetchCatchUpMessages();
+                }
                 if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
                     console.warn(`[ride-chat] realtime status for ${rideId}:`, status);
                 }
             });
 
+        const resyncVisibleChat = () => {
+            if (document.visibilityState === 'visible') void fetchCatchUpMessages();
+        };
+
+        window.addEventListener('focus', fetchCatchUpMessages);
+        document.addEventListener('visibilitychange', resyncVisibleChat);
+
         return () => {
             cancelled = true;
+            window.removeEventListener('focus', fetchCatchUpMessages);
+            document.removeEventListener('visibilitychange', resyncVisibleChat);
             supabase.removeChannel(channel);
         };
     }, [rideId]);
