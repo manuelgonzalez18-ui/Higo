@@ -1,11 +1,10 @@
-name: Build Higo 1.5.20 AAB
+name: Build Higo 1.5.21 AAB
 
 on:
   push:
     branches:
       - main
     paths:
-      - .github/workflows/build-higo-1.5.20-aab.yml
       - src/App.jsx
       - src/components/ChatWidget.jsx
       - src/pages/DriverDashboard.jsx
@@ -37,9 +36,9 @@ jobs:
 
       - name: Verify Android release version
         run: |
-          grep -q 'versionCode 52' android/app/build.gradle
-          grep -q 'versionName "1.5.20"' android/app/build.gradle
-          echo "Building Higo 1.5.20 (52) from $(git rev-parse --short HEAD)"
+          grep -q 'versionCode 53' android/app/build.gradle
+          grep -q 'versionName "1.5.21"' android/app/build.gradle
+          echo "Building Higo 1.5.21 (53) from $(git rev-parse --short HEAD)"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -112,25 +111,25 @@ jobs:
 
       - name: Prepare release artifacts
         run: |
-          cp android/app/build/outputs/bundle/release/app-release.aab higo-1.5.20-52-release.aab
-          cp android/app/build/outputs/apk/release/app-release.apk higo-1.5.20-52-release.apk
-          sha256sum higo-1.5.20-52-release.aab higo-1.5.20-52-release.apk > SHA256SUMS.txt
-          ls -lh higo-1.5.20-52-release.aab higo-1.5.20-52-release.apk SHA256SUMS.txt
+          cp android/app/build/outputs/bundle/release/app-release.aab higo-1.5.21-53-release.aab
+          cp android/app/build/outputs/apk/release/app-release.apk higo-1.5.21-53-release.apk
+          sha256sum higo-1.5.21-53-release.aab higo-1.5.21-53-release.apk > SHA256SUMS.txt
+          ls -lh higo-1.5.21-53-release.aab higo-1.5.21-53-release.apk SHA256SUMS.txt
 
       - name: Upload Play Store AAB
         uses: actions/upload-artifact@v4
         with:
-          name: higo-1.5.20-52-aab
+          name: higo-1.5.21-53-aab
           path: |
-            higo-1.5.20-52-release.aab
+            higo-1.5.21-53-release.aab
             SHA256SUMS.txt
           retention-days: 30
 
       - name: Upload device APK
         uses: actions/upload-artifact@v4
         with:
-          name: higo-1.5.20-52-apk
+          name: higo-1.5.21-53-apk
           path: |
-            higo-1.5.20-52-release.apk
+            higo-1.5.21-53-release.apk
             SHA256SUMS.txt
           retention-days: 30
