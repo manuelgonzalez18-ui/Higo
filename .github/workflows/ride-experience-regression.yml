@@ -1,0 +1,56 @@
+name: Ride Experience Regression
+
+on:
+  pull_request:
+    paths:
+      - src/components/ChatWidget.jsx
+      - src/components/InteractiveMapGoogle.jsx
+      - src/utils/rideMessageSync.js
+      - src/utils/vehicleMarkerRotation.js
+      - tests/rideExperienceRegression.test.mjs
+      - android/app/build.gradle
+      - .github/workflows/ride-experience-regression.yml
+  push:
+    branches:
+      - main
+    paths:
+      - src/components/ChatWidget.jsx
+      - src/components/InteractiveMapGoogle.jsx
+      - src/utils/rideMessageSync.js
+      - src/utils/vehicleMarkerRotation.js
+      - tests/rideExperienceRegression.test.mjs
+      - android/app/build.gradle
+      - .github/workflows/ride-experience-regression.yml
+
+permissions:
+  contents: read
+
+jobs:
+  ride-experience:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
+
+      - name: Test motorcycle marker and first-message synchronization
+        run: node --test tests/rideExperienceRegression.test.mjs
+
+      - name: Production build smoke test
+        env:
+          VITE_SHOP_ENABLED: 'false'
+          VITE_SERVER_SIDE_RIDE_PRICING: 'false'
+          VITE_SERVER_SIDE_RIDE_STATE: 'false'
+          VITE_UNIFIED_MEMBERSHIP_CHECKOUT: 'false'
+          VITE_DIRECTED_RIDE_OFFERS: 'false'
+        run: npm run build
