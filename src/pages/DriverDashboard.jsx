@@ -19,7 +19,7 @@ import ErrorBoundary from '../components/ErrorBoundary';
 
 // Utilities
 import { getDistanceFromLatLonInKm } from '../utils/geoUtils';
-import { isDriverRideRequestAvailable } from '../utils/driverRideOffer';
+import { hasActiveDirectedRideOffer, isDriverRideRequestAvailable } from '../utils/driverRideOffer';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { startLoopingRequestAlert, stopLoopingRequestAlert } from '../services/notificationService';
 import { Capacitor } from '@capacitor/core';
@@ -150,7 +150,7 @@ const DriverDashboard = () => {
     }, [speak]);
 
     // Handle parsing & filtering of requests
-    const processRequests = useCallback((incomingRides, replace = false) => {
+    const processRequests = useCallback((incomingRides, replace = false, requireDirectedOffer = false) => {
         if (!profile || activeRide) return;
 
         const newRides = incomingRides.map(ride => {
@@ -179,7 +179,10 @@ const DriverDashboard = () => {
         if (driverVehicleType === 'camioneta') driverVehicleType = 'van';
 
         const checkRide = (ride) => {
-            if (!isDriverRideRequestAvailable(ride)) return false;
+            const isAvailable = requireDirectedOffer
+                ? hasActiveDirectedRideOffer(ride)
+                : isDriverRideRequestAvailable(ride);
+            if (!isAvailable) return false;
 
             const rideType = ride.ride_type ? ride.ride_type.toLowerCase() : 'standard';
 
@@ -262,6 +265,7 @@ const DriverDashboard = () => {
         }
 
         setProfile(userProfile);
+        setIsOnline(userProfile.status === 'online');
         setLoading(false);
     };
 
@@ -421,7 +425,7 @@ const DriverDashboard = () => {
                 const reconcileDirectedOffers = async () => {
                     try {
                         const offers = await listDirectedRideOffers(20);
-                        if (!disposed) processRequests(offers, true);
+                        if (!disposed) processRequests(offers, true, true);
                     } catch (error) {
                         if (!disposed) {
                             console.warn('[driver-offers] reconciliation failed:', error);
@@ -523,39 +527,36 @@ const DriverDashboard = () => {
         }
     }, [requests]);
 
-    // Toggle Driver Status Online / Offline
+    // Toggle Driver Status Online / Offline. The RPC owns the state
+    // transition so native and web clients use the same RLS-safe path.
     const toggleOnline = async () => {
-        if (!isOnline) {
-            if (profile.subscription_status === 'suspended') {
-                if (window.confirm("⚠️ Tu membresía está vencida. Renuévala desde Higo Pay para volver a operar.\n\n¿Ir a renovar ahora?")) {
-                    navigate('/higo-pay');
-                }
-                return;
+        const nextOnline = !isOnline;
+        if (nextOnline && profile.subscription_status === 'suspended') {
+            if (window.confirm("⚠️ Tu membresía está vencida. Renuévala desde Higo Pay para volver a operar.\n\n¿Ir a renovar ahora?")) {
+                navigate('/higo-pay');
             }
+            return;
+        }
 
-            try {
-                const { error } = await supabase.from('profiles')
-                    .update({ status: 'online', last_location_update: new Date() })
-                    .eq('id', profile.id);
+        try {
+            const { data, error } = await supabase.rpc('driver_set_online_status', {
+                p_online: nextOnline,
+            });
+            if (error) throw error;
 
-                if (error) throw error;
-                setIsOnline(true);
-                speak("Conectado. Buscando solicitudes.");
-            } catch (e) {
-                console.error("Error going online:", e);
-                toast.error("Error al conectar: " + e.message);
-            }
-        } else {
-            try {
-                await supabase.from('profiles')
-                    .update({ status: 'offline' })
-                    .eq('id', profile.id);
-
-                setIsOnline(false);
-                speak("Desconectado.");
-            } catch (e) {
-                console.error("Error going offline:", e);
-            }
+            const serverOnline = data?.online === true;
+            setIsOnline(serverOnline);
+            setProfile((current) => current ? {
+                ...current,
+                status: serverOnline ? 'online' : 'offline',
+            } : current);
+            if (!serverOnline) setRequests([]);
+            speak(serverOnline ? "Conectado. Buscando solicitudes." : "Desconectado.");
+        } catch (error) {
+            console.error('[driver-presence] status update failed:', error);
+            toast.error(nextOnline
+                ? `No se pudo conectar: ${error.message}`
+                : `No se pudo desconectar: ${error.message}`);
         }
     };
 

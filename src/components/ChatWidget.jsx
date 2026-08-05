@@ -11,7 +11,7 @@ import { toast } from './Toast';
 // anteriores, por eso usamos un ID nuevo para forzar un canal audible.
 const CHAT_CHANNEL_ID = 'higo_messages_v2';
 const MAX_MESSAGE_LENGTH = 1000;
-const ACTIVE_RIDE_STATUSES = ['requested', 'accepted', 'in_progress', 'arrived_at_dropoff'];
+const ACTIVE_RIDE_STATUSES = ['requested', 'pending', 'accepted', 'arrived', 'driver_arrived', 'in_progress', 'arrived_at_dropoff'];
 
 const mergeMessages = (...groups) => {
     const byId = new Map();
@@ -43,7 +43,7 @@ const ChatWidget = () => {
     const [isSending, setIsSending] = useState(false);
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
-    const [rideId, setRideId] = useState(null);
+    const [rideId, setRideId] = useState(() => getRideIdFromHash());
     const [userId, setUserId] = useState(null);
     const [chatTitle, setChatTitle] = useState('Chat del viaje');
     const [unreadCount, setUnreadCount] = useState(0);
@@ -75,7 +75,7 @@ const ChatWidget = () => {
 
             const routeRideId = getRideIdFromHash();
             if (routeRideId) {
-                setRideId((currentRideId) => currentRideId || routeRideId);
+                setRideId(routeRideId);
                 return;
             }
 
@@ -93,7 +93,7 @@ const ChatWidget = () => {
                 console.warn('[ride-chat] active ride lookup failed:', error);
                 return;
             }
-            if (data?.id) setRideId((currentRideId) => currentRideId || data.id);
+            setRideId(data?.id || null);
         };
 
         const fetchUser = async () => {
@@ -130,7 +130,7 @@ const ChatWidget = () => {
         });
 
         const handleOpenChat = (event) => {
-            const nextRideId = event.detail?.rideId || null;
+            const nextRideId = event.detail?.rideId || getRideIdFromHash();
             if (!nextRideId) {
                 toast.error('No se pudo abrir el chat: falta el viaje activo.');
                 return;
@@ -149,6 +149,11 @@ const ChatWidget = () => {
         };
 
         const syncCurrentRoute = () => {
+            const routeRideId = getRideIdFromHash();
+            if (routeRideId) {
+                setRideId(routeRideId);
+                return;
+            }
             const currentUserId = userIdRef.current;
             if (currentUserId) void resolveActiveRide(currentUserId);
         };
@@ -158,6 +163,7 @@ const ChatWidget = () => {
         };
 
         window.addEventListener('open-chat', handleOpenChat);
+        window.addEventListener('higo-open-chat', handleOpenChat);
         window.addEventListener('hashchange', syncCurrentRoute);
         window.addEventListener('focus', syncCurrentRoute);
         document.addEventListener('visibilitychange', handleVisibility);
@@ -165,6 +171,7 @@ const ChatWidget = () => {
         return () => {
             disposed = true;
             window.removeEventListener('open-chat', handleOpenChat);
+            window.removeEventListener('higo-open-chat', handleOpenChat);
             window.removeEventListener('hashchange', syncCurrentRoute);
             window.removeEventListener('focus', syncCurrentRoute);
             document.removeEventListener('visibilitychange', handleVisibility);

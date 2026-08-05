@@ -129,7 +129,8 @@ export const createRideRequest = async ({
 };
 
 export const listDirectedRideOffers = async (limit = 20) => {
-    const rows = unwrap(await supabase.rpc('driver_list_ride_offers', { p_limit: limit })) || [];
+    const boundedLimit = Math.max(1, Math.min(50, Number(limit) || 20));
+    const rows = unwrap(await supabase.rpc('driver_list_ride_offers', { p_limit: boundedLimit })) || [];
     return rows.map((row) => ({
         offerId: row.offer_id,
         expiresAt: row.expires_at,
@@ -137,6 +138,14 @@ export const listDirectedRideOffers = async (limit = 20) => {
         score: row.score,
         ...(row.ride || {}),
     }));
+};
+
+export const getDirectedRideOfferForRide = async (rideId) => {
+    const normalizedRideId = String(rideId ?? '').trim();
+    if (!normalizedRideId) return null;
+
+    const offers = await listDirectedRideOffers(50);
+    return offers.find((offer) => String(offer.id) === normalizedRideId) || null;
 };
 
 export const areDirectedRideOffersEnabled = async () => {
