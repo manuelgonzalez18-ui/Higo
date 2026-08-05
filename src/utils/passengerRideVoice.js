@@ -1,3 +1,5 @@
+// Higo 1.5.18 passenger voice contract. Keep these prompts synchronized with
+// the authoritative ride milestones used by ConfirmTripPage and RideStatusPage.
 const STORAGE_PREFIX = 'higo.passenger-ride-voice.v1';
 const MAX_STORED_ANNOUNCEMENTS = 100;
 const pendingAnnouncements = new Set();
