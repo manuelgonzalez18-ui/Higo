@@ -5,6 +5,7 @@ on:
     paths:
       - src/utils/driverRideOffer.js
       - scripts/apply_driver_ghost_offer_fix.py
+      - scripts/apply_driver_ghost_offer_fix_v2.py
       - .github/workflows/apply-driver-ghost-offer-fix.yml
       - .github/workflows/build-higo-1.5.17-aab.yml
   push:
@@ -29,35 +30,7 @@ jobs:
           fetch-depth: 0
 
       - name: Apply exact source integrations
-        run: |
-          # The two historical notification handlers use different indentation.
-          # Normalize the first exact-replacement count, then patch the second
-          # handler after the main integration script finishes.
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('scripts/apply_driver_ghost_offer_fix.py')
-          text = path.read_text(encoding='utf-8')
-          old = '    expected=2,\n)\n\nnew_realtime_effect'
-          new = '    expected=1,\n)\n\nnew_realtime_effect'
-          if text.count(old) != 1:
-              raise SystemExit('unable to normalize notification replacement count')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
-          PY
-          python scripts/apply_driver_ghost_offer_fix.py
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('src/pages/DriverDashboard.jsx')
-          text = path.read_text(encoding='utf-8')
-          old = """                            await supabase.from('rides')
-                                .update({ status: 'accepted', driver_id: user.id })
-                                .eq('id', rideId)
-                                .eq('status', 'requested');
-"""
-          new = "                            await acceptRideRequest(rideId);\n"
-          if text.count(old) != 1:
-              raise SystemExit(f'deep-link accept block count={text.count(old)}')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
-          PY
+        run: python scripts/apply_driver_ghost_offer_fix_v2.py
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -113,6 +86,7 @@ jobs:
             tests/driverGhostOfferRegression.test.mjs
           git rm \
             .github/workflows/apply-driver-ghost-offer-fix.yml \
-            scripts/apply_driver_ghost_offer_fix.py
+            scripts/apply_driver_ghost_offer_fix.py \
+            scripts/apply_driver_ghost_offer_fix_v2.py
           git commit -m "fix(driver): eliminar solicitudes fantasma y respetar ofertas dirigidas"
           git push origin HEAD:main
