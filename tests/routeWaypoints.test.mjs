@@ -42,6 +42,6 @@ test('both map engines integrate intermediate waypoints', async () => {
     assert.match(google, /legs\.reduce/);
     assert.match(mapbox, /getRoute\(origin, destination, 'driving-traffic', markersProp\)/);
     assert.match(service, /routePoints\(origin, destination/);
-    assert.match(gradle, /versionCode 53/);
-    assert.match(gradle, /versionName "1\.5\.21"/);
+    assert.match(gradle, /versionCode 54/);
+    assert.match(gradle, /versionName "1\.5\.22"/);
 });

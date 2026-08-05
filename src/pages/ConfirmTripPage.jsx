@@ -278,9 +278,10 @@ export default function ConfirmTripPage() {
             const rideId = creation?.rideId || creation?.id;
             if (!rideId) throw new Error('El servidor no devolvió el identificador del viaje.');
             await saveRecipientContact(session, rideId);
-            if (!isDelivery) {
-                void announcePassengerRideMilestone({ rideId, milestone: 'searching' });
-            }
+            void announcePassengerRideMilestone({
+                rideId,
+                milestone: isDelivery ? 'delivery_searching' : 'searching',
+            });
             toast.success(creation?.idempotentReplay ? 'Solicitud recuperada correctamente.' : 'Solicitud enviada. Buscando conductores…');
             navigate(`/ride/${rideId}`, { replace: true });
         } catch (error) {

@@ -17,6 +17,10 @@ test('uses the exact passenger voice phrases requested by product', () => {
         arrived: 'Tu Higo Driver llegó',
         started: 'Tu viaje ha comenzado',
         completed: 'Has llegado a tu destino',
+        delivery_searching: 'Buscando Higo Driver',
+        delivery_accepted: 'Higo Driver Encontrado',
+        delivery_picked_up: 'Tu envío ha sido Recogido',
+        delivery_completed: 'Tu Envío ha sido entregado',
     });
 });
 
@@ -28,9 +32,23 @@ test('resolves the latest passenger milestone from the authoritative ride row', 
     assert.equal(resolvePassengerRideMilestone({ id: 1, status: 'completed', driver_id: 'driver-1' }), 'completed');
 });
 
-test('does not announce passenger ride phrases for Higo Envíos', () => {
-    assert.equal(resolvePassengerRideMilestone({ id: 2, status: 'requested', service_type: 'delivery' }), null);
-    assert.equal(resolvePassengerRideMilestone({ id: 3, status: 'completed', delivery_info: { receiverName: 'Ana' } }), null);
+test('resolves the four Higo Envíos voice milestones', () => {
+    assert.equal(
+        resolvePassengerRideMilestone({ id: 2, status: 'requested', service_type: 'delivery' }),
+        'delivery_searching',
+    );
+    assert.equal(
+        resolvePassengerRideMilestone({ id: 2, status: 'accepted', driver_id: 'driver-2', service_type: 'delivery' }),
+        'delivery_accepted',
+    );
+    assert.equal(
+        resolvePassengerRideMilestone({ id: 2, status: 'in_progress', driver_id: 'driver-2', service_type: 'delivery' }),
+        'delivery_picked_up',
+    );
+    assert.equal(
+        resolvePassengerRideMilestone({ id: 3, status: 'completed', delivery_info: { receiverName: 'Ana' } }),
+        'delivery_completed',
+    );
 });
 
 test('dedupe key is isolated by ride and milestone', () => {
@@ -52,10 +70,10 @@ test('passenger screens integrate the centralized voice contract', async () => {
     ]);
 
     assert.match(confirmPage, /announcePassengerRideMilestone/);
-    assert.match(confirmPage, /milestone: 'searching'/);
+    assert.match(confirmPage, /milestone: isDelivery \? 'delivery_searching' : 'searching'/);
     assert.match(statusPage, /announcePassengerRideState/);
     assert.match(statusPage, /announcePassengerRideState\(payload\.new\)/);
     assert.match(statusPage, /announcePassengerRideState\(data\)/);
-    assert.match(gradle, /versionCode 53/);
-    assert.match(gradle, /versionName "1\.5\.21"/);
+    assert.match(gradle, /versionCode 54/);
+    assert.match(gradle, /versionName "1\.5\.22"/);
 });

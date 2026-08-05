@@ -1,4 +1,4 @@
-// Higo 1.5.18 passenger voice contract. Keep these prompts synchronized with
+// Passenger and Higo Envíos voice contract. Keep these prompts synchronized with
 // the authoritative ride milestones used by ConfirmTripPage and RideStatusPage.
 const STORAGE_PREFIX = 'higo.passenger-ride-voice.v1';
 const MAX_STORED_ANNOUNCEMENTS = 100;
@@ -10,6 +10,10 @@ export const PASSENGER_RIDE_VOICE_PHRASES = Object.freeze({
     arrived: 'Tu Higo Driver llegó',
     started: 'Tu viaje ha comenzado',
     completed: 'Has llegado a tu destino',
+    delivery_searching: 'Buscando Higo Driver',
+    delivery_accepted: 'Higo Driver Encontrado',
+    delivery_picked_up: 'Tu envío ha sido Recogido',
+    delivery_completed: 'Tu Envío ha sido entregado',
 });
 
 const normalizeStatus = (value) => String(value || '').trim().toLowerCase();
@@ -19,9 +23,20 @@ const isDeliveryRide = (ride = {}) => (
 );
 
 export const resolvePassengerRideMilestone = (ride = {}) => {
-    if (!ride?.id || isDeliveryRide(ride)) return null;
+    if (!ride?.id) return null;
 
     const status = normalizeStatus(ride.status);
+
+    if (isDeliveryRide(ride)) {
+        if (['completed', 'finished', 'delivered'].includes(status)) return 'delivery_completed';
+        if (['in_progress', 'started', 'ongoing', 'picked_up', 'collected'].includes(status)) return 'delivery_picked_up';
+        if (
+            ride.driver_id
+            || ['accepted', 'assigned', 'driver_assigned'].includes(status)
+        ) return 'delivery_accepted';
+        if (['requested', 'searching', 'pending'].includes(status)) return 'delivery_searching';
+        return null;
+    }
 
     if (['completed', 'finished'].includes(status)) return 'completed';
     if (['in_progress', 'started', 'ongoing'].includes(status)) return 'started';
