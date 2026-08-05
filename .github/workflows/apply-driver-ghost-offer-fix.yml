@@ -55,10 +55,18 @@ jobs:
       - name: Verify expected integration diff
         run: |
           git diff --exit-code -- src/utils/driverRideOffer.js
-          git diff --quiet -- src/pages/DriverDashboard.jsx && { echo "DriverDashboard was not patched"; exit 1; } || true
-          git diff --quiet -- src/components/driver/IncomingRequestCard.jsx && { echo "IncomingRequestCard was not patched"; exit 1; } || true
-          git diff --quiet -- src/hooks/useDriverActiveTrip.js && { echo "useDriverActiveTrip was not patched"; exit 1; } || true
-          git diff --quiet -- src/services/rideApi.js && { echo "rideApi was not patched"; exit 1; } || true
+          for path in \
+            src/pages/DriverDashboard.jsx \
+            src/components/driver/IncomingRequestCard.jsx \
+            src/hooks/useDriverActiveTrip.js \
+            src/services/rideApi.js \
+            android/app/build.gradle; do
+            if git diff --quiet -- "$path"; then
+              echo "::error::$path was not patched"
+              exit 1
+            fi
+          done
+          test -f tests/driverGhostOfferRegression.test.mjs
           grep -q 'versionCode 49' android/app/build.gradle
           grep -q 'versionName "1.5.17"' android/app/build.gradle
 
