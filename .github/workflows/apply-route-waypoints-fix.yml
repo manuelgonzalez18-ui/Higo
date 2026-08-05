@@ -69,7 +69,9 @@ jobs:
             src/components/InteractiveMapGoogle.jsx \
             src/components/InteractiveMapMapbox.jsx \
             src/services/directionsService.js \
-            android/app/build.gradle
+            android/app/build.gradle \
+            tests/driverGhostOfferRegression.test.mjs \
+            tests/passengerRideVoice.test.mjs
           git rm -f \
             .github/workflows/apply-route-waypoints-fix.yml \
             scripts/apply_route_waypoints_fix.py \
