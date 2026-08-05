@@ -80,6 +80,18 @@ replace_once(
     "        versionCode 50\n        versionName \"1.5.18\"\n",
 )
 
+# The previous release regression intentionally pinned 1.5.17. Advance the
+# expectation together with the Android release so the full suite remains useful.
+replace_once(
+    "tests/driverGhostOfferRegression.test.mjs",
+    """    assert.match(gradle, /versionCode 49/);
+    assert.match(gradle, /versionName \"1\\.5\\.17\"/);
+""",
+    """    assert.match(gradle, /versionCode 50/);
+    assert.match(gradle, /versionName \"1\\.5\\.18\"/);
+""",
+)
+
 
 Path("tests/passengerRideVoice.test.mjs").write_text(r'''import test from 'node:test';
 import assert from 'node:assert/strict';
