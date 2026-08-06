@@ -28,8 +28,8 @@ test('SOS is sent quickly and receives a precise GPS follow-up', async () => {
         read('src/utils/triggerEmergencyAlert.js'),
         read('public/api/update-emergency-location.php'),
     ]);
-    assert.match(client, /GEO_SOFT_TIMEOUT_MS = 700/);
-    assert.match(client, /GEO_FOLLOW_UP_TIMEOUT_MS = 12000/);
+    assert.doesNotMatch(client, /GEO_SOFT_TIMEOUT_MS/);
+    assert.match(client, /GEO_FOLLOW_UP_TIMEOUT_MS = 15000/);
     assert.match(client, /update-emergency-location\.php/);
     assert.match(endpoint, /location_lat/);
     assert.match(endpoint, /UBICACIÓN SOS ACTUALIZADA/);
@@ -45,8 +45,8 @@ test('ride message push remains compatible with PHP hosts without str_starts_wit
     assert.match(chat, /if \(!pushResponse\.ok\)/);
 });
 
-test('Android release version is 1.5.25 build 57', async () => {
+test('Android release version is 1.5.27 build 59', async () => {
     const gradle = await read('android/app/build.gradle');
-    assert.match(gradle, /versionCode 58/);
-    assert.match(gradle, /versionName \"1\.5\.26\"/);
+    assert.match(gradle, /versionCode 59/);
+    assert.match(gradle, /versionName \"1\.5\.27\"/);
 });

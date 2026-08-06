@@ -54,6 +54,11 @@ $sosId = (int) ($body['sos_id'] ?? 0);
 $threadId = (int) ($body['support_thread_id'] ?? 0);
 $lat = isset($body['lat']) ? (float) $body['lat'] : null;
 $lng = isset($body['lng']) ? (float) $body['lng'] : null;
+$accuracy = isset($body['location_accuracy']) && is_numeric($body['location_accuracy'])
+    ? max(0.0, (float) $body['location_accuracy'])
+    : null;
+$capturedAt = (string) ($body['location_captured_at'] ?? gmdate('c'));
+$source = preg_replace('/[^a-z0-9_\-]/i', '', (string) ($body['location_source'] ?? 'device_gps'));
 if ($sosId <= 0) uel_send(400, ['ok' => false, 'error' => 'sos_id_required']);
 if ($lat === null || $lng === null || $lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
     uel_send(400, ['ok' => false, 'error' => 'invalid_coordinates']);
@@ -61,7 +66,7 @@ if ($lat === null || $lng === null || $lat < -90 || $lat > 90 || $lng < -180 || 
 
 $serviceHeaders = ['apikey: ' . $supaKey, 'Authorization: Bearer ' . $supaKey];
 [$eventStatus, $eventBody] = bl_http_get(
-    $supaUrl . '/rest/v1/sos_events?id=eq.' . $sosId . '&select=id,user_id,ride_id&limit=1',
+    $supaUrl . '/rest/v1/sos_events?id=eq.' . $sosId . '&select=id,user_id,ride_id,metadata&limit=1',
     $serviceHeaders,
     15
 );
@@ -70,11 +75,20 @@ $event = is_array($events) ? ($events[0] ?? null) : null;
 if ($eventStatus !== 200 || !is_array($event)) uel_send(404, ['ok' => false, 'error' => 'sos_not_found']);
 if ((string) ($event['user_id'] ?? '') !== $callerId) uel_send(403, ['ok' => false, 'error' => 'not_owner']);
 
+$metadata = is_array($event['metadata'] ?? null) ? $event['metadata'] : [];
+$metadata['location'] = [
+    'source' => $source ?: 'device_gps',
+    'accuracy_m' => $accuracy,
+    'captured_at' => $capturedAt,
+    'approximate' => false,
+];
+
 [$patchStatus] = bl_http_patch(
     $supaUrl . '/rest/v1/sos_events?id=eq.' . $sosId,
     (string) json_encode([
         'location_lat' => $lat,
         'location_lng' => $lng,
+        'metadata' => $metadata,
     ]),
     array_merge($serviceHeaders, ['Content-Type: application/json', 'Prefer: return=minimal']),
     15
@@ -98,7 +112,10 @@ if ($threadId > 0) {
             . "- Evento SOS: #" . $sosId . "\n"
             . "- Coordenadas: " . $lat . ", " . $lng . "\n"
             . "- Google Maps: " . $maps . "\n"
-            . "- Hora UTC: " . gmdate('Y-m-d H:i:s');
+            . "- Fuente: GPS preciso del dispositivo"
+            . ($accuracy !== null ? " · precisión ±" . round($accuracy) . " m" : "") . "\n"
+            . "- Capturada: " . $capturedAt . "\n"
+            . "- Recibida UTC: " . gmdate('Y-m-d H:i:s');
 
         [$messageStatus] = bl_http_post(
             $supaUrl . '/rest/v1/support_messages',

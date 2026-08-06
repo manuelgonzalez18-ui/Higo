@@ -8,8 +8,8 @@ android {
         minSdkVersion 23
         targetSdkVersion 35
         // Higo 1.5.26: passenger resume resync and hardened background push/voice.
-        versionCode 58
-        versionName "1.5.26"
+        versionCode 59
+        versionName "1.5.27"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
