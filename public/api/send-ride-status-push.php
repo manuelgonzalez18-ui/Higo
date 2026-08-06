@@ -176,9 +176,19 @@ $messages = [
 ];
 $message = $messages[$milestone];
 $clickAction = '/#/ride/' . rawurlencode($rideId);
+$dedupePath = sys_get_temp_dir() . '/higo-ride-status-' . hash('sha256', $rideId . '|' . $milestone) . '.json';
+if (is_file($dedupePath) && (time() - (int) @filemtime($dedupePath)) < 600) {
+    rsp_send(200, [
+        'ok' => true,
+        'sent' => 1,
+        'deduplicated' => true,
+        'ride_id' => $rideId,
+        'milestone' => $milestone,
+    ]);
+}
 
 try { $accessToken = rsp_access_token((string) $cfg['FIREBASE_SA_PATH']); }
-catch (Throwable $error) { rsp_send(500, ['ok' => false, 'error' => 'oauth_fail']); }
+catch (Throwable $error) { rsp_send(500, ['ok' => false, 'error' => 'oauth_fail', 'detail' => $error->getMessage()]); }
 
 $fcmPayload = [
     'message' => [
@@ -194,7 +204,9 @@ $fcmPayload = [
         ],
         'android' => [
             'priority' => 'HIGH',
-            'ttl' => '120s',
+            'ttl' => '600s',
+            'collapse_key' => 'ride-status-' . $rideId . '-' . $milestone,
+            'restricted_package_name' => 'com.higoapp.ve',
             'direct_boot_ok' => true,
         ],
         'webpush' => [
@@ -219,6 +231,11 @@ $fcmPayload = [
     15
 );
 if ($fcmStatus >= 200 && $fcmStatus < 300) {
+    @file_put_contents($dedupePath, (string) json_encode([
+        'ride_id' => $rideId,
+        'milestone' => $milestone,
+        'sent_at' => gmdate('c'),
+    ]), LOCK_EX);
     rsp_send(200, ['ok' => true, 'sent' => 1, 'ride_id' => $rideId, 'milestone' => $milestone]);
 }
 

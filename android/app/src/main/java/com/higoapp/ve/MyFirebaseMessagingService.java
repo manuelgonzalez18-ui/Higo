@@ -12,6 +12,7 @@ import android.content.SharedPreferences;
 import android.media.AudioAttributes;
 import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 
@@ -26,7 +27,7 @@ import java.util.Locale;
 public class MyFirebaseMessagingService extends FirebaseMessagingService {
     private static final String RIDE_CHANNEL_ID = "higo_rides_v13_immediate";
     private static final String CHAT_CHANNEL_ID = "higo_messages_v3_immediate";
-    private static final String STATUS_CHANNEL_ID = "higo_ride_status_v1";
+    private static final String STATUS_CHANNEL_ID = "higo_ride_status_v2";
     private static final String STATUS_PREFS = "higo_ride_status_dedupe";
     private static final long STATUS_DEDUPE_MS = 24L * 60L * 60L * 1000L;
 
@@ -217,10 +218,21 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         final String text = value(remoteMessage, "voice_text", "body");
         if (text == null || text.trim().isEmpty()) return;
 
+        final PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        final PowerManager.WakeLock wakeLock = powerManager != null
+                ? powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "higo:ride-status-voice")
+                : null;
+        if (wakeLock != null) wakeLock.acquire(15000L);
+
         final TextToSpeech[] engine = new TextToSpeech[1];
+        final Runnable cleanup = () -> {
+            if (engine[0] != null) engine[0].shutdown();
+            if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+        };
+
         engine[0] = new TextToSpeech(getApplicationContext(), status -> {
             if (status != TextToSpeech.SUCCESS || engine[0] == null) {
-                if (engine[0] != null) engine[0].shutdown();
+                cleanup.run();
                 return;
             }
             engine[0].setLanguage(new Locale("es", "ES"));
@@ -229,18 +241,16 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
             final String utteranceId = "higo-status-" + System.currentTimeMillis();
             engine[0].setOnUtteranceProgressListener(new UtteranceProgressListener() {
                 @Override public void onStart(String id) { }
-                @Override public void onDone(String id) {
-                    if (engine[0] != null) engine[0].shutdown();
-                }
-                @Override public void onError(String id) {
-                    if (engine[0] != null) engine[0].shutdown();
-                }
+                @Override public void onDone(String id) { cleanup.run(); }
+                @Override public void onError(String id) { cleanup.run(); }
             });
-            engine[0].speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId);
+            int result = engine[0].speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId);
+            if (result == TextToSpeech.ERROR) cleanup.run();
         });
     }
 
     private boolean isAppInForeground() {
+        if (MainActivity.isInForeground()) return true;
         ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
         if (manager == null) return false;
         List<ActivityManager.RunningAppProcessInfo> processes = manager.getRunningAppProcesses();

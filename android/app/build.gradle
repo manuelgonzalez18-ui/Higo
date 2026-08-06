@@ -7,9 +7,9 @@ android {
         applicationId "com.higoapp.ve"
         minSdkVersion 23
         targetSdkVersion 35
-        // Higo 1.5.25: background passenger voice/status, reliable chat push and SOS GPS follow-up.
-        versionCode 57
-        versionName "1.5.25"
+        // Higo 1.5.26: passenger resume resync and hardened background push/voice.
+        versionCode 58
+        versionName "1.5.26"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'

@@ -6,6 +6,24 @@ import android.view.WindowManager;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+    private static volatile boolean inForeground = false;
+
+    public static boolean isInForeground() {
+        return inForeground;
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        inForeground = true;
+    }
+
+    @Override
+    protected void onStop() {
+        inForeground = false;
+        super.onStop();
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(OverlayPlugin.class);

@@ -386,6 +386,7 @@ const App = () => {
           nativeListener = await CapacitorApp.addListener('appStateChange', ({ isActive }) => {
             if (isActive) {
               checkSession();
+              ensureFcmRegistration();
             }
           });
         } catch (e) {
