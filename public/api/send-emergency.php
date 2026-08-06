@@ -46,6 +46,27 @@ function emerg_send(int $code, array $payload): void {
     exit;
 }
 
+function emerg_valid_location($lat, $lng): bool {
+    return is_numeric($lat) && is_numeric($lng)
+        && (float) $lat >= -90 && (float) $lat <= 90
+        && (float) $lng >= -180 && (float) $lng <= 180;
+}
+
+function emerg_profile_location(?array $profile, int $maxAgeSeconds): ?array {
+    if (!$profile || !emerg_valid_location($profile['curr_lat'] ?? null, $profile['curr_lng'] ?? null)) {
+        return null;
+    }
+    $updated = strtotime((string) ($profile['last_location_update'] ?? ''));
+    if ($updated === false || (time() - $updated) > $maxAgeSeconds) {
+        return null;
+    }
+    return [
+        'lat' => (float) $profile['curr_lat'],
+        'lng' => (float) $profile['curr_lng'],
+        'captured_at' => gmdate('c', $updated),
+    ];
+}
+
 // bl_http_patch vive en public/banesco-core.php (require_once arriba),
 // junto al resto de los helpers cURL.
 
@@ -87,8 +108,14 @@ if (!is_array($body)) {
     emerg_send(400, ['ok' => false, 'error' => 'bad_json']);
 }
 $rideId      = isset($body['ride_id']) ? (int) $body['ride_id'] : 0;
-$lat         = isset($body['lat']) ? (float) $body['lat'] : null;
-$lng         = isset($body['lng']) ? (float) $body['lng'] : null;
+$lat         = emerg_valid_location($body['lat'] ?? null, $body['lng'] ?? null) ? (float) $body['lat'] : null;
+$lng         = $lat !== null ? (float) $body['lng'] : null;
+$locationSource = $lat !== null ? (string) ($body['location_source'] ?? 'device_gps') : null;
+$locationAccuracy = isset($body['location_accuracy']) && is_numeric($body['location_accuracy'])
+    ? max(0.0, (float) $body['location_accuracy'])
+    : null;
+$locationCapturedAt = $lat !== null ? (string) ($body['location_captured_at'] ?? gmdate('c')) : null;
+$locationApproximate = false;
 $triggeredBy = (string) ($body['triggered_by'] ?? 'passenger'); // 'passenger'|'driver'
 if (!in_array($triggeredBy, ['passenger', 'driver'], true)) {
     emerg_send(400, ['ok' => false, 'error' => 'bad_triggered_by']);
@@ -98,7 +125,7 @@ if (!in_array($triggeredBy, ['passenger', 'driver'], true)) {
 // Profile del que disparó (con service_role para saltar RLS).
 [$pStatus, $pBody] = bl_http_get(
     $supaUrl . '/rest/v1/profiles?id=eq.' . rawurlencode($userId)
-        . '&select=full_name,phone,role,avatar_url',
+        . '&select=full_name,phone,role,avatar_url,curr_lat,curr_lng,last_location_update',
     ['apikey: ' . $supaSrv, 'Authorization: Bearer ' . $supaSrv]
 );
 $callerProfile = ($pStatus === 200) ? (json_decode((string) $pBody, true)[0] ?? null) : null;
@@ -114,7 +141,7 @@ if ($rideId > 0) {
     // en el mensaje SOS. Fix: pedir solo columnas reales de rides.
     [$rStatus, $rBody] = bl_http_get(
         $supaUrl . '/rest/v1/rides?id=eq.' . $rideId
-            . '&select=id,user_id,driver_id,pickup,dropoff,status,ride_type,service_type,created_at',
+            . '&select=id,user_id,driver_id,pickup,dropoff,pickup_lat,pickup_lng,dropoff_lat,dropoff_lng,status,ride_type,service_type,arrived_at_pickup_at,created_at',
         ['apikey: ' . $supaSrv, 'Authorization: Bearer ' . $supaSrv]
     );
     if ($rStatus === 200) {
@@ -131,13 +158,60 @@ if ($rideId > 0) {
 if ($counterpartId) {
     [$cpStatus, $cpBody] = bl_http_get(
         $supaUrl . '/rest/v1/profiles?id=eq.' . rawurlencode((string) $counterpartId)
-            . '&select=full_name,phone,role,license_plate,vehicle_model,vehicle_color,avatar_url',
+            . '&select=full_name,phone,role,license_plate,vehicle_model,vehicle_color,avatar_url,curr_lat,curr_lng,last_location_update',
         ['apikey: ' . $supaSrv, 'Authorization: Bearer ' . $supaSrv]
     );
     if ($cpStatus === 200) {
         $counterpartProfile = json_decode((string) $cpBody, true)[0] ?? null;
     }
 }
+
+// Resolver una ubicación operativa sin bloquear ni perder el SOS.
+// Prioridad: GPS del dispositivo -> perfil del alertante -> posición del
+// vehículo (para pasajero en viaje) -> punto de recogida como referencia.
+if ($lat === null || $lng === null) {
+    $callerLast = emerg_profile_location($callerProfile, 10 * 60);
+    if ($callerLast) {
+        $lat = $callerLast['lat'];
+        $lng = $callerLast['lng'];
+        $locationSource = 'caller_last_known';
+        $locationCapturedAt = $callerLast['captured_at'];
+        $locationApproximate = true;
+    }
+}
+
+if (($lat === null || $lng === null) && $triggeredBy === 'passenger' && $ride) {
+    $vehicleLast = emerg_profile_location($counterpartProfile, 5 * 60);
+    $vehicleStatuses = ['in_progress', 'arrived_at_dropoff'];
+    if ($vehicleLast && (in_array((string) ($ride['status'] ?? ''), $vehicleStatuses, true) || !empty($ride['arrived_at_pickup_at']))) {
+        $lat = $vehicleLast['lat'];
+        $lng = $vehicleLast['lng'];
+        $locationSource = 'driver_vehicle_last_known';
+        $locationCapturedAt = $vehicleLast['captured_at'];
+        $locationApproximate = true;
+    }
+}
+
+if (($lat === null || $lng === null) && $ride && emerg_valid_location($ride['pickup_lat'] ?? null, $ride['pickup_lng'] ?? null)) {
+    $lat = (float) $ride['pickup_lat'];
+    $lng = (float) $ride['pickup_lng'];
+    $locationSource = 'ride_pickup_reference';
+    $locationCapturedAt = (string) ($ride['created_at'] ?? gmdate('c'));
+    $locationApproximate = true;
+}
+
+$locationLabels = [
+    'native_gps' => 'GPS nativo del dispositivo',
+    'web_gps' => 'GPS del navegador',
+    'native_app_location' => 'Última ubicación nativa de la app',
+    'web_app_location' => 'Última ubicación web de la app',
+    'cached_app_location' => 'Última ubicación guardada por la app',
+    'caller_last_known' => 'Última ubicación del usuario',
+    'driver_vehicle_last_known' => 'Última ubicación del vehículo asignado',
+    'ride_pickup_reference' => 'Punto de recogida del viaje (referencia)',
+    'device_gps' => 'GPS del dispositivo',
+];
+$locationLabel = $locationLabels[$locationSource] ?? ($locationSource ?: 'No disponible');
 
 // Contactos de emergencia del user (puede estar vacío).
 [$ecStatus, $ecBody] = bl_http_get(
@@ -155,6 +229,13 @@ $metadata = [
     'contacts'    => $contacts,
     'user_agent'  => substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 200),
     'caller_ip'   => $_SERVER['REMOTE_ADDR'] ?? null,
+    'location'    => [
+        'source' => $locationSource,
+        'label' => $locationLabel,
+        'accuracy_m' => $locationAccuracy,
+        'captured_at' => $locationCapturedAt,
+        'approximate' => $locationApproximate,
+    ],
 ];
 $insertBody = json_encode([
     'user_id'        => $userId,
@@ -285,9 +366,12 @@ try {
             . "- Nombre: " . $rawCallerName . "\n"
             . "- Teléfono: " . $rawCallerPhone . "\n"
             . "- Correo: " . $userEmail . "\n\n"
-            . "📍 UBICACIÓN EN VIVO:\n"
+            . "📍 UBICACIÓN DEL SOS:\n"
             . "- Coordenadas: " . ($lat !== null && $lng !== null ? $lat . ", " . $lng : "No disponibles") . "\n"
-            . "- Google Maps: " . $rawMapsLink . "\n\n"
+            . "- Google Maps: " . $rawMapsLink . "\n"
+            . "- Fuente: " . $locationLabel . ($locationApproximate ? " (aproximada)" : "") . "\n"
+            . "- Capturada: " . ($locationCapturedAt ?: "No disponible")
+            . ($locationAccuracy !== null ? " · precisión ±" . round($locationAccuracy) . " m" : "") . "\n\n"
             . "🚗 CONTEXTO DEL VIAJE:\n"
             . "- Viaje ID: " . ($rideId > 0 ? '#' . $rideId : 'Sin viaje activo') . "\n"
             . "- Origen (Pickup): " . $rawPickup . "\n"
@@ -476,4 +560,6 @@ emerg_send(200, [
     'support_thread_id'  => $supportThreadId,
     'support_ok'         => $supportError === null,
     'request_id'         => $requestId,
+    'location_available' => $lat !== null && $lng !== null,
+    'location_source'    => $locationSource,
 ]);
