@@ -48,6 +48,8 @@ jobs:
               content = content.replace('versionCode 56', 'versionCode 57')
               content = content.replace('versionName "1.5.23"', 'versionName "1.5.25"')
               content = content.replace('versionName "1.5.24"', 'versionName "1.5.25"')
+              content = content.replace(r'1\.5\.23', r'1\.5\.25')
+              content = content.replace(r'1\.5\.24', r'1\.5\.25')
               content = content.replace('release is Higo 1.5.23 build 55', 'release is Higo 1.5.25 build 57')
               content = content.replace('release is Higo 1.5.24 build 56', 'release is Higo 1.5.25 build 57')
               target.write_text(content, encoding='utf-8')
@@ -137,7 +139,7 @@ jobs:
             tests/driverGhostOfferRegression.test.mjs \
             tests/passengerRideVoice.test.mjs \
             tests/routeWaypoints.test.mjs
-          git commit -m "feat: background passenger alerts and SOS GPS follow-up [generated]"
+          git commit -m "feat: background passenger alerts and SOS GPS follow-up [skip ci]"
           git push origin HEAD:release/higo-1.5.25-background-alerts
 
       - name: Sync Capacitor Android
