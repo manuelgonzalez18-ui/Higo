@@ -71,6 +71,7 @@ jobs:
           replacements = (
               (r'/Geolocation\\.getCurrentPosition/', r'/Geolocation\.getCurrentPosition/'),
               (r'/readEmergencyLocation\\(\\)/', r'/readEmergencyLocation\(\)/'),
+              (r'/update-emergency-location\\.php/', r'/update-emergency-location\.php/'),
               (r"/'metadata' => \\$metadata/", r"/'metadata' => \$metadata/"),
               (r'/versionName "1\\.5\\.27"/', r'/versionName "1\.5\.27"/'),
           )
