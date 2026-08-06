@@ -40,7 +40,8 @@ test('Android background service uses real activity state and keeps TTS awake', 
         read('android/app/src/main/java/com/higoapp/ve/MyFirebaseMessagingService.java'),
     ]);
     assert.match(activity, /private static volatile boolean inForeground/);
-    assert.match(activity, /protected void onStop\(\)/);
+    assert.match(activity, /public void onStart\(\)/);
+    assert.match(activity, /public void onStop\(\)/);
     assert.match(service, /MainActivity\.isInForeground\(\)/);
     assert.match(service, /PowerManager\.PARTIAL_WAKE_LOCK/);
     assert.match(service, /higo_ride_status_v2/);
