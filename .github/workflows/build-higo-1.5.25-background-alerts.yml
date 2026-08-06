@@ -1,0 +1,166 @@
+name: Build Higo 1.5.25 Background Alerts
+
+on:
+  push:
+    branches:
+      - release/higo-1.5.25-background-alerts
+    paths:
+      - scripts/apply_higo_1_5_25_background_alerts.py
+      - .github/workflows/build-higo-1.5.25-background-alerts.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Apply fixes, test and build signed AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          ref: release/higo-1.5.25-background-alerts
+          fetch-depth: 0
+
+      - name: Apply Higo 1.5.25 improvements
+        run: |
+          sed -i 's#urn:ietf:params:oauth2-bearer#urn:ietf:params:oauth:grant-type:jwt-bearer#g' scripts/apply_higo_1_5_25_background_alerts.py
+          python3 scripts/apply_higo_1_5_25_background_alerts.py
+
+      - name: Verify release version
+        run: |
+          grep -q 'versionCode 57' android/app/build.gradle
+          grep -q 'versionName "1.5.25"' android/app/build.gradle
+          grep -q 'ride_status' android/app/src/main/java/com/higoapp/ve/MyFirebaseMessagingService.java
+          grep -q 'TextToSpeech' android/app/src/main/java/com/higoapp/ve/MyFirebaseMessagingService.java
+          echo "Preparing Higo 1.5.25 (57) from $(git rev-parse --short HEAD)"
+
+      - name: Lint changed PHP endpoints
+        run: |
+          php -l public/api/send-ride-message-push.php
+          php -l public/api/send-ride-status-push.php
+          php -l public/api/update-emergency-location.php
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
+
+      - name: Run background alerts and ride regressions
+        run: |
+          node --test \
+            tests/backgroundPassengerAlertsRegression.test.mjs \
+            tests/passengerRideVoice.test.mjs \
+            tests/nativeDriverChatGhostRegression.test.mjs \
+            tests/chatDiscoveryRegression.test.mjs \
+            tests/notificationLatencyRegression.test.mjs \
+            tests/driverGhostOfferRegression.test.mjs \
+            tests/routeWaypoints.test.mjs
+
+      - name: Build web bundle with production ride flags
+        env:
+          VITE_SHOP_ENABLED: 'false'
+          VITE_SERVER_SIDE_RIDE_PRICING: 'true'
+          VITE_SERVER_SIDE_RIDE_STATE: 'true'
+          VITE_UNIFIED_MEMBERSHIP_CHECKOUT: 'true'
+          VITE_DIRECTED_RIDE_OFFERS: 'true'
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.ANDROID_GOOGLE_MAPS_API_KEY }}
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_MEASUREMENT_ID: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}
+        run: npm run build
+
+      - name: Commit validated source changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            scripts/apply_higo_1_5_25_background_alerts.py \
+            src/App.jsx \
+            src/components/ChatWidget.jsx \
+            src/hooks/useDriverActiveTrip.js \
+            src/utils/sendRideStatusPush.js \
+            src/utils/triggerEmergencyAlert.js \
+            public/api/send-ride-message-push.php \
+            public/api/send-ride-status-push.php \
+            public/api/update-emergency-location.php \
+            android/app/build.gradle \
+            android/app/src/main/java/com/higoapp/ve/MyFirebaseMessagingService.java \
+            tests/backgroundPassengerAlertsRegression.test.mjs
+          git commit -m "feat: background passenger alerts and SOS GPS follow-up [generated]"
+          git push origin HEAD:release/higo-1.5.25-background-alerts
+
+      - name: Sync Capacitor Android
+        run: npx cap sync android
+
+      - name: Decode release keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64" || { echo "::error::ANDROID_KEYSTORE_BASE64 no está configurado"; exit 1; }
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -cd 'A-Za-z0-9+/=' | base64 -d > android/app/release-key.jks
+          magic=$(head -c 2 android/app/release-key.jks | xxd -p)
+          if [ "$magic" != "feed" ] && [ "$magic" != "3082" ]; then
+            echo "::error::Keystore inválido (magic=0x$magic)"
+            exit 1
+          fi
+
+      - name: Build signed AAB and APK
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          chmod +x gradlew
+          ./gradlew bundleRelease assembleRelease --no-daemon
+
+      - name: Cleanup keystore
+        if: always()
+        run: rm -f android/app/release-key.jks
+
+      - name: Prepare release artifacts
+        run: |
+          cp android/app/build/outputs/bundle/release/app-release.aab higo-1.5.25-57-release.aab
+          cp android/app/build/outputs/apk/release/app-release.apk higo-1.5.25-57-release.apk
+          sha256sum higo-1.5.25-57-release.aab higo-1.5.25-57-release.apk > SHA256SUMS.txt
+          ls -lh higo-1.5.25-57-release.aab higo-1.5.25-57-release.apk SHA256SUMS.txt
+
+      - name: Upload Play Store AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: higo-1.5.25-57-aab
+          path: |
+            higo-1.5.25-57-release.aab
+            SHA256SUMS.txt
+          retention-days: 30
+
+      - name: Upload device APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: higo-1.5.25-57-apk
+          path: |
+            higo-1.5.25-57-release.apk
+            SHA256SUMS.txt
+          retention-days: 30
