@@ -13,13 +13,13 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onStart() {
+    public void onStart() {
         super.onStart();
         inForeground = true;
     }
 
     @Override
-    protected void onStop() {
+    public void onStop() {
         inForeground = false;
         super.onStop();
     }
