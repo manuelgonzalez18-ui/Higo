@@ -29,6 +29,30 @@ jobs:
           sed -i 's#urn:ietf:params:oauth2-bearer#urn:ietf:params:oauth:grant-type:jwt-bearer#g' scripts/apply_higo_1_5_25_background_alerts.py
           python3 scripts/apply_higo_1_5_25_background_alerts.py
 
+      - name: Refresh release assertions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          paths = [
+              'tests/chatDiscoveryRegression.test.mjs',
+              'tests/notificationLatencyRegression.test.mjs',
+              'tests/driverGhostOfferRegression.test.mjs',
+              'tests/passengerRideVoice.test.mjs',
+              'tests/routeWaypoints.test.mjs',
+          ]
+          for path in paths:
+              target = Path(path)
+              content = target.read_text(encoding='utf-8')
+              content = content.replace('versionCode 55', 'versionCode 57')
+              content = content.replace('versionCode 56', 'versionCode 57')
+              content = content.replace('versionName "1.5.23"', 'versionName "1.5.25"')
+              content = content.replace('versionName "1.5.24"', 'versionName "1.5.25"')
+              content = content.replace('release is Higo 1.5.23 build 55', 'release is Higo 1.5.25 build 57')
+              content = content.replace('release is Higo 1.5.24 build 56', 'release is Higo 1.5.25 build 57')
+              target.write_text(content, encoding='utf-8')
+          PY
+
       - name: Verify release version
         run: |
           grep -q 'versionCode 57' android/app/build.gradle
@@ -107,7 +131,12 @@ jobs:
             public/api/update-emergency-location.php \
             android/app/build.gradle \
             android/app/src/main/java/com/higoapp/ve/MyFirebaseMessagingService.java \
-            tests/backgroundPassengerAlertsRegression.test.mjs
+            tests/backgroundPassengerAlertsRegression.test.mjs \
+            tests/chatDiscoveryRegression.test.mjs \
+            tests/notificationLatencyRegression.test.mjs \
+            tests/driverGhostOfferRegression.test.mjs \
+            tests/passengerRideVoice.test.mjs \
+            tests/routeWaypoints.test.mjs
           git commit -m "feat: background passenger alerts and SOS GPS follow-up [generated]"
           git push origin HEAD:release/higo-1.5.25-background-alerts
 
