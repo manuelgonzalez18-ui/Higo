@@ -6,6 +6,8 @@ on:
       - release/higo-1.5.25-background-alerts
     paths:
       - .github/workflows/rebuild-higo-1.5.26-passenger-resume-push.yml
+      - tests/passengerResumePushRegression.test.mjs
+      - android/app/src/main/java/com/higoapp/ve/MainActivity.java
 
 permissions:
   contents: read
