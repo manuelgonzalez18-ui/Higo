@@ -28,7 +28,10 @@ jobs:
       - name: Apply active ride chat discovery correction
         run: |
           python scripts/apply_higo_chat_discovery_1_5_24.py
-          sed -i 's/higo-1.5.24-54/higo-1.5.24-56/g' .github/workflows/build-higo-1.5.22-aab.yml
+          # The canonical release workflow is maintained directly in main.
+          # Do not include a workflow-file mutation in the bot-authored commit,
+          # because GitHub blocks workflow changes without workflows permission.
+          git checkout -- .github/workflows/build-higo-1.5.22-aab.yml
           sed -i 's/Higo 1.5.22: release with Higo Envíos voice milestones./Higo 1.5.24: chat discovers the active ride before the panel opens./' android/app/build.gradle
           python - <<'PY'
           from pathlib import Path
@@ -136,8 +139,7 @@ jobs:
             src/components/ChatWidget.jsx \
             android/app/build.gradle \
             tests/chatDiscoveryRegression.test.mjs \
-            tests/notificationLatencyRegression.test.mjs \
-            .github/workflows/build-higo-1.5.22-aab.yml
+            tests/notificationLatencyRegression.test.mjs
           git diff --cached --check
           git commit -m 'fix(chat): subscribe before the panel opens'
           git push origin HEAD:main
