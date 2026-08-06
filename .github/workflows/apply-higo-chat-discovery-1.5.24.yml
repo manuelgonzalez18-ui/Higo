@@ -27,11 +27,21 @@ jobs:
 
       - name: Apply active ride chat discovery correction
         run: |
+          # The canonical release workflow is already maintained directly in
+          # main. Trim that obsolete migration block from the one-shot patcher
+          # before executing it, so the bot commit contains source changes only.
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/apply_higo_chat_discovery_1_5_24.py')
+          source = path.read_text(encoding='utf-8')
+          marker = '# Update the canonical Android build workflow so the post-fix commit does not'
+          if marker not in source:
+              raise SystemExit('canonical workflow block marker not found')
+          source = source.split(marker, 1)[0]
+          source += "print('Applied Higo 1.5.24 active-ride chat discovery fix.')\n"
+          path.write_text(source, encoding='utf-8')
+          PY
           python scripts/apply_higo_chat_discovery_1_5_24.py
-          # The canonical release workflow is maintained directly in main.
-          # Do not include a workflow-file mutation in the bot-authored commit,
-          # because GitHub blocks workflow changes without workflows permission.
-          git checkout -- .github/workflows/build-higo-1.5.22-aab.yml
           sed -i 's/Higo 1.5.22: release with Higo Envíos voice milestones./Higo 1.5.24: chat discovers the active ride before the panel opens./' android/app/build.gradle
           python - <<'PY'
           from pathlib import Path
@@ -49,6 +59,7 @@ jobs:
               raise SystemExit('chat discovery regression block not found')
           path.write_text(source.replace(old, new, 1), encoding='utf-8')
           PY
+          git checkout -- scripts/apply_higo_chat_discovery_1_5_24.py
           grep -q 'const setupRideDiscovery' src/components/ChatWidget.jsx
           grep -q 'filter: `user_id=eq.${currentUserId}`' src/components/ChatWidget.jsx
           grep -q 'filter: `driver_id=eq.${currentUserId}`' src/components/ChatWidget.jsx
