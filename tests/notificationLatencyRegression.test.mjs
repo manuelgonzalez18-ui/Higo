@@ -50,8 +50,8 @@ test('Android uses high-priority data-only paths for fresh ride and chat alerts'
     assert.match(chatPush, /'priority' => 'HIGH'/);
 });
 
-test('release is Higo 1.5.24 build 56', async () => {
+test('release is Higo 1.5.25 build 57', async () => {
     const gradle = await read('android/app/build.gradle');
-    assert.match(gradle, /versionCode 56/);
-    assert.match(gradle, /versionName "1\.5\.24"/);
+    assert.match(gradle, /versionCode 57/);
+    assert.match(gradle, /versionName "1\.5\.25"/);
 });

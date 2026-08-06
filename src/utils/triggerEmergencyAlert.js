@@ -2,92 +2,158 @@ import { supabase } from '../services/supabase';
 import { logger } from './logger';
 import { apiUrl } from './apiUrl';
 
-// Dispara una alerta SOS al backend send-emergency.php.
-//
-// CRÍTICO: el caller invoca tel:911 sincrónicamente DESPUÉS de esta
-// función. En la mayoría de browsers el cambio de window.location
-// cancela los fetch in-flight ANTES de que salgan al wire. Esto causaba
-// que el SOS se "perdiera" silenciosamente. Dos defensas:
-//
-//   1. Geo timeout cortísimo (700ms). Mejor mandar lat/lng=null que
-//      perder la alerta entera porque el navegador tardó 2.5s en
-//      preguntarnos los permisos.
-//   2. fetch con `keepalive: true` — el browser garantiza que la
-//      request termina aunque la página se descargue (límite 64KB,
-//      el body son ~150B). Compatible con Chrome, Edge, Safari, FF
-//      y WebView de Capacitor (Android 87+ / iOS 13.4+).
-//
-// API: triggerEmergencyAlert({ rideId, triggeredBy }) → Promise
-//   triggeredBy: 'passenger' | 'driver'
-//   Resuelve con { ok, sos_id, ... } del endpoint, o rechaza con Error.
+const GEO_SOFT_TIMEOUT_MS = 700;
+const GEO_FOLLOW_UP_TIMEOUT_MS = 12000;
+const LOCATION_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
+const LOCATION_CACHE_KEY = 'higo:last-known-location';
 
-const GEO_TIMEOUT_MS = 700;
+const validCoordinate = (value, min, max) => (
+    Number.isFinite(Number(value)) && Number(value) >= min && Number(value) <= max
+);
 
-const getLocation = () => new Promise((resolve) => {
+const normalizeLocation = (value) => {
+    const lat = Number(value?.lat ?? value?.latitude);
+    const lng = Number(value?.lng ?? value?.longitude);
+    if (!validCoordinate(lat, -90, 90) || !validCoordinate(lng, -180, 180)) return null;
+    return { lat, lng };
+};
+
+const readCachedLocation = () => {
+    if (typeof window === 'undefined') return null;
+    try {
+        const parsed = JSON.parse(window.localStorage.getItem(LOCATION_CACHE_KEY) || 'null');
+        if (!parsed || Date.now() - Number(parsed.savedAt || 0) > LOCATION_CACHE_MAX_AGE_MS) return null;
+        return normalizeLocation(parsed);
+    } catch {
+        return null;
+    }
+};
+
+const cacheLocation = (location) => {
+    if (typeof window === 'undefined' || !location) return;
+    try {
+        window.localStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify({
+            ...location,
+            savedAt: Date.now(),
+        }));
+    } catch {
+        // Storage is best-effort; the emergency request must never depend on it.
+    }
+};
+
+const requestLocation = (timeoutMs) => new Promise((resolve) => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
-        resolve({ lat: null, lng: null });
+        resolve(null);
         return;
     }
+
     let settled = false;
-    const done = (val) => { if (!settled) { settled = true; resolve(val); } };
-    const timer = setTimeout(() => done({ lat: null, lng: null }), GEO_TIMEOUT_MS);
+    const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        const normalized = normalizeLocation(value);
+        if (normalized) cacheLocation(normalized);
+        resolve(normalized);
+    };
+
+    const timer = setTimeout(() => finish(null), timeoutMs + 250);
     navigator.geolocation.getCurrentPosition(
-        (pos) => {
+        (position) => {
             clearTimeout(timer);
-            done({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+            finish({
+                lat: position.coords.latitude,
+                lng: position.coords.longitude,
+            });
         },
         () => {
             clearTimeout(timer);
-            done({ lat: null, lng: null });
+            finish(null);
         },
-        { enableHighAccuracy: true, timeout: GEO_TIMEOUT_MS, maximumAge: 60000 }
+        {
+            enableHighAccuracy: true,
+            timeout: timeoutMs,
+            maximumAge: 60000,
+        },
     );
 });
+
+const wait = (ms, value = null) => new Promise((resolve) => {
+    setTimeout(() => resolve(value), ms);
+});
+
+const locationsMatch = (left, right) => (
+    left && right
+    && Math.abs(left.lat - right.lat) < 0.00001
+    && Math.abs(left.lng - right.lng) < 0.00001
+);
+
+const postJson = async (path, token, body, keepalive = true) => {
+    const response = await fetch(apiUrl(path), {
+        method: 'POST',
+        keepalive,
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+    });
+
+    const text = await response.text();
+    let payload = null;
+    try { payload = JSON.parse(text); } catch { /* non-JSON response */ }
+
+    if (!response.ok) {
+        throw new Error(`${path} returned ${response.status}: ${text.slice(0, 200)}`);
+    }
+    return payload || {};
+};
 
 export const triggerEmergencyAlert = async ({ rideId, triggeredBy }) => {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
     if (!token) throw new Error('No session token for emergency alert');
 
-    const { lat, lng } = await getLocation();
+    // Start a longer high-accuracy lookup immediately, but never delay the
+    // initial SOS by more than 700 ms. A fresh cached point is preferable to
+    // sending null while the GPS warms up.
+    const locationPromise = requestLocation(GEO_FOLLOW_UP_TIMEOUT_MS);
+    const fastLocation = await Promise.race([
+        locationPromise,
+        wait(GEO_SOFT_TIMEOUT_MS),
+    ]);
+    const initialLocation = fastLocation || readCachedLocation();
 
-    const res = await fetch(apiUrl('/api/send-emergency.php'), {
-        method: 'POST',
-        // keepalive: la request sigue viva aunque navegue a tel:911
-        keepalive: true,
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + token,
-        },
-        body: JSON.stringify({
-            ride_id: rideId || null,
-            lat,
-            lng,
-            triggered_by: triggeredBy || 'passenger',
-        }),
+    const payload = await postJson('/api/send-emergency.php', token, {
+        ride_id: rideId || null,
+        lat: initialLocation?.lat ?? null,
+        lng: initialLocation?.lng ?? null,
+        triggered_by: triggeredBy || 'passenger',
     });
 
-    // Log explícito del resultado para diagnosticar fallos silenciosos
-    // en producción. El SOS es crítico — necesitamos que cualquier
-    // problema sea visible inmediatamente en DevTools.
-    const text = await res.text();
-    let payload = null;
-    try { payload = JSON.parse(text); } catch (_) { /* respuesta no-JSON */ }
+    // The emergency is already persisted. Continue resolving GPS in the
+    // background and append the precise coordinates to the SOS/admin thread.
+    void locationPromise.then(async (preciseLocation) => {
+        if (!preciseLocation || !payload?.sos_id || locationsMatch(initialLocation, preciseLocation)) return;
+        try {
+            await postJson('/api/update-emergency-location.php', token, {
+                sos_id: payload.sos_id,
+                support_thread_id: payload.support_thread_id || null,
+                lat: preciseLocation.lat,
+                lng: preciseLocation.lng,
+            });
+            logger.debug('[SOS] precise location attached to event #' + payload.sos_id);
+        } catch (error) {
+            console.warn('[SOS] precise location follow-up failed:', error);
+        }
+    });
 
-    if (!res.ok) {
-        console.error('[SOS] endpoint failed', res.status, payload || text);
-        throw new Error(`Emergency endpoint returned ${res.status}: ${text.slice(0, 200)}`);
-    }
-
-    // H5.1 — el server ya no expone support_error (stack interno).
-    // Solo booleano support_ok + request_id para correlacionar logs.
     if (payload?.support_ok === false) {
-        console.warn('[SOS] support chat integration failed. Request ID for admin: ' + (payload.request_id || '?'));
+        console.warn('[SOS] support chat integration failed. Request ID: ' + (payload.request_id || '?'));
     } else if (payload?.support_thread_id) {
         logger.debug('[SOS] OK · thread #' + payload.support_thread_id + ' · req=' + (payload.request_id || '?'));
     } else {
         logger.debug('[SOS] OK · response:', payload);
     }
 
-    return payload || {};
+    return payload;
 };

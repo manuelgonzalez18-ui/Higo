@@ -7,9 +7,9 @@ android {
         applicationId "com.higoapp.ve"
         minSdkVersion 23
         targetSdkVersion 35
-        // Higo 1.5.24: chat discovers the active ride before the panel opens.
-        versionCode 56
-        versionName "1.5.24"
+        // Higo 1.5.25: background passenger voice/status, reliable chat push and SOS GPS follow-up.
+        versionCode 57
+        versionName "1.5.25"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'

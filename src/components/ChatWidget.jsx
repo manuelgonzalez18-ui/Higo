@@ -548,7 +548,7 @@ const ChatWidget = () => {
             try {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (!session?.access_token || !data?.id) return;
-                await fetch('/api/send-ride-message-push.php', {
+                const pushResponse = await fetch('/api/send-ride-message-push.php', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -556,6 +556,14 @@ const ChatWidget = () => {
                     },
                     body: JSON.stringify({ message_id: data.id, ride_id: rideId }),
                 });
+                const pushText = await pushResponse.text();
+                if (!pushResponse.ok) {
+                    console.warn(
+                        '[ride-chat] background push rejected:',
+                        pushResponse.status,
+                        pushText.slice(0, 240),
+                    );
+                }
             } catch (pushError) {
                 console.warn('[ride-chat] background push failed:', pushError);
             }

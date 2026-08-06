@@ -78,7 +78,7 @@ function rmp_access_token(string $saPath): string {
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') rmp_send(405, ['ok' => false, 'error' => 'method_not_allowed']);
 
 $authorization = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
-if (!str_starts_with($authorization, 'Bearer ') || substr_count($authorization, '.') < 2) {
+if ($authorization === '' || strpos($authorization, 'Bearer ') !== 0 || substr_count($authorization, '.') < 2) {
     rmp_send(401, ['ok' => false, 'error' => 'unauthorized']);
 }
 $callerJwt = substr($authorization, 7);
@@ -149,7 +149,7 @@ if ($token === '') rmp_send(200, ['ok' => true, 'sent' => 0, 'note' => 'recipien
 
 $preview = trim(preg_replace('/\s+/', ' ', (string) ($message['content'] ?? '')) ?? '');
 if ($preview === '') $preview = 'Tienes un nuevo mensaje';
-$preview = mb_substr($preview, 0, 140);
+$preview = function_exists('mb_substr') ? mb_substr($preview, 0, 140) : substr($preview, 0, 140);
 $title = 'Nuevo mensaje del viaje';
 $clickAction = '/#/ride/' . rawurlencode($rideId);
 

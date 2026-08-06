@@ -512,7 +512,7 @@ function rsp_access_token(string $saPath): string {
     [$status, $body] = bl_http_post(
         'https://oauth2.googleapis.com/token',
         http_build_query([
-            'grant_type' => 'urn:ietf:params:oauth2-bearer',
+            'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
             'assertion' => $unsigned . '.' . $b64($signature),
         ]),
         ['Content-Type: application/x-www-form-urlencoded'],
