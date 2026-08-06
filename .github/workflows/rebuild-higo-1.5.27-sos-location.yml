@@ -43,6 +43,37 @@ jobs:
           python3 scripts/.tmp_apply_higo_1_5_27_sos_location.py
           rm -f scripts/.tmp_apply_higo_1_5_27_sos_location.py
 
+      - name: Refresh SOS regression assertions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          background = Path('tests/backgroundPassengerAlertsRegression.test.mjs')
+          content = background.read_text(encoding='utf-8')
+          content = content.replace(
+              'assert.match(client, /GEO_SOFT_TIMEOUT_MS = 700/);',
+              'assert.doesNotMatch(client, /GEO_SOFT_TIMEOUT_MS/);',
+          )
+          content = content.replace(
+              'assert.match(client, /GEO_FOLLOW_UP_TIMEOUT_MS = 12000/);',
+              'assert.match(client, /GEO_FOLLOW_UP_TIMEOUT_MS = 15000/);',
+          )
+          content = content.replace(
+              "test('Android release version is 1.5.25 build 57'",
+              "test('Android release version is 1.5.27 build 59'",
+          )
+          content = content.replace('/versionCode 58/', '/versionCode 59/')
+          content = content.replace('1\\.5\\.26', '1\\.5\\.27')
+          background.write_text(content, encoding='utf-8')
+
+          sos = Path('tests/sosLocationRegression.test.mjs')
+          content = sos.read_text(encoding='utf-8')
+          content = content.replace(r'/Geolocation\\.getCurrentPosition/', r'/Geolocation\.getCurrentPosition/')
+          content = content.replace(r"/'metadata' => \\$metadata/", r"/'metadata' => \$metadata/")
+          content = content.replace(r'/versionName "1\\.5\\.27"/', r'/versionName "1\.5\.27"/')
+          sos.write_text(content, encoding='utf-8')
+          PY
+
       - name: Verify and lint
         run: |
           grep -q "versionCode 59" android/app/build.gradle
