@@ -70,6 +70,10 @@ const ChatWidget = () => {
 
     useEffect(() => {
         let disposed = false;
+        let passengerRideChannel = null;
+        let driverRideChannel = null;
+        let discoveryPollTimer = null;
+        let discoveryUserId = null;
 
         const resolveActiveRide = async (currentUserId) => {
             if (!currentUserId || disposed) return;
@@ -94,7 +98,78 @@ const ChatWidget = () => {
                 console.warn('[ride-chat] active ride lookup failed:', error);
                 return;
             }
-            setRideId(data?.id || null);
+            const nextRideId = data?.id || null;
+            setRideId((currentRideId) => {
+                if (String(currentRideId || '') === String(nextRideId || '')) {
+                    return currentRideId;
+                }
+                setMessages([]);
+                setUnreadCount(0);
+                return nextRideId;
+            });
+        };
+
+        const teardownRideDiscovery = () => {
+            if (passengerRideChannel) {
+                void supabase.removeChannel(passengerRideChannel);
+                passengerRideChannel = null;
+            }
+            if (driverRideChannel) {
+                void supabase.removeChannel(driverRideChannel);
+                driverRideChannel = null;
+            }
+            if (discoveryPollTimer) {
+                window.clearInterval(discoveryPollTimer);
+                discoveryPollTimer = null;
+            }
+            discoveryUserId = null;
+        };
+
+        // The widget mounts before a ride is usually accepted. Previously it
+        // resolved the active ride only at mount/auth/focus, so no chat channel
+        // existed when the first message arrived. Opening the panel supplied the
+        // ride id and the 30-second catch-up then played the delayed beep.
+        // Listen to both participant columns and keep a small polling fallback so
+        // rideId is known before either participant opens the chat.
+        const setupRideDiscovery = (currentUserId) => {
+            if (!currentUserId || disposed) return;
+            if (discoveryUserId === currentUserId
+                && passengerRideChannel
+                && driverRideChannel) return;
+
+            teardownRideDiscovery();
+            discoveryUserId = currentUserId;
+            const refreshActiveRide = () => void resolveActiveRide(currentUserId);
+            const onDiscoveryStatus = (side) => (status) => {
+                if (status === 'SUBSCRIBED') refreshActiveRide();
+                if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                    console.warn(`[ride-chat] ${side} ride discovery status:`, status);
+                }
+            };
+
+            passengerRideChannel = supabase
+                .channel(`ride-chat-discovery:passenger:${currentUserId}`)
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'rides',
+                    filter: `user_id=eq.${currentUserId}`,
+                }, refreshActiveRide)
+                .subscribe(onDiscoveryStatus('passenger'));
+
+            driverRideChannel = supabase
+                .channel(`ride-chat-discovery:driver:${currentUserId}`)
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'rides',
+                    filter: `driver_id=eq.${currentUserId}`,
+                }, refreshActiveRide)
+                .subscribe(onDiscoveryStatus('driver'));
+
+            discoveryPollTimer = window.setInterval(() => {
+                if (document.visibilityState === 'visible') refreshActiveRide();
+            }, 3000);
         };
 
         const fetchUser = async () => {
@@ -102,6 +177,7 @@ const ChatWidget = () => {
             if (session?.user) {
                 userIdRef.current = session.user.id;
                 setUserId(session.user.id);
+                setupRideDiscovery(session.user.id);
                 void resolveActiveRide(session.user.id);
                 return session.user.id;
             }
@@ -110,7 +186,10 @@ const ChatWidget = () => {
             const nextUserId = user?.id || null;
             userIdRef.current = nextUserId;
             setUserId(nextUserId);
-            if (nextUserId) void resolveActiveRide(nextUserId);
+            if (nextUserId) {
+                setupRideDiscovery(nextUserId);
+                void resolveActiveRide(nextUserId);
+            }
             return nextUserId;
         };
 
@@ -121,8 +200,10 @@ const ChatWidget = () => {
             userIdRef.current = nextUserId;
             setUserId(nextUserId);
             if (nextUserId) {
+                setupRideDiscovery(nextUserId);
                 void resolveActiveRide(nextUserId);
             } else {
+                teardownRideDiscovery();
                 setIsOpen(false);
                 setRideId(null);
                 setMessages([]);
@@ -176,6 +257,7 @@ const ChatWidget = () => {
             window.removeEventListener('hashchange', syncCurrentRoute);
             window.removeEventListener('focus', syncCurrentRoute);
             document.removeEventListener('visibilitychange', handleVisibility);
+            teardownRideDiscovery();
             subscription.unsubscribe();
         };
     }, []);
