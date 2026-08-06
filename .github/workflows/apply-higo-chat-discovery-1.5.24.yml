@@ -30,6 +30,22 @@ jobs:
           python scripts/apply_higo_chat_discovery_1_5_24.py
           sed -i 's/higo-1.5.24-54/higo-1.5.24-56/g' .github/workflows/build-higo-1.5.22-aab.yml
           sed -i 's/Higo 1.5.22: release with Higo Envíos voice milestones./Higo 1.5.24: chat discovers the active ride before the panel opens./' android/app/build.gradle
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tests/chatDiscoveryRegression.test.mjs')
+          source = path.read_text(encoding='utf-8')
+          old = """    const realtime = chat.indexOf(\".channel(`ride-chat:${rideId}`)\", rideEffect);
+              const openGuard = chat.indexOf('if (chatIsOpen) return;', rideEffect);
+              assert.ok(rideEffect >= 0 && realtime > rideEffect);
+              assert.ok(openGuard > realtime);"""
+          new = """    const realtime = chat.indexOf(\".channel(`ride-chat:${rideId}`)\", rideEffect);
+              const effectEnd = chat.indexOf('}, [rideId]);', realtime);
+              assert.ok(rideEffect >= 0 && realtime > rideEffect);
+              assert.ok(effectEnd > realtime);"""
+          if old not in source:
+              raise SystemExit('chat discovery regression block not found')
+          path.write_text(source.replace(old, new, 1), encoding='utf-8')
+          PY
           grep -q 'const setupRideDiscovery' src/components/ChatWidget.jsx
           grep -q 'filter: `user_id=eq.${currentUserId}`' src/components/ChatWidget.jsx
           grep -q 'filter: `driver_id=eq.${currentUserId}`' src/components/ChatWidget.jsx
