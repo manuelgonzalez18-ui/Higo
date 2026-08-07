@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '../../services/supabase';
-import { getOfficialBcvRate } from '../../services/bcv';
 import { toast } from '../Toast';
 
 const MAX_QR_FILE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_QR_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp']);
+const BOLIVAR_PAYMENT_NOTE = 'El equivalente en bolívares se determina al momento del pago.';
 
 const PaymentReceiptModal = ({
     show,
@@ -15,8 +15,6 @@ const PaymentReceiptModal = ({
     handleQRClosed
 }) => {
     const fileInputRef = useRef(null);
-    const [bcvRate, setBcvRate] = useState(null);
-    const [loadingRate, setLoadingRate] = useState(true);
     const [uploading, setUploading] = useState(false);
     const [manageOpen, setManageOpen] = useState(false);
     const [qrUrl, setQrUrl] = useState(profile?.payment_qr_url || '');
@@ -28,28 +26,8 @@ const PaymentReceiptModal = ({
         setQrUrl(profile?.payment_qr_url || '');
     }, [profile?.payment_qr_url]);
 
-    useEffect(() => {
-        if (!isTripPayment) return;
-
-        const fetchRate = async () => {
-            setLoadingRate(true);
-            try {
-                const data = await getOfficialBcvRate();
-                if (data && data.rate) {
-                    setBcvRate(data.rate);
-                }
-            } catch (err) {
-                console.error('Error fetching BCV rate:', err);
-            } finally {
-                setLoadingRate(false);
-            }
-        };
-
-        fetchRate();
-    }, [isTripPayment]);
-
     const priceUsd = Number(activeRide?.price) || 0;
-    const priceBs = bcvRate ? priceUsd * bcvRate : null;
+    const isPagoMovil = activeRide?.payment_method === 'pago_movil';
 
     const uploadQrFile = async (file) => {
         if (!file || !profile?.id) return;
@@ -240,22 +218,10 @@ const PaymentReceiptModal = ({
                                 ${priceUsd.toFixed(2)} <span className="text-sm font-bold text-gray-400">USD</span>
                             </h2>
 
-                            {loadingRate ? (
-                                <div className="flex items-center gap-1.5 text-xs text-gray-400 mt-1">
-                                    <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
-                                    <span>Calculando tasa BCV...</span>
-                                </div>
-                            ) : priceBs ? (
-                                <div className="mt-1 flex flex-col items-center">
-                                    <h3 className="text-xl font-bold text-emerald-400 tracking-tight">
-                                        {priceBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs
-                                    </h3>
-                                    <p className="text-[9px] text-gray-500 mt-0.5">
-                                        Tasa oficial BCV: <span className="font-bold">{bcvRate.toFixed(2)} Bs/$</span>
-                                    </p>
-                                </div>
-                            ) : (
-                                <p className="text-[10px] text-red-400 mt-1 font-semibold">Tasa BCV no disponible</p>
+                            {isPagoMovil && (
+                                <p className="text-[10px] text-gray-400 mt-2 leading-relaxed max-w-[240px]">
+                                    {BOLIVAR_PAYMENT_NOTE}
+                                </p>
                             )}
                         </div>
                     </div>
