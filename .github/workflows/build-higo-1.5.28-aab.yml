@@ -9,6 +9,8 @@ on:
       - src/components/driver/PaymentReceiptModal.jsx
       - tests/paymentUsdOnlyRegression.test.mjs
       - tests/backgroundPassengerAlertsRegression.test.mjs
+      - tests/passengerResumePushRegression.test.mjs
+      - tests/sosLocationRegression.test.mjs
       - tests/chatDiscoveryRegression.test.mjs
       - tests/notificationLatencyRegression.test.mjs
       - tests/driverGhostOfferRegression.test.mjs
@@ -65,6 +67,8 @@ jobs:
           node --test \
             tests/paymentUsdOnlyRegression.test.mjs \
             tests/backgroundPassengerAlertsRegression.test.mjs \
+            tests/passengerResumePushRegression.test.mjs \
+            tests/sosLocationRegression.test.mjs \
             tests/passengerRideVoice.test.mjs \
             tests/nativeDriverChatGhostRegression.test.mjs \
             tests/chatDiscoveryRegression.test.mjs \
