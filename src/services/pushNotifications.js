@@ -26,6 +26,8 @@ const VAPID_KEY = import.meta.env.VITE_FCM_VAPID_KEY || '';
 
 let lastSyncedToken = null;
 let nativeInitialized = false;
+let pendingNativeToken = null;
+const NATIVE_TOKEN_CACHE_KEY = 'higo.pending-fcm-token';
 const nativeHandlers = new Set();
 
 const isNative = () => {
@@ -38,7 +40,8 @@ const isNative = () => {
 async function persistToken(token) {
     if (!token) return null;
     try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
         if (!user) return token;
         if (lastSyncedToken === token) return token;
 
@@ -88,7 +91,14 @@ async function ensureFcmRegistrationNative() {
             // directo de register()) — por eso persistTokenInProfile() esta
             // aca y no en el return de ensureFcmRegistrationNative().
             PushNotifications.addListener('registration', async (token) => {
-                await persistToken(token.value);
+                pendingNativeToken = token.value || null;
+                try {
+                    if (pendingNativeToken) window.localStorage.setItem(NATIVE_TOKEN_CACHE_KEY, pendingNativeToken);
+                } catch { /* cache is best-effort */ }
+                const persisted = await persistToken(pendingNativeToken);
+                if (persisted) {
+                    try { window.localStorage.removeItem(NATIVE_TOKEN_CACHE_KEY); } catch { /* ignore */ }
+                }
             });
 
             // Error en registracion (FCM mal configurado, falta
@@ -125,7 +135,19 @@ async function ensureFcmRegistrationNative() {
             nativeInitialized = true;
         }
 
-        // 3. register() → dispara el evento 'registration' con el token FCM.
+        // Retry a token captured before the Supabase session was ready.
+        if (!pendingNativeToken) {
+            try { pendingNativeToken = window.localStorage.getItem(NATIVE_TOKEN_CACHE_KEY); }
+            catch { pendingNativeToken = null; }
+        }
+        if (pendingNativeToken) {
+            const persisted = await persistToken(pendingNativeToken);
+            if (persisted) {
+                try { window.localStorage.removeItem(NATIVE_TOKEN_CACHE_KEY); } catch { /* ignore */ }
+            }
+        }
+
+        // 3. register() → dispara el evento 'registration' with the current token.
         await PushNotifications.register();
         return 'native-pending';
     } catch (err) {

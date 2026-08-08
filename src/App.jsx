@@ -150,6 +150,42 @@ const OnboardingGate = () => {
     return null;
 };
 
+
+const NativeRideDeepLinkHandler = () => {
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        if (!Capacitor.isNativePlatform()) return undefined;
+
+        let listener = null;
+        let disposed = false;
+        const openRide = (url) => {
+            if (!url || !url.startsWith('higo://ride')) return;
+            try {
+                const parsed = new URL(url);
+                const rideId = parsed.searchParams.get('rideId');
+                if (rideId) navigate(`/ride/${rideId}`);
+            } catch (error) {
+                console.warn('[ride-status-push] invalid deep link:', error);
+            }
+        };
+
+        void (async () => {
+            listener = await CapacitorApp.addListener('appUrlOpen', ({ url }) => openRide(url));
+            const launch = await CapacitorApp.getLaunchUrl();
+            if (launch?.url) openRide(launch.url);
+            if (disposed) listener?.remove?.();
+        })();
+
+        return () => {
+            disposed = true;
+            listener?.remove?.();
+        };
+    }, [navigate]);
+
+    return null;
+};
+
 const App = () => {
   const { showDisclosure, handleAcceptDisclosure } = useGeolocation();
   const [incomingRequest, setIncomingRequest] = useState(null);
@@ -350,6 +386,7 @@ const App = () => {
           nativeListener = await CapacitorApp.addListener('appStateChange', ({ isActive }) => {
             if (isActive) {
               checkSession();
+              ensureFcmRegistration();
             }
           });
         } catch (e) {
@@ -482,6 +519,7 @@ const App = () => {
   return (
     <ToastProvider>
     <HashRouter>
+      <NativeRideDeepLinkHandler />
       <OnboardingGate />
       {/* Suspense fallback mientras se carga el chunk de la ruta. */}
       <Suspense fallback={

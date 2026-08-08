@@ -1,93 +1,99 @@
 import { supabase } from '../services/supabase';
 import { logger } from './logger';
 import { apiUrl } from './apiUrl';
+import {
+    prewarmEmergencyLocation,
+    readEmergencyLocation,
+    requestEmergencyLocation,
+} from './emergencyLocation';
 
-// Dispara una alerta SOS al backend send-emergency.php.
-//
-// CRÍTICO: el caller invoca tel:911 sincrónicamente DESPUÉS de esta
-// función. En la mayoría de browsers el cambio de window.location
-// cancela los fetch in-flight ANTES de que salgan al wire. Esto causaba
-// que el SOS se "perdiera" silenciosamente. Dos defensas:
-//
-//   1. Geo timeout cortísimo (700ms). Mejor mandar lat/lng=null que
-//      perder la alerta entera porque el navegador tardó 2.5s en
-//      preguntarnos los permisos.
-//   2. fetch con `keepalive: true` — el browser garantiza que la
-//      request termina aunque la página se descargue (límite 64KB,
-//      el body son ~150B). Compatible con Chrome, Edge, Safari, FF
-//      y WebView de Capacitor (Android 87+ / iOS 13.4+).
-//
-// API: triggerEmergencyAlert({ rideId, triggeredBy }) → Promise
-//   triggeredBy: 'passenger' | 'driver'
-//   Resuelve con { ok, sos_id, ... } del endpoint, o rechaza con Error.
+const GEO_FOLLOW_UP_TIMEOUT_MS = 15000;
 
-const GEO_TIMEOUT_MS = 700;
+const locationsMatch = (left, right) => (
+    left && right
+    && Math.abs(left.lat - right.lat) < 0.00001
+    && Math.abs(left.lng - right.lng) < 0.00001
+);
 
-const getLocation = () => new Promise((resolve) => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-        resolve({ lat: null, lng: null });
-        return;
-    }
-    let settled = false;
-    const done = (val) => { if (!settled) { settled = true; resolve(val); } };
-    const timer = setTimeout(() => done({ lat: null, lng: null }), GEO_TIMEOUT_MS);
-    navigator.geolocation.getCurrentPosition(
-        (pos) => {
-            clearTimeout(timer);
-            done({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        },
-        () => {
-            clearTimeout(timer);
-            done({ lat: null, lng: null });
-        },
-        { enableHighAccuracy: true, timeout: GEO_TIMEOUT_MS, maximumAge: 60000 }
-    );
+const locationPayload = (location) => ({
+    lat: location?.lat ?? null,
+    lng: location?.lng ?? null,
+    location_accuracy: location?.accuracy ?? null,
+    location_captured_at: location?.capturedAt ?? null,
+    location_source: location?.source ?? null,
 });
+
+const postJson = async (path, token, body, keepalive = true) => {
+    const response = await fetch(apiUrl(path), {
+        method: 'POST',
+        keepalive,
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+    });
+
+    const text = await response.text();
+    let payload = null;
+    try { payload = JSON.parse(text); } catch { /* non-JSON response */ }
+
+    if (!response.ok) {
+        throw new Error(`${path} returned ${response.status}: ${text.slice(0, 200)}`);
+    }
+    return payload || {};
+};
+
+// Warm the last-known position as soon as a ride screen imports this module.
+// It never opens a permission prompt; it only refreshes when permission was
+// already granted. The SOS button can then send coordinates immediately.
+if (typeof window !== 'undefined') {
+    window.setTimeout(() => {
+        void prewarmEmergencyLocation();
+    }, 0);
+}
 
 export const triggerEmergencyAlert = async ({ rideId, triggeredBy }) => {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
     if (!token) throw new Error('No session token for emergency alert');
 
-    const { lat, lng } = await getLocation();
-
-    const res = await fetch(apiUrl('/api/send-emergency.php'), {
-        method: 'POST',
-        // keepalive: la request sigue viva aunque navegue a tel:911
-        keepalive: true,
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + token,
-        },
-        body: JSON.stringify({
-            ride_id: rideId || null,
-            lat,
-            lng,
-            triggered_by: triggeredBy || 'passenger',
-        }),
+    // Persist the SOS immediately with the fresh app cache (when available).
+    // Do not wait for a cold GPS fix before the phone dialer opens.
+    const initialLocation = readEmergencyLocation();
+    const locationPromise = requestEmergencyLocation({
+        timeoutMs: GEO_FOLLOW_UP_TIMEOUT_MS,
+        requestPermission: true,
     });
 
-    // Log explícito del resultado para diagnosticar fallos silenciosos
-    // en producción. El SOS es crítico — necesitamos que cualquier
-    // problema sea visible inmediatamente en DevTools.
-    const text = await res.text();
-    let payload = null;
-    try { payload = JSON.parse(text); } catch (_) { /* respuesta no-JSON */ }
+    const payload = await postJson('/api/send-emergency.php', token, {
+        ride_id: rideId || null,
+        triggered_by: triggeredBy || 'passenger',
+        ...locationPayload(initialLocation),
+    });
 
-    if (!res.ok) {
-        console.error('[SOS] endpoint failed', res.status, payload || text);
-        throw new Error(`Emergency endpoint returned ${res.status}: ${text.slice(0, 200)}`);
-    }
+    // The SOS already exists. Attach a fresh native GPS point when it arrives.
+    void locationPromise.then(async (preciseLocation) => {
+        if (!preciseLocation || !payload?.sos_id || locationsMatch(initialLocation, preciseLocation)) return;
+        try {
+            await postJson('/api/update-emergency-location.php', token, {
+                sos_id: payload.sos_id,
+                support_thread_id: payload.support_thread_id || null,
+                ...locationPayload(preciseLocation),
+            });
+            logger.debug('[SOS] precise location attached to event #' + payload.sos_id);
+        } catch (error) {
+            console.warn('[SOS] precise location follow-up failed:', error);
+        }
+    });
 
-    // H5.1 — el server ya no expone support_error (stack interno).
-    // Solo booleano support_ok + request_id para correlacionar logs.
     if (payload?.support_ok === false) {
-        console.warn('[SOS] support chat integration failed. Request ID for admin: ' + (payload.request_id || '?'));
+        console.warn('[SOS] support chat integration failed. Request ID: ' + (payload.request_id || '?'));
     } else if (payload?.support_thread_id) {
         logger.debug('[SOS] OK · thread #' + payload.support_thread_id + ' · req=' + (payload.request_id || '?'));
     } else {
         logger.debug('[SOS] OK · response:', payload);
     }
 
-    return payload || {};
+    return payload;
 };

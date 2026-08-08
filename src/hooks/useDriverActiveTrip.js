@@ -14,6 +14,7 @@ import { computeWaitFee } from '../utils/ridePricing';
 import { stopLoopingRequestAlert } from '../services/notificationService';
 import { toast } from '../components/Toast';
 import { sendDeliveryMilestone } from '../utils/sendDeliveryMilestone';
+import { queueRideStatusPush } from '../utils/sendRideStatusPush';
 
 const hydratePassengerInfo = async (ride) => {
     if (!ride?.user_id || ride.passenger_name) return ride;
@@ -240,6 +241,7 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
             stopLoopingRequestAlert();
             setNavStep(1);
             setArrivalTime(null);
+            queueRideStatusPush({ rideId: accepted?.id || ride.id, milestone: 'driver_found' });
             speak(`Viaje aceptado. Navegando a ${ride.pickup}`);
         } catch (error) {
             const errorText = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
@@ -276,6 +278,7 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
             setArrivalTime(arrivedAt);
             setWaitElapsedSec(0);
             setWaitFee(0);
+            queueRideStatusPush({ rideId: updated?.id || activeRideRef.current.id, milestone: 'arrived' });
             speak('Llegada marcada. Esperando al pasajero.');
         } catch (error) {
             toast.error(`No se pudo marcar la llegada: ${error?.message || error}`);
@@ -287,6 +290,7 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
             const updated = await startRide(ride.id);
             setActiveRide((current) => ({ ...current, ...updated }));
             setWaitFee(Number(updated.wait_fee || 0));
+            queueRideStatusPush({ rideId: ride.id, milestone: 'started' });
             return updated;
         }
 
@@ -307,6 +311,7 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
         if (error) throw error;
         setWaitFee(fee);
         setActiveRide((current) => ({ ...current, ...data }));
+        queueRideStatusPush({ rideId: ride.id, milestone: 'started' });
         return data;
     }, [arrivalTime]);
 
@@ -397,6 +402,7 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
                 updated = data;
             }
             setActiveRide((current) => ({ ...current, ...updated }));
+            queueRideStatusPush({ rideId: ride.id, milestone: 'completed' });
             if (delivery) sendDeliveryMilestone({ rideId: ride.id, status: 'completed' });
             if (ride.user_id) {
                 void Promise.resolve(

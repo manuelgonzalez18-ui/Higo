@@ -7,6 +7,8 @@ import { triggerEmergencyAlert } from '../utils/triggerEmergencyAlert';
 import { toast } from '../components/Toast';
 import { useFabLift } from '../hooks/useFabLift';
 import { announcePassengerRideState } from '../utils/passengerRideVoice';
+import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
 
 const RideStatusPage = () => {
     const { id } = useParams();
@@ -138,7 +140,7 @@ const RideStatusPage = () => {
         };
         requestPermissions();
 
-        fetchRide();
+        fetchRide('initial');
 
         const channel = supabase
             .channel(`ride:${id}`)
@@ -339,20 +341,35 @@ const RideStatusPage = () => {
         }
     }, [ride?.delivery_pod_url, deliveryPodSignedUrl]);
 
-    const fetchRide = async () => {
+    const fetchRide = async (source = 'manual') => {
         const { data, error } = await supabase.from('rides').select('*').eq('id', id).single();
         if (data) {
+            const previousStatus = statusRef.current;
+            const previousArrived = arrivedPickupRef.current;
+            const nextArrived = Boolean(data.arrived_at_pickup_at);
+
             setRide(data);
-            
+
             const isDel = data.service_type === 'delivery' || !!data.delivery_info;
-            arrivedPickupRef.current = !!data.arrived_at_pickup_at;
+            arrivedPickupRef.current = nextArrived;
+            statusRef.current = data.status;
             void announcePassengerRideState(data);
-            if (!statusRef.current) {
-                statusRef.current = data.status;
-                // If already completed on load, show modal
-                if (data.status === 'completed' && isDel) {
-                    setShowDeliverySuccessModal(true);
-                }
+
+            if (data.status === 'completed' && isDel) {
+                setShowDeliverySuccessModal(true);
+            }
+
+            if (
+                source !== 'initial'
+                && (previousStatus !== data.status || previousArrived !== nextArrived)
+            ) {
+                console.debug('[ride-sync] passenger state refreshed', {
+                    source,
+                    rideId: data.id,
+                    previousStatus,
+                    nextStatus: data.status,
+                    arrivedAtPickup: nextArrived,
+                });
             }
 
             if (data.driver_id) {
@@ -369,9 +386,79 @@ const RideStatusPage = () => {
                 setPollingStatus("NoDriver");
             }
         } else {
-            setPollingStatus("RideNull");
+            setPollingStatus(error ? `RideERR: ${error.code || 'unknown'}` : "RideNull");
         }
     };
+
+    // Android suspends the WebView and its realtime socket while the passenger
+    // uses another app. On every resume/visibility change we reconnect and
+    // fetch the authoritative row. A low-frequency visible-only poll is the
+    // final safety net for OEMs that silently drop websocket subscriptions.
+    useEffect(() => {
+        let nativeListener = null;
+        let disposed = false;
+        let syncInFlight = false;
+        let lastSyncAt = 0;
+
+        const syncRideNow = async (reason) => {
+            if (disposed || syncInFlight) return;
+            const now = Date.now();
+            if (reason !== 'visible-poll' && now - lastSyncAt < 750) return;
+
+            syncInFlight = true;
+            try {
+                try { supabase.realtime.connect(); } catch { /* already connected */ }
+                await fetchRide(reason);
+                lastSyncAt = Date.now();
+            } catch (syncError) {
+                console.warn('[ride-sync] refresh failed:', reason, syncError);
+            } finally {
+                syncInFlight = false;
+            }
+        };
+
+        const onVisible = () => {
+            if (document.visibilityState === 'visible') {
+                void syncRideNow('visibility');
+            }
+        };
+        const onFocus = () => void syncRideNow('focus');
+        const onPageShow = () => void syncRideNow('pageshow');
+        const onOnline = () => void syncRideNow('online');
+
+        document.addEventListener('visibilitychange', onVisible);
+        window.addEventListener('focus', onFocus);
+        window.addEventListener('pageshow', onPageShow);
+        window.addEventListener('online', onOnline);
+
+        const visiblePoll = window.setInterval(() => {
+            const currentStatus = String(statusRef.current || '').toLowerCase();
+            if (document.visibilityState !== 'visible') return;
+            if (currentStatus === 'completed' || currentStatus === 'cancelled') return;
+            void syncRideNow('visible-poll');
+        }, 10000);
+
+        if (Capacitor.isNativePlatform()) {
+            void CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+                if (isActive) void syncRideNow('native-resume');
+            }).then((listener) => {
+                nativeListener = listener;
+                if (disposed) nativeListener?.remove?.();
+            }).catch((listenerError) => {
+                console.warn('[ride-sync] native resume listener unavailable:', listenerError);
+            });
+        }
+
+        return () => {
+            disposed = true;
+            document.removeEventListener('visibilitychange', onVisible);
+            window.removeEventListener('focus', onFocus);
+            window.removeEventListener('pageshow', onPageShow);
+            window.removeEventListener('online', onOnline);
+            window.clearInterval(visiblePoll);
+            nativeListener?.remove?.();
+        };
+    }, [id]); // fetchRide intentionally closes over the current ride id
 
     // NOTA: el polling cada 3s a profiles para refrescar driver location
     // se eliminó. El channel `driver_loc:${ride.driver_id}` con filter

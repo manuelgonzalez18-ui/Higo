@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Geolocation } from '@capacitor/geolocation'; // Ensure this is installed
 import { Capacitor } from '@capacitor/core';
+import { rememberEmergencyLocation } from '../utils/emergencyLocation';
 
 export const useGeolocation = () => {
     const [location, setLocation] = useState(null); // { lat, lng }
@@ -67,7 +68,13 @@ export const useGeolocation = () => {
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
                     (pos) => {
-                        setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+                        const nextLocation = rememberEmergencyLocation({
+                            lat: pos.coords.latitude,
+                            lng: pos.coords.longitude,
+                            accuracy: pos.coords.accuracy,
+                            capturedAt: pos.timestamp ? new Date(pos.timestamp).toISOString() : new Date().toISOString(),
+                        }, 'web_app_location');
+                        setLocation(nextLocation ? { lat: nextLocation.lat, lng: nextLocation.lng } : null);
                         setLoading(false);
                     },
                     (err) => {
@@ -87,10 +94,13 @@ export const useGeolocation = () => {
                 timeout: 10000,
             });
 
-            setLocation({
+            const nextLocation = rememberEmergencyLocation({
                 lat: position.coords.latitude,
-                lng: position.coords.longitude
-            });
+                lng: position.coords.longitude,
+                accuracy: position.coords.accuracy,
+                capturedAt: position.timestamp ? new Date(position.timestamp).toISOString() : new Date().toISOString(),
+            }, 'native_app_location');
+            setLocation(nextLocation ? { lat: nextLocation.lat, lng: nextLocation.lng } : null);
         } catch (e) {
             console.warn("Capacitor Geolocation failed:", e);
             setError(e.message || 'Error getting location');

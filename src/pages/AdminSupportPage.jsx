@@ -56,6 +56,25 @@ const highlightMatch = (text, query) => {
     return safeText.replace(re, (m) => `<mark class="bg-yellow-400/40 text-yellow-100 rounded px-0.5">${m}</mark>`);
 };
 
+const MESSAGE_URL_RE = /(https?:\/\/[^\s]+)/g;
+const renderMessageContent = (content) => String(content || '')
+    .split(MESSAGE_URL_RE)
+    .map((part, index) => (
+        /^https?:\/\//.test(part)
+            ? (
+                <a
+                    key={`${part}-${index}`}
+                    href={part}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-400 underline underline-offset-2"
+                >
+                    {part}
+                </a>
+            )
+            : <React.Fragment key={`text-${index}`}>{part}</React.Fragment>
+    ));
+
 const AdminSupportPage = () => {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
@@ -771,7 +790,7 @@ const AdminSupportPage = () => {
                                                     />
                                                 )}
                                                 {m.content && (
-                                                    <p className="text-sm whitespace-pre-wrap break-words">{m.content}</p>
+                                                    <p className="text-sm whitespace-pre-wrap break-words">{renderMessageContent(m.content)}</p>
                                                 )}
                                                 <div className={`flex items-center gap-1 mt-1 ${isAdmin ? 'justify-end' : 'justify-start'}`}>
                                                     <p className={`text-[10px] ${isAdmin ? 'text-white/70' : 'text-gray-500'}`}>
