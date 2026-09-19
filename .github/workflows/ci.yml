@@ -1,252 +1,83 @@
 name: Quality Gate
-
 on:
   pull_request:
   push:
-    branches:
-      - main
-      - agent/platform-hardening
-
-concurrency:
-  group: quality-${{ github.ref }}
-  cancel-in-progress: true
-
+    branches: [main, 'agent/**']
+  workflow_call:
 permissions:
   contents: read
-  pull-requests: write
-  issues: write
-
 jobs:
   build-test:
-    name: Build and test
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-
+    timeout-minutes: 25
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci --legacy-peer-deps --no-audit --no-fund
-
-      - name: Validate migrations
-        run: npm run check:migrations
-
-      - name: Full lint baseline report
-        run: npm run lint
-        continue-on-error: true
-
-      - name: Strict lint for hardened modules
-        run: >-
-          npx eslint
-          scripts/check-migrations.mjs
-          tests/featureFlags.test.mjs
-          tests/ridePricing.test.mjs
-          src/components/AdminGuard.jsx
-          src/components/AdminNav.jsx
-          src/config/features.js
-          src/config/parseBooleanFlag.js
-          src/hooks/useBackgroundLocation.js
-          src/hooks/useDriverActiveTrip.js
-          src/pages/AdminDriverApplicationsPage.jsx
-          src/pages/ConfirmTripPage.jsx
-          src/pages/HigoPayPage.jsx
-          src/services/adminApi.js
-          src/services/analytics.js
-          src/services/banesco.js
-          src/services/membershipApi.js
-          src/services/rideApi.js
-          src/utils/apiUrl.js
-          src/utils/ridePricing.js
-          src/main.jsx
-          vite.config.js
-
-      - name: PHP syntax validation
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - run: npm ci --legacy-peer-deps --no-fund
+      - run: npm run check:migrations
+      - run: npm run lint
+      - name: Validate release shell syntax
+        run: for script in scripts/deploy-release.sh scripts/test-deploy-release.sh; do bash -n "$script"; done
+      - name: Verify artifact checksums and local rollback simulation
         run: |
-          php -l public/api/_cors.php
-          php -l public/api/_driver_applications.php
-          php -l public/api/welcome-driver.php
-          php -l public/api/welcome-driver-v2.php
-          php -l public/api/banesco-validate-v2.php
-          php -l public/api/driver-applications-ingest.php
-          php -l public/api/driver-application-status.php
-          php -l public/api/driver-application-documents.php
-          php -l public/api/driver-application-admin.php
-          php -l public/api/convert-driver-application.php
-
-      - name: Test feature flags
-        run: node --test tests/featureFlags.test.mjs
-
-      - name: Test ride pricing
-        run: node --test tests/ridePricing.test.mjs
-
-      # Suite de vitest (pricing, geoUtils, shopMoney). Antes no corría en CI:
-      # la config de vitest se rompió y los 44 tests dejaron de ejecutarse sin
-      # que nada lo detectara, porque el Quality Gate solo corría los dos
-      # node --test de arriba.
-      - name: Vitest suite
-        run: npx vitest run
-
-      - name: Production build
-        env:
-          VITE_SHOP_ENABLED: 'false'
-          VITE_SERVER_SIDE_RIDE_PRICING: 'false'
-          VITE_SERVER_SIDE_RIDE_STATE: 'false'
-          VITE_UNIFIED_MEMBERSHIP_CHECKOUT: 'false'
-          VITE_DIRECTED_RIDE_OFFERS: 'false'
-        run: npm run build
-
+          node --test scripts/release-tools.test.mjs
+          bash scripts/test-deploy-release.sh
+      - run: npm run test:run
+      - run: npm run test:unit
+      - run: npm run test:php
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run build:test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-report-${{ github.run_id }}
+          path: playwright-report
+          retention-days: 7
   database-migrations:
-    name: Replay Supabase migrations
+    name: Disposable schema contract (not a production baseline)
     runs-on: ubuntu-latest
     timeout-minutes: 35
-
+    env:
+      PGPASSWORD: postgres
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v2
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --legacy-peer-deps --no-fund
+      - uses: supabase/setup-cli@v2
         with:
           version: 2.101.0
           github-token: ${{ github.token }}
-
-      - name: Start local database and replay schema contract
-        id: migration_start
-        continue-on-error: true
-        env:
-          PGPASSWORD: postgres
+      - name: Replay disposable schema contract
         shell: bash
         run: |
-          set +e
-          rm -rf /tmp/higo-migrations
-          mkdir -p /tmp/higo-migrations
-          find supabase/migrations -maxdepth 1 -type f -name '*.sql' -print0 \
-            | sort -z \
-            | xargs -0 -r -I{} mv "{}" /tmp/higo-migrations/
-
-          {
-            echo '=== START EMPTY LOCAL SUPABASE DATABASE ==='
-            supabase db start
-            status=$?
-
-            if [ "$status" -eq 0 ]; then
-              echo '=== APPLY HISTORICAL CONTRACT FIXTURE ==='
-              psql --host 127.0.0.1 --port 54322 --username postgres --dbname postgres \
-                --set ON_ERROR_STOP=1 --file supabase/tests/platform_base_fixture.sql
-              status=$?
-            fi
-
-            if [ "$status" -eq 0 ]; then
-              echo '=== REPLAY REPOSITORY MIGRATIONS ==='
-              for migration in /tmp/higo-migrations/*.sql; do
-                echo "--- Applying $(basename "$migration")"
-                psql --host 127.0.0.1 --port 54322 --username postgres --dbname postgres \
-                  --set ON_ERROR_STOP=1 --file "$migration" || { status=$?; break; }
-              done
-            fi
-          } > /tmp/supabase-db-start.log 2>&1
-
-          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
-          tail -n 140 /tmp/supabase-db-start.log
-          exit 0
-
-      - name: Publish migration failure on PR
-        if: steps.migration_start.outputs.exit_code != '0' && github.event_name == 'pull_request'
+          set -euo pipefail
+          staged=$(mktemp -d)
+          mv supabase/migrations/*.sql "$staged/"
+          supabase db start
+          psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f supabase/tests/platform_base_fixture.sql
+          for migration in "$staged"/*.sql; do
+            psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$migration"
+          done
+          for test in platform_hardening_postdeploy platform_hardening_behavior driver_application_behavior launch_behavior; do
+            psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f "supabase/tests/$test.sql"
+          done
+      - name: Verify concurrent requests against disposable PostgreSQL
         env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        shell: bash
-        run: |
-          {
-            echo '<!-- higo-migration-replay-failure -->'
-            echo '### Supabase migration replay failed'
-            echo
-            echo 'The CI contract database could not apply the repository migrations. Last log lines:'
-            echo
-            echo '```text'
-            tail -n 110 /tmp/supabase-db-start.log
-            echo '```'
-          } > /tmp/migration-comment.md
-          gh pr comment "$PR_NUMBER" --body-file /tmp/migration-comment.md
-
-      - name: Stop when migration replay failed
-        if: steps.migration_start.outputs.exit_code != '0'
-        run: exit 1
-
-      - name: Run post-deploy database assertions
-        if: steps.migration_start.outputs.exit_code == '0'
-        env:
-          PGPASSWORD: postgres
-        run: >-
-          psql
-          --host 127.0.0.1
-          --port 54322
-          --username postgres
-          --dbname postgres
-          --set ON_ERROR_STOP=1
-          --file supabase/tests/platform_hardening_postdeploy.sql
-
-      - name: Run behavioral database assertions
-        id: behavior_tests
-        if: steps.migration_start.outputs.exit_code == '0'
-        continue-on-error: true
-        env:
-          PGPASSWORD: postgres
-        shell: bash
-        run: |
-          set +e
-          psql \
-            --host 127.0.0.1 \
-            --port 54322 \
-            --username postgres \
-            --dbname postgres \
-            --set ON_ERROR_STOP=1 \
-            --file supabase/tests/platform_hardening_behavior.sql \
-            > /tmp/platform-behavior.log 2>&1
-          status=$?
-          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
-          tail -n 100 /tmp/platform-behavior.log
-          exit 0
-
-      - name: Publish behavioral failure on PR
-        if: steps.behavior_tests.outputs.exit_code != '0' && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        shell: bash
-        run: |
-          {
-            echo '<!-- higo-behavior-test-failure -->'
-            echo '### Platform behavior assertions failed'
-            echo
-            echo 'The migration replay succeeded, but an end-to-end database rule did not. Last log lines:'
-            echo
-            echo '```text'
-            tail -n 90 /tmp/platform-behavior.log
-            echo '```'
-          } > /tmp/behavior-comment.md
-          gh pr comment "$PR_NUMBER" --body-file /tmp/behavior-comment.md
-
-      - name: Upload behavioral failure log
-        if: steps.behavior_tests.outputs.exit_code != '0'
-        uses: actions/upload-artifact@v4
-        with:
-          name: platform-behavior-log
-          path: /tmp/platform-behavior.log
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Stop when behavioral assertions failed
-        if: steps.behavior_tests.outputs.exit_code != '0'
-        run: exit 1
-
-      - name: Stop local Supabase
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          HIGO_DISPOSABLE_DATABASE: '1'
+        run: node scripts/test-db-concurrency.mjs
+      - name: Stop disposable Supabase
         if: always()
         run: supabase stop --no-backup

@@ -55,6 +55,7 @@ const RideStatusPage = () => {
                     .from('delivery_tracking_tokens')
                     .select('token,expires_at')
                     .eq('ride_id', ride.id)
+                    .is('revoked_at', null)
                     .gt('expires_at', new Date().toISOString())
                     .order('created_at', { ascending: false })
                     .limit(1)
@@ -112,13 +113,7 @@ const RideStatusPage = () => {
             return;
         }
 
-        const { error } = await supabase
-            .from('rides')
-            .update({
-                status: 'cancelled',
-                cancellation_reason: selectedReason
-            })
-            .eq('id', id);
+        const { error } = await supabase.rpc('passenger_cancel_ride_v2', { p_ride_id: id, p_reason: selectedReason });
 
         if (error) {
             console.error(error);
@@ -297,10 +292,10 @@ const RideStatusPage = () => {
 
     // --- FRESHNESS TIMER LOGIC ---
     const [lastPacketTime, setLastPacketTime] = useState(Date.now());
-    const [secondsAgo, setSecondsAgo] = useState(0);
+    const [, setSecondsAgo] = useState(0);
 
 
-    const [pollingStatus, setPollingStatus] = useState("Init"); // Debug Polling
+    const [, setPollingStatus] = useState("Init"); // Debug Polling
 
     useEffect(() => {
         if (driver?.curr_lat) {
@@ -476,10 +471,7 @@ const RideStatusPage = () => {
     // submitRating ya no las toca; quedan en su default 0/NULL.
 
     const submitRating = async () => {
-        const { error } = await supabase
-            .from('rides')
-            .update({ rating, feedback })
-            .eq('id', id);
+        const { error } = await supabase.rpc('passenger_rate_ride_v1', { p_ride_id: id, p_rating: rating, p_feedback: feedback });
 
         if (!error) {
             setSubmitted(true);
@@ -490,22 +482,13 @@ const RideStatusPage = () => {
     };
 
     const confirmPayment = async (method) => {
-        const updates = {
-            payment_confirmed_by_user: true,
-            payment_method: method
-        };
-        // Si el conductor ya confirmó, cerramos con timestamp.
-        if (ride?.payment_confirmed_by_driver) {
-            updates.payment_confirmed_at = new Date().toISOString();
-        }
-        const { error } = await supabase
-            .from('rides')
-            .update(updates)
-            .eq('id', id);
+        const { data, error } = await supabase.rpc('passenger_confirm_payment_v1', {
+            p_ride_id: id, p_method: method,
+        });
         if (error) {
             toast.error(`No se pudo confirmar el pago: ${error.message}`);
         } else {
-            setRide(prev => ({ ...prev, ...updates }));
+            setRide(prev => ({ ...prev, ...data }));
         }
     };
 
@@ -525,9 +508,7 @@ const RideStatusPage = () => {
         }
     };
 
-    const handleSecurity = () => {
-        toast.warning("¡MODO EMERGENCIA ACTIVADO! Se ha notificado a tus contactos de confianza y al soporte Higo.");
-    };
+
 
     const handleDestination = () => {
         toast.info(`Destino: ${ride?.dropoff || 'Desconocido'} · ETA: 10:45 PM`);
@@ -918,7 +899,7 @@ const RideStatusPage = () => {
                                     </div>
                                 </div>
                             )}
-                            
+
                             {!deliveryPodSignedUrl && pickupPodSignedUrl && (
                                 <div className="bg-[#111520] border border-white/5 rounded-2xl p-4">
                                     <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
@@ -967,10 +948,7 @@ const RideStatusPage = () => {
                                 onClick={async () => {
                                     if (rating > 0) {
                                         // Save rating and redirect
-                                        const { error } = await supabase
-                                            .from('rides')
-                                            .update({ rating, feedback })
-                                            .eq('id', id);
+                                        const { error } = await supabase.rpc('passenger_rate_ride_v1', { p_ride_id: id, p_rating: rating, p_feedback: feedback });
                                         if (error) {
                                             console.error("Error submitting rating:", error);
                                         }

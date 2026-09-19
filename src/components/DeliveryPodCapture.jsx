@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '../services/supabase';
 import { toast } from './Toast';
 import { triggerPodEmail } from '../utils/triggerPodEmail';
@@ -8,6 +8,8 @@ const DeliveryPodCapture = ({ rideId, kind, onUploaded, onCancel, hideCancel = f
     const [preview, setPreview] = useState(null);
     const [file, setFile] = useState(null);
     const [uploading, setUploading] = useState(false);
+    const uploadRef = useRef(null);
+    useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
 
     const labels = kind === 'pickup'
         ? { title: 'Foto del paquete al recoger', hint: 'Mostrar el paquete completo y en buen estado.' }
@@ -21,6 +23,7 @@ const DeliveryPodCapture = ({ rideId, kind, onUploaded, onCancel, hideCancel = f
             return;
         }
         setFile(f);
+        uploadRef.current = null;
         const url = URL.createObjectURL(f);
         setPreview(url);
     };
@@ -29,17 +32,19 @@ const DeliveryPodCapture = ({ rideId, kind, onUploaded, onCancel, hideCancel = f
         if (!file || uploading) return;
         setUploading(true);
         try {
-            const path = `${rideId}/${kind}.jpg`;
-            const { error: upErr } = await supabase.storage
-                .from('delivery-pods')
-                .upload(path, file, { upsert: true, contentType: file.type || 'image/jpeg' });
-            if (upErr) throw upErr;
+            const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[file.type];
+            if (!ext || file.size > 10 * 1024 * 1024) throw new Error('Usa JPG, PNG o WebP de hasta 10 MB.');
+            if (!uploadRef.current) uploadRef.current = { path: `${rideId}/${kind}/${crypto.randomUUID()}.${ext}`, uploaded: false };
+            const { path } = uploadRef.current;
+            if (!uploadRef.current.uploaded) {
+                const { error: upErr } = await supabase.storage
+                    .from('delivery-pods')
+                    .upload(path, file, { upsert: false, contentType: file.type });
+                if (upErr && upErr.statusCode !== '409' && upErr.statusCode !== 409) throw upErr;
+                uploadRef.current.uploaded = true;
+            }
 
-            const column = kind === 'pickup' ? 'pickup_pod_url' : 'delivery_pod_url';
-            const { error: updErr } = await supabase
-                .from('rides')
-                .update({ [column]: path })
-                .eq('id', rideId);
+            const { error: updErr } = await supabase.rpc('driver_register_pod_v1', { p_ride_id: rideId, p_stage: kind, p_object_path: path });
             if (updErr) throw updErr;
 
             // Disparar la notificación por correo al cliente (fire-and-forget)
@@ -64,7 +69,8 @@ const DeliveryPodCapture = ({ rideId, kind, onUploaded, onCancel, hideCancel = f
                     <div className="mb-5">
                         <img src={preview} alt="POD preview" className="w-full rounded-2xl" />
                         <button
-                            onClick={() => { setFile(null); setPreview(null); }}
+                            onClick={() => { setFile(null); setPreview(null); uploadRef.current = null; }}
+                            disabled={uploading}
                             className="text-emerald-400 text-sm mt-2 underline"
                         >
                             Cambiar foto

@@ -30,7 +30,7 @@ import React, { useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { supabase } from '../services/supabase';
-import { calculateBearing } from '../utils/geoUtils';
+
 import { getRoute } from '../services/directionsService';
 import { reportError } from '../utils/reportError';
 import { normalizeRouteWaypoints } from '../utils/routeWaypoints';
@@ -523,7 +523,7 @@ const InteractiveMapMapbox = ({
             supabase.removeChannel(channel);
             Object.values(internalMarkers).forEach((m) => m.remove());
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+
     }, [markersProp, markers]);
 
     return (

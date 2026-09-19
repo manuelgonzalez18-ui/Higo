@@ -1,276 +1,168 @@
-name: Deploy to Hostinger
-
+name: Verified release
 on:
-  push:
-    branches:
-      - main
-      - master
-
-# Si entra un nuevo push mientras el deploy anterior sigue corriendo,
-# cancelamos el viejo. Evita stacks de runs colgados (clásico con lftp
-# trabado por antivirus de Hostinger lockeando archivos).
-concurrency:
-  group: deploy-${{ github.ref }}
-  cancel-in-progress: true
-
-# El deploy solo hace checkout + build + FTP; no necesita escribir en el repo.
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [staging, production]
+        default: staging
+        required: true
+      deploy_web:
+        type: boolean
+        default: false
+      build_android:
+        type: boolean
+        default: false
 permissions:
   contents: read
-
+concurrency:
+  group: release-${{ inputs.environment }}
+  cancel-in-progress: false
 jobs:
-  web-deploy:
-    name: Deploy
+  quality:
+    uses: ./.github/workflows/ci.yml
+  artifact:
+    needs: quality
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 25
+    env:
+      VITE_APP_ENV: ${{ inputs.environment }}
+      VITE_GIT_SHA: ${{ github.sha }}
+      VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+      VITE_DIRECTED_RIDE_OFFERS: ${{ vars.VITE_DIRECTED_RIDE_OFFERS || 'false' }}
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+      VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+      VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+      VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+      VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+      VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+      VITE_FCM_VAPID_KEY: ${{ secrets.VITE_FCM_VAPID_KEY }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - name: Require reconciled backend before packaging a launch build
+        env:
+          LAUNCH_DATABASE_READY: ${{ vars.LAUNCH_DATABASE_READY }}
+          DIRECTED_DISPATCH_READY: ${{ vars.DIRECTED_DISPATCH_READY }}
+          RELEASE_BRANCH: ${{ github.ref }}
+        run: |
+          test "$LAUNCH_DATABASE_READY" = true || { echo 'Reconcile and validate the deployed database before enabling LAUNCH_DATABASE_READY.' >&2; exit 1; }
+          if [ "$VITE_APP_ENV" = production ]; then test "$RELEASE_BRANCH" = refs/heads/main; fi
+          if [ "$VITE_DIRECTED_RIDE_OFFERS" = true ]; then test "$DIRECTED_DISPATCH_READY" = true; fi
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm install --legacy-peer-deps --no-audit --no-fund
-
-      - name: Build Project
+          cache: npm
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - run: npm ci --legacy-peer-deps --no-fund
+      - run: npm run build:release
+      - name: Verify packaged inventory and environment
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
-          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
-          VITE_FIREBASE_MEASUREMENT_ID: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}
-          VITE_FCM_VAPID_KEY: ${{ secrets.VITE_FCM_VAPID_KEY }}
-          # Anexo C — motor de mapa (google|mapbox) + token Mapbox.
-          # Default 'google' si el secret no esta seteado. Para volver a
-          # intentar la cutover a Mapbox: cargar VITE_MAP_ENGINE='mapbox'
-          # y VITE_MAPBOX_TOKEN con pk.* (>=60 chars) en GitHub Secrets.
-          # La guarda mas abajo aborta el build si el token falta o esta
-          # malformado.
-          VITE_MAP_ENGINE: ${{ secrets.VITE_MAP_ENGINE || 'google' }}
-          VITE_MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
-        run: |
-          echo "=== ENV DIAGNOSTIC (lengths only, no values) ==="
-          echo "VITE_SUPABASE_URL length: ${#VITE_SUPABASE_URL}"
-          echo "VITE_SUPABASE_ANON_KEY length: ${#VITE_SUPABASE_ANON_KEY}"
-          echo "VITE_GOOGLE_MAPS_API_KEY length: ${#VITE_GOOGLE_MAPS_API_KEY}"
-          echo "VITE_FIREBASE_API_KEY length: ${#VITE_FIREBASE_API_KEY}"
-          echo "VITE_FIREBASE_PROJECT_ID length: ${#VITE_FIREBASE_PROJECT_ID}"
-          echo "================================================="
-          if [[ ! "$VITE_GOOGLE_MAPS_API_KEY" =~ ^AIza[0-9A-Za-z_-]{35}$ ]]; then
-            echo "::error::VITE_GOOGLE_MAPS_API_KEY no tiene formato valido de Google API key (esperado: AIza + 35 chars alfanumericos/_-, total 39; recibido: ${#VITE_GOOGLE_MAPS_API_KEY} chars). Revisa el secret en GitHub: Settings > Secrets and variables > Actions. Causa comun: espacios, saltos de linea o comillas al pegar."
-            exit 1
-          fi
-          # Supabase env vars: warning si faltan/estan rotas, pero NO
-          # exit 1. supabase.js tiene FALLBACK hardcoded (hotfix
-          # 2026-05-22) que arranca el bundle con la URL/anon-key
-          # publicas si las env vars estan vacias. Mejor un deploy
-          # funcionando con fallback que un deploy bloqueado y prod
-          # rota.
-          if [[ ! "$VITE_SUPABASE_URL" =~ ^https://[a-z0-9-]+\.supabase\.co$ ]]; then
-            echo "::warning::VITE_SUPABASE_URL no tiene formato valido (recibido len=${#VITE_SUPABASE_URL}). El bundle usara FALLBACK_URL de supabase.js. Revisa GitHub Secrets cuando puedas."
-          fi
-          if [[ "${#VITE_SUPABASE_ANON_KEY}" -lt 20 ]]; then
-            echo "::warning::VITE_SUPABASE_ANON_KEY es sospechosamente corto (len=${#VITE_SUPABASE_ANON_KEY}). El bundle usara FALLBACK_KEY de supabase.js. Revisa GitHub Secrets cuando puedas."
-          fi
-          # Mapbox: si el motor esta seteado a 'mapbox', exigir token con
-          # formato pk.* y longitud razonable. Sin esto, un secret vacio o
-          # malformado se baked-in como '' al bundle y mapbox-gl dibuja
-          # solo los controles DOM sin tiles (incidente 2026-05-22).
-          # Si el motor es 'google' no validamos — el token puede no estar.
-          echo "VITE_MAP_ENGINE: $VITE_MAP_ENGINE"
-          echo "VITE_MAPBOX_TOKEN length: ${#VITE_MAPBOX_TOKEN}"
-          if [[ "$VITE_MAP_ENGINE" == "mapbox" ]]; then
-            if [[ ! "$VITE_MAPBOX_TOKEN" =~ ^pk\.[A-Za-z0-9_-]+$ ]]; then
-              echo "::error::VITE_MAP_ENGINE=mapbox pero VITE_MAPBOX_TOKEN no tiene formato valido (esperado: pk.<base64url>; recibido len=${#VITE_MAPBOX_TOKEN}). El bundle saldria con tiles en blanco. Carga el secret en GitHub > Settings > Secrets and variables > Actions o cambia VITE_MAP_ENGINE a 'google'."
-              exit 1
-            fi
-            if [[ "${#VITE_MAPBOX_TOKEN}" -lt 60 ]]; then
-              echo "::error::VITE_MAPBOX_TOKEN es sospechosamente corto (len=${#VITE_MAPBOX_TOKEN}, esperado >= 60 chars). Probable token truncado al pegar."
-              exit 1
-            fi
-          fi
-          npm run build
-
-      # lftp con xfer:clobber on + ftp:use-allo off para que suba cada
-      # archivo con su nombre final y evite el patron .in.<file> + rename
-      # que Hostinger rompe (su antivirus/sync quita dotfiles antes del
-      # rename y devuelve 550 No such file or directory).
-      - name: Install lftp
-        run: sudo apt-get update && sudo apt-get install -y lftp
-
-      # NOTA sobre --no-perms:
-      # Hostinger no le permite a este FTP user hacer `SITE CHMOD`. lftp
-      # por default intenta preservar permisos del archivo local y emite
-      # un chmod después de cada PUT, lo que devuelve 550 y aborta todo
-      # el mirror. `--no-perms` lo saltea — los archivos quedan con los
-      # perms default del usuario FTP (typically 644 / 755), que es lo
-      # que necesitamos.
-      #
-      # NOTA sobre --ignore-time + bash retry (en vez de --loop):
-      # El antivirus de Hostinger lockea archivos individuales durante
-      # el upload (550 transiente) Y modifica el mtime tras escanear.
-      # Con --loop nativo de lftp, el cambio de mtime hacía que cada
-      # iteración detectara TODOS los archivos como modificados → loop
-      # infinito (corrida real: 24min sin terminar).
-      #
-      # Fix: --ignore-time compara solo por size (el AV no toca el size,
-      # solo el mtime). Y envolvemos el lftp en un retry bash con tope
-      # de 3 intentos — total bounded a ~5-10 min worst case en vez de
-      # loop infinito.
-      #
-      # NOTA sobre --delete:
-      # Con chunks hasheados (vite.config.js: chunkFileNames con [hash])
-      # cada build produce nombres únicos. `mirror --delete` intenta
-      # borrar los hashes viejos del server, pero el antivirus de
-      # Hostinger los suele tener lockeados al momento del DELETE y
-      # devuelve "550 No such file" → lftp exit 1 → workflow rojo
-      # AUNQUE el upload de los archivos nuevos haya completado bien.
-      #
-      # Solución: dropear --delete. Los chunks viejos quedan huérfanos
-      # (5-30KB cada uno, ningún index.html actual los referencia, no
-      # rompen nada). Si la acumulación molesta a futuro, una limpieza
-      # manual periódica via FileZilla o un cron de Hostinger barre
-      # `dist/assets/*-<hash>.js` con timestamp > 30 días.
-      #
-      # .builds/ lo crea el sistema interno de Hostinger; lo seguimos
-      # excluyendo por las dudas.
-      # FTPS explícito (AUTH TLS): cifra credenciales y datos en tránsito.
-      # Antes iba en CLARO (ssl-allow no) → un MITM runner↔Hostinger leía la
-      # FTP_PASSWORD de producción (auditoría 2026-07-02). ssl-force aborta
-      # si el server no ofrece TLS. verify-certificate queda en `no` porque
-      # el hosting compartido de Hostinger suele presentar un cert que no
-      # valida por hostname; fijar `cafile` con el cert real es el
-      # hardening siguiente. Aun sin validar, el canal ya va cifrado, lo que
-      # cierra el sniffing pasivo de credenciales.
-      - name: Deploy via lftp
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_ENVIRONMENT: ${{ inputs.environment }}
+        run: node scripts/verify-release.mjs
+      - run: npx playwright install --with-deps chromium
+      - name: Test exact release artifact with all external services intercepted
+        run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        with:
+          name: higo-web-${{ github.sha }}
+          path: dist/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
+  deploy:
+    if: inputs.deploy_web
+    needs: artifact
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: higo-web-${{ github.sha }}
+          path: dist
+      - name: Publish complete release with verified SSH and rollback
         env:
-          FTP_SERVER: ${{ secrets.FTP_SERVER }}
-          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
-          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-        run: |
-          attempt=0
-          max=3
-          until lftp -c "
-          set ftp:ssl-allow yes;
-          set ftp:ssl-force true;
-          set ftp:ssl-protect-data true;
-          set ftp:ssl-protect-list true;
-          set ssl:verify-certificate no;
-          set net:timeout 60;
-          set net:max-retries 10;
-          set net:reconnect-interval-base 5;
-          set net:reconnect-interval-multiplier 1.5;
-          set xfer:clobber on;
-          set ftp:use-allo off;
-          set mirror:parallel-transfer-count 1;
-          open -u '$FTP_USERNAME','$FTP_PASSWORD' '$FTP_SERVER';
-          mirror --reverse --verbose --parallel=1 --no-perms --ignore-time --exclude-glob .ftp-deploy-sync-state.json --exclude '(^|\/)\.builds(\/|$)' ./dist/ ./;
-          put -O ./ ./dist/index.html;
-          put -O ./ ./dist/.htaccess;
-          " || [ $attempt -ge $max ]; do
-            attempt=$((attempt + 1))
-            echo "::warning::lftp mirror falló (intento $attempt/$max). Reintentando en 15s..."
-            sleep 15
-          done
-          if [ $attempt -ge $max ]; then
-            echo "::error::lftp mirror falló después de $max intentos."
-            exit 1
-          fi
-
-      # H7.1 — smoke test post-deploy de higoapp.com.
-      # Verifica (a) que el index.html servido tenga el title canonico Y
-      # (b) que el bundle JS principal que referencia RESPONDA 200 — no
-      # solo que exista el HTML. El bug del 2026-07-22 fue justamente ese:
-      # `mirror --ignore-time` compara por tamaño y el index.html nuevo
-      # pesaba igual que el viejo (los hashes tienen largo fijo) → nunca
-      # se re-subia y quedaba apuntando a un chunk que no existia → pagina
-      # en blanco, pero con title correcto (el smoke viejo pasaba igual).
-      # Ahora forzamos put de index.html/.htaccess en el deploy y acá
-      # validamos que el JS cargue.
-      # Hostinger a veces sirve HTML viejo 5-10s post-upload (caché del
-      # MTA / antivirus); reintentamos hasta 3 veces con backoff.
-      - name: Smoke test higoapp.com
-        run: |
-          echo "Esperando 10s para que Hostinger sirva el HTML nuevo..."
-          sleep 10
-          for i in 1 2 3; do
-            echo "Smoke test intento $i/3..."
-            if curl -fsS -o /tmp/index.html --max-time 20 "https://higoapp.com/?cb=$(date +%s)"; then
-              if grep -q "Higo - Tecnología" /tmp/index.html; then
-                # Extraer el primer <script src="/assets/....js"> y verificar 200.
-                js_path=$(grep -oE '/assets/[A-Za-z0-9._-]+\.js' /tmp/index.html | head -1)
-                if [ -z "$js_path" ]; then
-                  echo "::warning::No se hallo ningun /assets/*.js en el HTML."
-                elif curl -fsS -o /dev/null --max-time 20 "https://higoapp.com${js_path}?cb=$(date +%s)"; then
-                  echo "✓ Smoke test OK — title presente y bundle JS ($js_path) responde 200."
-                  exit 0
-                else
-                  echo "::warning::El HTML referencia $js_path pero NO responde 200 (deploy parcial)."
-                fi
-              else
-                echo "::warning::HTML sirvio pero NO contiene 'Higo - Tecnología'. Posible cache o deploy parcial."
-              fi
-            else
-              echo "::warning::curl fallo en intento $i."
-            fi
-            sleep 5
-          done
-          echo "::error::Smoke test fallo despues de 3 intentos. higoapp.com puede estar sirviendo HTML viejo o roto."
-          exit 1
-
-      # higodriver.com vive en un hosting Hostinger separado (FTP user
-      # u841591024.higodriver.com, path public_html). Subimos ./higodriver/
-      # entero, no solo el .php — incluye también el index.html del landing.
-      #
-      # Guard: si el secret HIGODRIVER_FTP_PASSWORD no está configurado,
-      # skipeamos sin romper el job — útil mientras se cargan los secrets.
-      #
-      # if: !cancelled() — higodriver.com es un hosting independiente de
-      # higoapp.com; su mirror no debe quedar rehén del smoke test del
-      # paso anterior (incidente 2026-07-02: smoke 403 dejó higodriver
-      # sin deployar aunque su FTP estaba sano). No usamos always() para
-      # respetar cancelaciones del concurrency group.
-      - name: Deploy higodriver via lftp
-        if: ${{ !cancelled() }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_ROOT: ${{ vars.DEPLOY_ROOT }}
+          PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_ENVIRONMENT: ${{ inputs.environment }}
+        run: bash scripts/deploy-release.sh
+  android:
+    if: inputs.build_android
+    needs: artifact
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - run: npm ci --legacy-peer-deps --no-fund
+      - uses: actions/download-artifact@v4
+        with:
+          name: higo-web-${{ github.sha }}
+          path: dist
+      - name: Verify the Android input artifact
         env:
-          HIGODRIVER_FTP_SERVER: ${{ secrets.HIGODRIVER_FTP_SERVER }}
-          HIGODRIVER_FTP_USERNAME: ${{ secrets.HIGODRIVER_FTP_USERNAME }}
-          HIGODRIVER_FTP_PASSWORD: ${{ secrets.HIGODRIVER_FTP_PASSWORD }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_ENVIRONMENT: ${{ inputs.environment }}
+        run: node scripts/verify-release.mjs
+      - run: npx cap sync android
+      - name: Install isolated native Firebase configuration
+        env:
+          ANDROID_GOOGLE_SERVICES_JSON: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
+          FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
         run: |
-          if [ -z "$HIGODRIVER_FTP_PASSWORD" ]; then
-            echo "::warning::HIGODRIVER_FTP_PASSWORD no está configurado — skipeando deploy de higodriver.com. Agregalo en Settings > Secrets para habilitar."
-            exit 0
-          fi
-          attempt=0
-          max=3
-          until lftp -c "
-          set ftp:ssl-allow yes;
-          set ftp:ssl-force true;
-          set ftp:ssl-protect-data true;
-          set ftp:ssl-protect-list true;
-          set ssl:verify-certificate no;
-          set net:timeout 60;
-          set net:max-retries 10;
-          set net:reconnect-interval-base 5;
-          set net:reconnect-interval-multiplier 1.5;
-          set xfer:clobber on;
-          set ftp:use-allo off;
-          set mirror:parallel-transfer-count 1;
-          open -u '$HIGODRIVER_FTP_USERNAME','$HIGODRIVER_FTP_PASSWORD' '$HIGODRIVER_FTP_SERVER';
-          mirror --reverse --verbose --parallel=1 --no-perms --ignore-time --exclude-glob .ftp-deploy-sync-state.json --exclude '(^|\/)\.builds(\/|$)' ./higodriver/ ./;
-          " || [ $attempt -ge $max ]; do
-            attempt=$((attempt + 1))
-            echo "::warning::lftp higodriver mirror falló (intento $attempt/$max). Reintentando en 15s..."
-            sleep 15
-          done
-          if [ $attempt -ge $max ]; then
-            echo "::error::lftp higodriver mirror falló después de $max intentos."
-            exit 1
-          fi
+          test -n "$ANDROID_GOOGLE_SERVICES_JSON"
+          printf '%s' "$ANDROID_GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          node --input-type=module -e 'import fs from "node:fs"; const config=JSON.parse(fs.readFileSync("android/app/google-services.json")); if(!process.env.FIREBASE_PROJECT_ID || config.project_info?.project_id!==process.env.FIREBASE_PROJECT_ID) throw Error("Native Firebase project differs from release environment");'
+      - name: Decode upload key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$KEYSTORE_BASE64"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > android/app/release-key.jks
+      - name: Build signed Android from tested web artifact
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          chmod +x gradlew
+          ./gradlew bundleRelease assembleRelease --no-daemon
+      - if: always()
+        run: rm -f android/app/release-key.jks
+      - uses: actions/upload-artifact@v4
+        with:
+          name: higo-android-${{ github.sha }}
+          path: |
+            android/app/build/outputs/bundle/release/app-release.aab
+            android/app/build/outputs/apk/release/app-release.apk
+            dist/release.json
+          if-no-files-found: error
+          retention-days: 30

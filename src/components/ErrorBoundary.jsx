@@ -51,7 +51,7 @@ class ErrorBoundary extends React.Component {
         // En dev, dejar el error visible en consola con su stack
         // crudo para que devtools lo capture.
         if (IS_DEV) {
-            // eslint-disable-next-line no-console
+
             console.error('[ErrorBoundary]', error, errorInfo);
         }
     }

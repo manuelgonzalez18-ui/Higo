@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const ProhibitedItemsModal = ({ isOpen, onClose, onConfirm }) => {
+const ProhibitedItemsModal = ({ isOpen, onConfirm }) => {
     const [accepted, setAccepted] = useState(false);
 
     if (!isOpen) return null;
