@@ -70,9 +70,13 @@ jobs:
           for migration in "$staged"/*.sql; do
             psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$migration"
           done
-          for test in platform_hardening_postdeploy platform_hardening_behavior driver_application_behavior launch_behavior; do
+          for test in platform_hardening_postdeploy platform_hardening_behavior driver_application_behavior; do
             psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f "supabase/tests/$test.sql"
           done
+          # The local `postgres` role is not a superuser. This transaction must
+          # SET SESSION AUTHORIZATION to remove owner exemptions from assertions.
+          # Only its fixture setup uses the disposable container's superuser.
+          docker exec -i supabase_db_higo-platform-ci psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 < supabase/tests/launch_behavior.sql
       - name: Verify concurrent requests against disposable PostgreSQL
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres

@@ -13,7 +13,7 @@ const route = {
     stops: [],
 };
 
-/** connect() must return a connected node-postgres Client in an isolated DB. */
+/** connect({user,password}?) must honor login overrides in this isolated DB. */
 export async function verifyRideConcurrency(connect) {
     const admin = await connect();
     const blocker = await connect();
@@ -22,13 +22,21 @@ export async function verifyRideConcurrency(connect) {
     const drivers = [randomUUID(), randomUUID()];
     const actors = [...passengers, ...drivers];
     let originalDispatch;
+    const loginRole = `higo_race_${randomUUID().replaceAll('-', '')}`;
+    const loginPassword = randomUUID();
+    let loginCreated = false;
 
     const actorClient = async (actor, name) => {
-        const client = await connect();
+        const client = await connect({ user: loginRole, password: loginPassword });
         clients.push(client);
         await client.query("select set_config('application_name',$1,false)", [name]);
         await client.query('set statement_timeout = 12000');
-        await client.query('set session authorization authenticated');
+        await client.query('set role authenticated');
+        const { rows: identity } = await client.query('select session_user as login, current_user as role, rolsuper, rolbypassrls from pg_roles where rolname=session_user');
+        assert.equal(identity[0].login, loginRole, 'actor connection must use its own unprivileged login');
+        assert.equal(identity[0].role, 'authenticated');
+        assert.equal(identity[0].rolsuper, false);
+        assert.equal(identity[0].rolbypassrls, false);
         await client.query("select set_config('request.jwt.claim.sub',$1,false), set_config('request.jwt.claims',$2,false)",
             [actor, JSON.stringify({ sub: actor, role: 'authenticated' })]);
         return client;
@@ -74,6 +82,10 @@ export async function verifyRideConcurrency(connect) {
     };
 
     try {
+        // Both identifiers are generated UUID-derived values, never user input.
+        await admin.query(`create role "${loginRole}" login noinherit password '${loginPassword}'`);
+        loginCreated = true;
+        await admin.query(`grant authenticated to "${loginRole}"`);
         const { rows: flags } = await admin.query('select directed_ride_offers from public.platform_runtime_flags where singleton');
         originalDispatch = flags[0].directed_ride_offers;
         await admin.query('update public.platform_runtime_flags set directed_ride_offers=false where singleton');
@@ -138,8 +150,12 @@ export async function verifyRideConcurrency(connect) {
                 await admin.query('update public.platform_runtime_flags set directed_ride_offers=$1 where singleton', [originalDispatch]);
             }
         } finally {
-            await blocker.end();
-            await admin.end();
+            try {
+                if (loginCreated) await admin.query(`drop role "${loginRole}"`);
+            } finally {
+                await blocker.end();
+                await admin.end();
+            }
         }
     }
 }
@@ -155,8 +171,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         throw new Error('Database concurrency tests are restricted to loopback hosts.');
     }
     const { Client } = await import('pg');
-    await verifyRideConcurrency(async () => {
-        const client = new Client({ connectionString, connectionTimeoutMillis: 5000 });
+    await verifyRideConcurrency(async (identity = {}) => {
+        const loginUrl = new URL(connectionString);
+        if (identity.user) {
+            loginUrl.username = identity.user;
+            loginUrl.password = identity.password;
+        }
+        const client = new Client({ connectionString: loginUrl.toString(), connectionTimeoutMillis: 5000 });
         await client.connect();
         return client;
     });
