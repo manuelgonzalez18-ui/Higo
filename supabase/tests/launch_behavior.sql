@@ -1,5 +1,10 @@
 -- Disposable database only. Exercises the final contract as non-owner roles.
 begin;
+-- Model the Storage API transaction context so its statement-level SQL-delete
+-- safeguard does not mask Higo's own RLS immutability assertions. This flag
+-- grants no table privileges and lasts only until the final rollback.
+-- https://supabase.com/blog/supabase-storage-performance-security-reliability-updates
+set local storage.allow_delete_query = 'true';
 insert into public.profiles(id,full_name,role,status,subscription_status,vehicle_type,subscription_override_until)
 values
  ('00000000-0000-4000-8000-000000009101','Launch passenger','passenger','offline','suspended',null,null),
