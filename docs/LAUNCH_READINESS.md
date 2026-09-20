@@ -37,6 +37,8 @@ garantías:** las migraciones nuevas todavía deben promoverse al entorno real.
 - Suites Node/Vitest/PHP/navegador/SQL, lint obligatorio, dependencias actualizadas,
   entrega por artefacto con hashes, SSH verificado y reversión. Auditoría determinista
   obligatoria; la revisión por IA es un complemento opcional.
+- Inventario de esquema de solo lectura y comparación de objetos/permisos; CI
+  conserva su captura por SHA para apoyar la conciliación con el entorno real.
 
 Contratos: [cotización y evidencias](./QUOTE_AND_EVIDENCE_API.md).
 Configuración y publicación: [guía de entrega](./RELEASE_DEPLOYMENT.md).
@@ -81,12 +83,15 @@ Antes del staging definitivo:
 5. Ensayar restauración y reversión, y solo entonces marcar `LAUNCH_DATABASE_READY`.
 
 El fixture `platform_base_fixture.sql` sigue siendo un contrato de CI, **no el baseline
-de producción**. El inventario no incluye datos personales y no se hizo DDL remoto.
+de producción**. El inventario no incluye datos personales. La comparación ampliada,
+el proyecto creado y el bloqueo de exportación se detallan en
+[SCHEMA_RECONCILIATION.md](./SCHEMA_RECONCILIATION.md).
 
 ## Condiciones externas todavía pendientes
 
-- Aprovisionar staging separado en Supabase/PHP/Storage/Firebase, con facturación del
-  recurso confirmada antes de crearlo. Reactivar producción no crea ese entorno.
+- Higo Staging (`oiszcfmuxfihcullioou`) ya está creado y activo, con coste autorizado
+  de US$10/mes. Quedan cargar el esquema reconciliado y aprovisionar PHP/Firebase
+  aislados. La base de staging todavía no contiene relaciones de la aplicación.
 - Configurar claves privadas de servidor, dominios/CORS, credenciales SSH y GitHub
   Environments. Verificar pagos simulados y entrega de notificaciones en staging.
 - Validar y aplicar el corte de permisos después de migrar todos los consumidores,

@@ -70,6 +70,7 @@ jobs:
           for migration in "$staged"/*.sql; do
             psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$migration"
           done
+          psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -t -A -f scripts/schema-inventory.sql > schema-inventory.json
           for test in platform_hardening_postdeploy platform_hardening_behavior driver_application_behavior; do
             psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f "supabase/tests/$test.sql"
           done
@@ -85,3 +86,11 @@ jobs:
       - name: Stop disposable Supabase
         if: always()
         run: supabase stop --no-backup
+      - name: Preserve schema inventory without application data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: schema-contract-${{ github.sha }}-${{ github.run_id }}
+          path: schema-inventory.json
+          if-no-files-found: warn
+          retention-days: 7
