@@ -5,6 +5,19 @@ begin;
 -- grants no table privileges and lasts only until the final rollback.
 -- https://supabase.com/blog/supabase-storage-performance-security-reliability-updates
 set local storage.allow_delete_query = 'true';
+-- The reconciled schema references real Auth identities. No login credentials
+-- or email are assigned, and all six fixtures disappear at transaction rollback.
+do $$begin
+ if to_regclass('auth.users') is not null then
+  insert into auth.users(id) values
+   ('00000000-0000-4000-8000-000000009101'),
+   ('00000000-0000-4000-8000-000000009102'),
+   ('00000000-0000-4000-8000-000000009103'),
+   ('00000000-0000-4000-8000-000000009104'),
+   ('00000000-0000-4000-8000-000000009105'),
+   ('00000000-0000-4000-8000-000000009106');
+ end if;
+end $$;
 insert into public.profiles(id,full_name,role,status,subscription_status,vehicle_type,subscription_override_until)
 values
  ('00000000-0000-4000-8000-000000009101','Launch passenger','passenger','offline','suspended',null,null),

@@ -5,8 +5,9 @@
 Se creó **Higo Staging**, proyecto `oiszcfmuxfihcullioou`, en la organización
 ManuDeveloper (`kbahrsyankldrjzgfzyw`), región `us-east-1`. El usuario autorizó
 el coste de US$10 al mes informado por el conector. La comprobación posterior
-devolvió `ACTIVE_HEALTHY`, PostgreSQL 17.6 y cero relaciones de aplicación en
-`public`: el recurso existe, pero aún no tiene el esquema de Higo.
+devolvió `ACTIVE_HEALTHY`, PostgreSQL 17.6. El 20 de septiembre se restauró el
+esquema revisado y se aplicaron las dos migraciones de lanzamiento. El corte
+`higo_finalize_launch()` sigue sin activarse en el proyecto compartido.
 
 Origen: Higo Project (`yfgomicdcwifgeumqsvv`), PostgreSQL 17.6, activo. No se han
 aplicado las migraciones del PR en producción ni reparado su historial.
@@ -34,7 +35,8 @@ explícitos frente a implícitos pueden producir diferencias sin un cambio funci
 Las posiciones de columnas también se conservan. Las diferencias requieren revisión;
 no son un recuento de vulnerabilidades. La consulta no cubre datos de configuración,
 archivos de Storage, secretos, servicios externos ni todos los objetos administrados
-por Supabase. El baseline definitivo requiere exportación y restauración independientes.
+por Supabase. La restauración del baseline se comprueba por separado; la comparación
+de catálogos no demuestra por sí sola que los flujos del producto funcionen.
 
 ## Resultado observado
 
@@ -70,28 +72,50 @@ El historial remoto sigue registrando 23 migraciones hasta `20260724110000`.
 La existencia de funciones posteriores no basta para marcar el resto como aplicadas:
 hay que comprobar sus permisos, triggers y efectos sobre datos de configuración.
 
-## Exportación pendiente y siguiente paso
+## Baseline restaurado y siguiente paso
 
 La CLI 2.101.0 reconoce la cuenta y vincula el origen. Sin embargo, el pooler de
 sesión cierra la conexión del usuario temporal `cli_login_postgres` durante el
 protocolo de conexión. La alternativa directa IPv6 tampoco está disponible desde
 este entorno. Las consultas de catálogo mediante el conector sí funcionan.
 
-Se prepararon herramientas nativas PostgreSQL 17.11 para exportar el esquema,
-pero **no se obtuvo aún un dump completo y restaurable**. No sustituirlo por el
-fixture ni copiar datos reales a staging para superar este punto.
+Se utilizó una extracción de catálogos mediante el conector y un generador específico
+para Higo (`scripts/build-schema-baseline.mjs`). La restauración transaccional en staging
+terminó correctamente. El artefacto revisado está en `supabase/baselines/20260920`;
+las capturas privadas originales no se incluyen, porque pueden contener configuración
+de webhooks. No es un dump completo de todos los componentes administrados por Supabase.
 
-1. Obtener una conexión de exportación funcional desde un entorno con acceso a
-   la base: pooler de sesión con credencial configurada de forma privada o conexión
-   directa IPv6 desde un runner compatible. No escribir contraseñas en Git ni chat.
-2. Exportar solo esquema y permisos; revisar por separado cambios personalizados
-   de Auth/Storage, extensiones, publicaciones, buckets, webhooks y Cron. Revisar
-   literales de funciones para excluir secretos y endpoints de producción.
-3. Restaurar en el proyecto de staging vacío con notificaciones y pagos aislados;
-   repetir inventario y pruebas por rol. Resolver diferencias, sin `migration repair`
-   automático. Configurar datos sintéticos y los parámetros del negocio por separado.
-4. Aplicar los cambios de lanzamiento que correspondan, ensayar restauración y
-   probar servicios reales de staging antes de habilitar `LAUNCH_DATABASE_READY`.
+| Resultado antes de las migraciones nuevas | Cantidad |
+|---|---:|
+| Tablas de aplicación restauradas | 56 |
+| Funciones públicas propias | 139 |
+| Secuencias / vistas | 23 / 3 |
+| Constraints / índices independientes / políticas | 259 / 83 / 146 |
+| Objetos idénticos en inventario origen–staging | 1.561 |
+| Diferencias deliberadas | 2 triggers de notificaciones excluidos |
+
+Se restauraron las configuraciones de siete buckets y diez membresías de Realtime,
+sin archivos ni filas de usuarios. Los triggers excluidos son
+`public.ride_offers."higo-send-directed-ride-offer"` y
+`public.rides."ride-request-push"`; sus endpoints y credenciales deben configurarse
+para staging. No se copiaron tareas Cron, secretos ni parámetros comerciales.
+
+SHA-256 del SQL revisado:
+`9d7c8ba7e0e9904a171412cce7092f2a1dbbfbb1d938c7452cf6c9c6e55ee75e`.
+
+El historial de staging registra `higo_reviewed_catalog_baseline`,
+`launch_ride_integrity` y `authoritative_route_quotes`. Se verificó que el cliente
+autenticado no puede ejecutar `higo_store_route_quote`, que `service_role` sí puede
+y que `integrity_enforced` permanece desactivado hasta terminar la validación.
+
+La nueva tarea de CI restaura este artefacto sobre Supabase PostgreSQL 17 y aplica
+solo las dos migraciones nuevas. Las pruebas usan identidades Auth sintéticas sin
+credenciales y revierten su transacción. Sus resultados deben consultarse en el SHA
+correspondiente; añadir la tarea no equivale a haberla aprobado.
+
+Pendiente: completar pruebas por rol y concurrencia sobre la reconstrucción,
+configurar PHP/Firebase y parámetros de negocio aislados, revisar los advisors y
+ensayar restauración/reversión antes de habilitar `LAUNCH_DATABASE_READY`.
 
 Referencia del procedimiento de exportación y sus excepciones para Auth/Storage:
 [Backup and Restore using the CLI](https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore).

@@ -64,17 +64,18 @@ ya presentaba objetos posteriores de precios, despacho y solicitudes de conducto
 Se inventariaron 139 funciones públicas no pertenecientes a extensiones, 48 triggers,
 259 constraints y 710 columnas. **No volver a aplicar automáticamente todo el historial.**
 
+Ya se restauró un baseline revisado de catálogos en staging: 1.561 objetos coinciden
+con origen y solo se excluyeron dos triggers de notificaciones externas. Las dos
+migraciones nuevas están aplicadas; el corte de permisos permanece desactivado.
 Antes del staging definitivo:
 
-1. Exportar un baseline solo de esquema desde una conexión administrativa segura;
-   revisar funciones, permisos, tipos, vistas, índices y triggers de Auth. No exportar
-   datos de usuarios a Git. Registrar además buckets/políticas, webhooks, Cron, secretos
-   por nombre (sin valores), configuración Auth y endpoints de notificación.
+1. Validar la reconstrucción versionada en `supabase/baselines/20260920` mediante
+   el nuevo job de CI. Completar la configuración externa de Auth, webhooks, Cron,
+   secretos y notificaciones, sin copiar credenciales ni datos de producción.
 2. Comparar cada migración local con sus objetos reales y hashes. `migration repair`
    solo se usa cuando el efecto completo ya está verificado. La existencia de una
    función no demuestra que su cuerpo y permisos coincidan.
-3. Reconstruir una instancia aislada desde ese baseline, aplicar únicamente diferencias
-   pendientes y las dos migraciones nuevas. Repetir pruebas con anon, pasajero,
+3. Repetir la restauración en una instancia desechable. Completar pruebas con anon, pasajero,
    conductor suspendido/activo, administrador y service role.
 4. Revisar los advisors sobre `wallet_balances`, la vista materializada expuesta,
    search paths mutables y funciones privilegiadas. Un permiso EXECUTE por sí solo
@@ -84,14 +85,14 @@ Antes del staging definitivo:
 
 El fixture `platform_base_fixture.sql` sigue siendo un contrato de CI, **no el baseline
 de producción**. El inventario no incluye datos personales. La comparación ampliada,
-el proyecto creado y el bloqueo de exportación se detallan en
+el proyecto creado y la restauración del baseline se detallan en
 [SCHEMA_RECONCILIATION.md](./SCHEMA_RECONCILIATION.md).
 
 ## Condiciones externas todavía pendientes
 
 - Higo Staging (`oiszcfmuxfihcullioou`) ya está creado y activo, con coste autorizado
-  de US$10/mes. Quedan cargar el esquema reconciliado y aprovisionar PHP/Firebase
-  aislados. La base de staging todavía no contiene relaciones de la aplicación.
+  de US$10/mes. Ya contiene el esquema y las dos migraciones de lanzamiento. Quedan
+  completar las pruebas sobre ese esquema y aprovisionar PHP/Firebase aislados.
 - Configurar claves privadas de servidor, dominios/CORS, credenciales SSH y GitHub
   Environments. Verificar pagos simulados y entrega de notificaciones en staging.
 - Validar y aplicar el corte de permisos después de migrar todos los consumidores,
