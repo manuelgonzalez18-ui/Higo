@@ -275,8 +275,8 @@ do $$begin
  exception when others then if sqlerrm<>'quote_expired' then raise; end if; end;
 end $$;
 reset session authorization;
-insert into public.rides(id,user_id,pickup,dropoff,price,ride_type,status,pickup_lat,pickup_lng,dropoff_lat,dropoff_lng)
-values(900009999,'00000000-0000-4000-8000-000000009102','Origin','Destination',3,'standard','requested',10.4653,-65.9711,10.475,-65.98);
+insert into public.rides(id,user_id,pickup,dropoff,price,ride_type,status,payment_method,pickup_lat,pickup_lng,dropoff_lat,dropoff_lng)
+values(900009999,'00000000-0000-4000-8000-000000009102','Origin','Destination',3,'standard','requested','cash',10.4653,-65.9711,10.475,-65.98);
 -- Existing requested rows without an addressed offer must disappear once the
 -- runtime gate turns on, including through the old SECURITY DEFINER RPC.
 update public.platform_runtime_flags set directed_ride_offers=true where singleton;
