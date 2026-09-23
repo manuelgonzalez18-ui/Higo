@@ -1,6 +1,6 @@
 # Publicación verificable de Higo
 
-Estado: este cambio prepara y prueba el mecanismo de entrega. **No se han publicado archivos, configurado secretos remotos, aplicado migraciones remotas ni ejecutado un rollback en Hostinger.** El entorno real debe reconciliarse antes de habilitarlo. El fixture SQL de CI es un contrato de prueba; no sustituye un baseline obtenido del proyecto desplegado.
+Estado: este cambio prepara y prueba el mecanismo de entrega. **No se han publicado archivos, configurado secretos remotos de hosting ni ejecutado un rollback en Hostinger.** Supabase staging ya tiene un baseline revisado y tres migraciones nuevas; producción permanece sin estas migraciones. CI comprueba tanto el contrato histórico como la reconstrucción del esquema real. PHP y Firebase de staging requieren completar el acceso y la configuración antes de habilitar la publicación.
 
 ## Flujo y garantías
 

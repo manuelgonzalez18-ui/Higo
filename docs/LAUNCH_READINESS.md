@@ -65,7 +65,7 @@ Se inventariaron 139 funciones públicas no pertenecientes a extensiones, 48 tri
 259 constraints y 710 columnas. **No volver a aplicar automáticamente todo el historial.**
 
 Ya se restauró un baseline revisado de catálogos en staging: 1.561 objetos coinciden
-con origen y solo se excluyeron dos triggers de notificaciones externas. Las dos
+con origen y solo se excluyeron dos triggers de notificaciones externas. Las tres
 migraciones nuevas están aplicadas; el corte de permisos permanece desactivado.
 Antes del staging definitivo:
 
@@ -77,9 +77,10 @@ Antes del staging definitivo:
    función no demuestra que su cuerpo y permisos coincidan.
 3. Repetir la restauración en una instancia desechable. Completar pruebas con anon, pasajero,
    conductor suspendido/activo, administrador y service role.
-4. Revisar los advisors sobre `wallet_balances`, la vista materializada expuesta,
-   search paths mutables y funciones privilegiadas. Un permiso EXECUTE por sí solo
-   no demuestra explotación; revisar el control de identidad dentro de cada función.
+4. Se corrigieron los advisors sobre `wallet_balances`, la vista materializada
+   expuesta y 14 search paths mutables. Completar la revisión de funciones
+   privilegiadas: un permiso EXECUTE por sí solo no demuestra explotación;
+   revisar el control de identidad dentro de cada función.
    La protección Auth contra contraseñas filtradas requiere configuración del proyecto.
 5. Ensayar restauración y reversión, y solo entonces marcar `LAUNCH_DATABASE_READY`.
 
@@ -91,7 +92,7 @@ el proyecto creado y la restauración del baseline se detallan en
 ## Condiciones externas todavía pendientes
 
 - Higo Staging (`oiszcfmuxfihcullioou`) ya está creado y activo, con coste autorizado
-  de US$10/mes. Ya contiene el esquema y las dos migraciones de lanzamiento. Quedan
+  de US$10/mes. Ya contiene el esquema y las tres migraciones de lanzamiento. Quedan
   completar las pruebas sobre ese esquema y aprovisionar PHP/Firebase aislados.
 - Configurar claves privadas de servidor, dominios/CORS, credenciales SSH y GitHub
   Environments. Verificar pagos simulados y entrega de notificaciones en staging.

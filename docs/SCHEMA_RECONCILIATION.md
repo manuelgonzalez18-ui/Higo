@@ -6,7 +6,8 @@ Se creó **Higo Staging**, proyecto `oiszcfmuxfihcullioou`, en la organización
 ManuDeveloper (`kbahrsyankldrjzgfzyw`), región `us-east-1`. El usuario autorizó
 el coste de US$10 al mes informado por el conector. La comprobación posterior
 devolvió `ACTIVE_HEALTHY`, PostgreSQL 17.6. El 20 de septiembre se restauró el
-esquema revisado y se aplicaron las dos migraciones de lanzamiento. El corte
+esquema revisado y se aplicaron las dos migraciones iniciales de lanzamiento.
+El 23 se aplicó el endurecimiento de accesos heredados. El corte
 `higo_finalize_launch()` sigue sin activarse en el proyecto compartido.
 
 Origen: Higo Project (`yfgomicdcwifgeumqsvv`), PostgreSQL 17.6, activo. No se han
@@ -104,16 +105,29 @@ SHA-256 del SQL revisado:
 `9d7c8ba7e0e9904a171412cce7092f2a1dbbfbb1d938c7452cf6c9c6e55ee75e`.
 
 El historial de staging registra `higo_reviewed_catalog_baseline`,
-`launch_ride_integrity` y `authoritative_route_quotes`. Se verificó que el cliente
+`launch_ride_integrity`, `authoritative_route_quotes` y
+`reconciled_schema_access_hardening`. Se verificó que el cliente
 autenticado no puede ejecutar `higo_store_route_quote`, que `service_role` sí puede
 y que `integrity_enforced` permanece desactivado hasta terminar la validación.
 
 La nueva tarea de CI restaura este artefacto sobre Supabase PostgreSQL 17 y aplica
-solo las dos migraciones nuevas. Las pruebas usan identidades Auth sintéticas sin
+solo las tres migraciones nuevas. Las pruebas usan identidades Auth sintéticas sin
 credenciales y revierten su transacción. Sus resultados deben consultarse en el SHA
 correspondiente; añadir la tarea no equivale a haberla aprobado.
 
-Pendiente: completar pruebas por rol y concurrencia sobre la reconstrucción,
+Las pruebas de acceso a saldos y fraude también pasaron en staging, mediante
+`SET LOCAL ROLE` y JWT sintéticos dentro de una transacción revertida. Se verificó
+que no quedaron identidades de prueba ni movimientos. Este modo valida RLS y
+permisos de las vistas; no sustituye los tests de viajes con login no privilegiado,
+porque algunos triggers históricos distinguen `session_user` administrativo.
+
+El advisor dejó de señalar `wallet_balances`, `fraud_signals` y las 14 funciones con
+`search_path` sin fijar. Persisten avisos de funciones SECURITY DEFINER ejecutables
+(62 por anon y 111 por authenticated); requieren revisión de autorización interna,
+no se consideran vulnerabilidades confirmadas solo por disponer de EXECUTE.
+Las dos tablas con RLS sin políticas se reservan deliberadamente al backend/owner.
+
+Pendiente: terminar la validación concurrente de la reconstrucción,
 configurar PHP/Firebase y parámetros de negocio aislados, revisar los advisors y
 ensayar restauración/reversión antes de habilitar `LAUNCH_DATABASE_READY`.
 

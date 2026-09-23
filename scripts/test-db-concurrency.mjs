@@ -25,6 +25,7 @@ export async function verifyRideConcurrency(connect) {
     const loginRole = `higo_race_${randomUUID().replaceAll('-', '')}`;
     const loginPassword = randomUUID();
     let loginCreated = false;
+    let authUsersCreated = false;
 
     const actorClient = async (actor, name) => {
         const client = await connect({ user: loginRole, password: loginPassword });
@@ -89,6 +90,13 @@ export async function verifyRideConcurrency(connect) {
         const { rows: flags } = await admin.query('select directed_ride_offers from public.platform_runtime_flags where singleton');
         originalDispatch = flags[0].directed_ride_offers;
         await admin.query('update public.platform_runtime_flags set directed_ride_offers=false where singleton');
+        const { rows: authSchema } = await admin.query("select to_regclass('auth.users') is not null as present");
+        if (authSchema[0].present) {
+            // The restored schema has Auth foreign keys absent from the minimal
+            // historical fixture. These identities have no login credentials.
+            await admin.query('insert into auth.users(id) select unnest($1::uuid[])', [actors]);
+            authUsersCreated = true;
+        }
         for (const id of passengers) {
             await admin.query("insert into public.profiles(id,full_name,role,status) values($1,'Concurrency passenger','passenger','offline')", [id]);
         }
@@ -146,6 +154,7 @@ export async function verifyRideConcurrency(connect) {
             await admin.query('delete from public.ride_route_quotes where user_id=any($1::uuid[])', [passengers]);
             await admin.query('delete from public.rides where user_id=any($1::uuid[])', [passengers]);
             await admin.query('delete from public.profiles where id=any($1::uuid[])', [actors]);
+            if (authUsersCreated) await admin.query('delete from auth.users where id=any($1::uuid[])', [actors]);
             if (originalDispatch !== undefined) {
                 await admin.query('update public.platform_runtime_flags set directed_ride_offers=$1 where singleton', [originalDispatch]);
             }
