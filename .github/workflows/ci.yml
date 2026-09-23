@@ -55,7 +55,7 @@ jobs:
           node-version: '22'
       - uses: supabase/setup-cli@v2
         with:
-          version: 2.101.0
+          version: 2.117.0
           github-token: ${{ github.token }}
       - name: Verify reviewed baseline checksum
         run: |
@@ -76,11 +76,15 @@ jobs:
           supabase db start
           psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f supabase/baselines/20260920/staging-baseline.sql
           psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -t -A -f scripts/schema-inventory.sql > restored-schema-inventory.json
-          for migration in 20260917001153_launch_ride_integrity.sql 20260917001201_authoritative_route_quotes.sql; do
+          for migration in 20260917001153_launch_ride_integrity.sql 20260917001201_authoritative_route_quotes.sql 20260923230329_reconciled_schema_access_hardening.sql; do
             psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$staged/$migration"
           done
           PGOPTIONS='-c higo.disposable_database=1' psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f supabase/tests/reconciled_configuration.sql
           docker exec -i -e PGPASSWORD supabase_db_higo-platform-ci psql -w -U supabase_admin -d postgres -v ON_ERROR_STOP=1 < supabase/tests/launch_behavior.sql
+          docker exec -i -e PGPASSWORD supabase_db_higo-platform-ci psql -w -U supabase_admin -d postgres -v ON_ERROR_STOP=1 < supabase/tests/reconciled_access_behavior.sql
+      - name: Capture database diagnostics
+        if: failure()
+        run: docker logs --tail 150 supabase_db_higo-platform-ci
       - name: Stop disposable Supabase
         if: always()
         run: supabase stop --no-backup
@@ -107,7 +111,7 @@ jobs:
       - run: npm ci --legacy-peer-deps --no-fund
       - uses: supabase/setup-cli@v2
         with:
-          version: 2.101.0
+          version: 2.117.0
           github-token: ${{ github.token }}
       - name: Replay disposable schema contract
         shell: bash
@@ -133,6 +137,9 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           HIGO_DISPOSABLE_DATABASE: '1'
         run: node scripts/test-db-concurrency.mjs
+      - name: Capture database diagnostics
+        if: failure()
+        run: docker logs --tail 150 supabase_db_higo-platform-ci
       - name: Stop disposable Supabase
         if: always()
         run: supabase stop --no-backup

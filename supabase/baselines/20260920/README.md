@@ -1,7 +1,7 @@
 # Reviewed staging baseline
 
 This is the application schema captured from Higo Project on 20 September 2026,
-before the two launch migrations. It was restored to Higo Staging on PostgreSQL
+before the launch migrations. It was restored to Higo Staging on PostgreSQL
 17.6. The catalog comparison matched 1,561 objects, with only two intentionally
 excluded outbound notification triggers. `source-comparison.json` records this
 comparison; its conservative `restorableBaselineVerified: false` field reflects
@@ -28,9 +28,10 @@ application relations already exist and restores inside one transaction.
 1. Apply `staging-baseline.sql` with `psql -v ON_ERROR_STOP=1`.
 2. Apply `../../migrations/20260917001153_launch_ride_integrity.sql`.
 3. Apply `../../migrations/20260917001201_authoritative_route_quotes.sql`.
-4. Configure synthetic business settings and run role/behavior tests. The CI job
+4. Apply `../../migrations/20260923230329_reconciled_schema_access_hardening.sql`.
+5. Configure synthetic business settings and run role/behavior tests. The CI job
    uses `supabase/tests/reconciled_configuration.sql` only on its disposable target.
-5. Configure and validate isolated services before any client cutover.
+6. Configure and validate isolated services before any client cutover.
 
 Do not replay the 39 historical migrations over this baseline. Do not place this
 artifact in `supabase/migrations`, repair production history automatically, or call
