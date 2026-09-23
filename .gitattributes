@@ -1,0 +1,2 @@
+*.sh text eol=lf
+supabase/baselines/**/staging-baseline.sql -text

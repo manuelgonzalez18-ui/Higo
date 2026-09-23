@@ -116,7 +116,9 @@ export const reportError = async (err, context = {}) => {
             stack:       truncate(stack, 8000),
             user_agent:  truncate(typeof navigator !== 'undefined' ? navigator.userAgent : '', 500),
             app_version: APP_VERSION,
-            context:     context && typeof context === 'object' ? context : {},
+            context:     { ...(context && typeof context === 'object' ? context : {}),
+                git_sha: import.meta.env.VITE_GIT_SHA || 'dev',
+                environment: import.meta.env.VITE_APP_ENV || 'development' },
         };
 
         // Fire-and-forget. Si el insert falla, nos enteramos en logs
@@ -134,7 +136,7 @@ export const reportError = async (err, context = {}) => {
         // Triple defensa: si TODO falla acá adentro, tragamos.
         // No queremos que reportError tire un unhandled rejection.
         try {
-            // eslint-disable-next-line no-console
+
             console.warn('[reportError] reporter self-failed:', reporterErr?.message || reporterErr);
         } catch {
             // ya está, rendido.

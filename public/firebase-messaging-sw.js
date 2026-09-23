@@ -1,17 +1,10 @@
-// Scripts for firebase-messaging-sw.js
+// Configuration is generated from the same environment as the application.
+importScripts("./firebase-config.js");
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
 
-const firebaseConfig = {
-    apiKey: "AIzaSyAcoBzdfPRJ76luR-bTjW4Kxen3dWZ0Xn4",
-    authDomain: "higo-app-26a19.firebaseapp.com",
-    projectId: "higo-app-26a19",
-    storageBucket: "higo-app-26a19.firebasestorage.app",
-    messagingSenderId: "402695441944",
-    appId: "1:402695441944:web:104db3fe36029e2c36bd6d",
-    measurementId: "G-0N2ZDGDGNT"
-};
-
+const firebaseConfig = self.HIGO_FIREBASE_CONFIG;
+if (firebaseConfig) {
 firebase.initializeApp(firebaseConfig);
 
 const messaging = firebase.messaging();
@@ -30,6 +23,8 @@ messaging.onBackgroundMessage((payload) => {
 
     self.registration.showNotification(notificationTitle, notificationOptions);
 });
+
+}
 
 self.addEventListener('notificationclick', function (event) {
     console.log('[firebase-messaging-sw.js] Notification click Received.', event);

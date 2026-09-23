@@ -197,8 +197,8 @@ export function OrderDetailPage() {
   const localOrder = getOrderById(orderId);
   const [remoteOrder, setRemoteOrder] = useState(null);
   const [isLoadingOrder, setIsLoadingOrder] = useState(true);
-  const [store, setStore] = useState(null);
-  const [isLoadingStore, setIsLoadingStore] = useState(true);
+  const [, setStore] = useState(null);
+  const [, setIsLoadingStore] = useState(true);
   const [activeTab, setActiveTab] = useState('store');
   const [inputText, setInputText] = useState('');
 

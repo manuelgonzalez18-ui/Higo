@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
+import { createRideRecovery } from '../utils/rideRecovery';
 import { supabase } from '../services/supabase';
 import {
     acceptRide,
@@ -9,8 +12,6 @@ import {
     markPickupArrival,
     startRide,
 } from '../services/rideApi';
-import { FEATURES } from '../config/features';
-import { computeWaitFee } from '../utils/ridePricing';
 import { stopLoopingRequestAlert } from '../services/notificationService';
 import { toast } from '../components/Toast';
 import { sendDeliveryMilestone } from '../utils/sendDeliveryMilestone';
@@ -50,6 +51,7 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
     const [voiceEnabled, setVoiceEnabled] = useState(true);
 
     const activeRideRef = useRef(null);
+    const rideMutationRef = useRef(0);
     const wakeLockRef = useRef(null);
 
     useEffect(() => {
@@ -125,32 +127,65 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
     useEffect(() => {
         if (!profile?.id) return;
         let cancelled = false;
+        let pending = null;
+        let nativeListener;
         const restore = async () => {
-            const { data } = await supabase
-                .from('rides')
-                .select('*')
-                .eq('driver_id', profile.id)
-                .in('status', ['accepted', 'in_progress', 'arrived_at_dropoff'])
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-            if (!data || cancelled) return;
-            const hydrated = await hydratePassengerInfo(data);
-            if (cancelled) return;
-            setActiveRide(hydrated);
-            setNavStep(data.status === 'accepted' ? 1 : 2);
-            if (data.arrived_at_pickup_at && data.status === 'accepted') {
-                setArrivalTime(new Date(data.arrived_at_pickup_at).getTime());
-            }
-            setWaitFee(Number(data.wait_fee || 0));
+            if (cancelled || activeRideRef.current) return;
+            if (pending) return pending;
+            const mutation = rideMutationRef.current;
+            pending = (async () => {
+                const { data, error } = await supabase
+                    .from('rides')
+                    .select('*')
+                    .eq('driver_id', profile.id)
+                    .in('status', ['accepted', 'in_progress', 'arrived_at_dropoff'])
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                if (error || !data || cancelled || mutation !== rideMutationRef.current || activeRideRef.current) return;
+                const hydrated = await hydratePassengerInfo(data);
+                if (cancelled || mutation !== rideMutationRef.current || activeRideRef.current) return;
+                activeRideRef.current = hydrated;
+                setActiveRide(hydrated);
+                setNavStep(data.status === 'accepted' ? 1 : 2);
+                setArrivalTime(data.arrived_at_pickup_at && data.status === 'accepted' ? new Date(data.arrived_at_pickup_at).getTime() : null);
+                setWaitFee(Number(data.wait_fee || 0));
+            })().catch(() => {
+                // A later online/resume event retries; avoid repeated outage alerts.
+            }).finally(() => { pending = null; });
+            return pending;
         };
-        restore();
-        return () => { cancelled = true; };
+        const onForeground = () => {
+            if (document.visibilityState === 'visible') void restore();
+        };
+        void restore();
+        document.addEventListener('visibilitychange', onForeground);
+        window.addEventListener('online', onForeground);
+        window.addEventListener('pageshow', onForeground);
+        const poll = setInterval(onForeground, 15000);
+        if (Capacitor.isNativePlatform()) {
+            void CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+                if (isActive) void restore();
+            }).then(listener => {
+                nativeListener = listener;
+                if (cancelled) void listener.remove();
+            }).catch(() => {});
+        }
+        return () => {
+            cancelled = true;
+            clearInterval(poll);
+            document.removeEventListener('visibilitychange', onForeground);
+            window.removeEventListener('online', onForeground);
+            window.removeEventListener('pageshow', onForeground);
+            void nativeListener?.remove();
+        };
     }, [profile?.id]);
 
     useEffect(() => {
         if (!activeRide?.id) return;
         const rideId = activeRide.id;
+        let disposed = false;
+        let nativeListener;
 
         const handleCancelledByPassenger = () => {
             navigator.vibrate?.([1000, 500, 1000]);
@@ -159,6 +194,21 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
             closeRide();
         };
 
+        const recovery = createRideRecovery({
+            fetchRide: async () => {
+                const { data, error } = await supabase.from('rides').select('*').eq('id', rideId).single();
+                if (error) throw error;
+                return data;
+            },
+            onRide: (row) => {
+                setActiveRide(current => current?.id === row.id ? { ...current, ...row } : current);
+                setNavStep(row.status === 'accepted' ? 1 : 2);
+                setArrivalTime(row.status === 'accepted' && row.arrived_at_pickup_at ? new Date(row.arrived_at_pickup_at).getTime() : null);
+                setWaitFee(Number(row.wait_fee || 0));
+                if (row.status === 'completed') setShowPaymentQR(true);
+            },
+            onCancelled: handleCancelledByPassenger,
+        });
         const channel = supabase
             .channel(`ride-state:${rideId}`)
             .on('postgres_changes', {
@@ -167,37 +217,44 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
                 table: 'rides',
                 filter: `id=eq.${rideId}`,
             }, (payload) => {
-                setActiveRide((current) => current ? { ...current, ...payload.new } : payload.new);
-                if (payload.new.status === 'cancelled') {
-                    handleCancelledByPassenger();
-                }
+                recovery.receive(payload.new);
             })
             .subscribe();
 
-        // Red de seguridad: si el conductor estaba en segundo plano cuando el
-        // pasajero canceló, el evento de realtime pudo perderse (no se reenvía).
-        // Al volver al frente re-consultamos el estado real y cerramos el viaje
-        // si ya fue cancelado, para que no quede pegado en un viaje muerto.
-        const resyncOnForeground = async () => {
+        // Re-read every field after suspension, reconnect and lost realtime events.
+        const resyncOnForeground = () => {
             if (document.visibilityState !== 'visible') return;
-            const { data } = await supabase
-                .from('rides')
-                .select('status')
-                .eq('id', rideId)
-                .single();
-            if (data?.status === 'cancelled') {
-                handleCancelledByPassenger();
-            }
+            void recovery.sync();
         };
         document.addEventListener('visibilitychange', resyncOnForeground);
+        window.addEventListener('online', resyncOnForeground);
+        window.addEventListener('pageshow', resyncOnForeground);
+        const poll = setInterval(resyncOnForeground, 15000);
+        resyncOnForeground();
+        if (Capacitor.isNativePlatform()) {
+            void CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+                if (isActive) void recovery.sync();
+            }).then(listener => {
+                nativeListener = listener;
+                if (disposed) void listener.remove();
+            }).catch(() => {});
+        }
 
         return () => {
+            disposed = true;
+            recovery.dispose();
+            clearInterval(poll);
+            void nativeListener?.remove();
             supabase.removeChannel(channel);
             document.removeEventListener('visibilitychange', resyncOnForeground);
+            window.removeEventListener('online', resyncOnForeground);
+            window.removeEventListener('pageshow', resyncOnForeground);
         };
     }, [activeRide?.id, speak]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const closeRide = useCallback(() => {
+        rideMutationRef.current += 1;
+        activeRideRef.current = null;
         setShowPaymentQR(false);
         setActiveRide(null);
         setNavStep(0);
@@ -218,24 +275,11 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
         }
 
         try {
-            let accepted;
-            if (FEATURES.serverSideRideState || ride.offerId || ride.offer_id) {
-                accepted = await acceptRide(ride.id);
-            } else {
-                const { data, error } = await supabase
-                    .from('rides')
-                    .update({ status: 'accepted', driver_id: profile.id })
-                    .eq('id', ride.id)
-                    .eq('status', 'requested')
-                    .is('driver_id', null)
-                    .select()
-                    .maybeSingle();
-                if (error) throw error;
-                if (!data) throw new Error('ride_unavailable');
-                accepted = data;
-            }
+            rideMutationRef.current += 1;
+            const accepted = await acceptRide(ride.id);
 
             const hydrated = await hydratePassengerInfo({ ...ride, ...accepted });
+            activeRideRef.current = hydrated;
             setActiveRide(hydrated);
             setRequests?.([]);
             stopLoopingRequestAlert();
@@ -257,22 +301,8 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
     const handleMarkArrival = useCallback(async () => {
         if (!activeRideRef.current || arrivalTime) return;
         try {
-            let updated = activeRideRef.current;
-            let arrivedAtIso = new Date().toISOString();
-            if (FEATURES.serverSideRideState) {
-                updated = await markPickupArrival(activeRideRef.current.id);
-                arrivedAtIso = updated?.arrived_at_pickup_at || arrivedAtIso;
-            } else {
-                const { data, error } = await supabase
-                    .from('rides')
-                    .update({ arrived_at_pickup_at: arrivedAtIso })
-                    .eq('id', activeRideRef.current.id)
-                    .eq('status', 'accepted')
-                    .select()
-                    .single();
-                if (error) throw error;
-                updated = data;
-            }
+            const updated = await markPickupArrival(activeRideRef.current.id);
+            const arrivedAtIso = updated.arrived_at_pickup_at;
             setActiveRide((current) => ({ ...current, ...updated }));
             const arrivedAt = new Date(updated?.arrived_at_pickup_at || arrivedAtIso).getTime();
             setArrivalTime(arrivedAt);
@@ -286,34 +316,12 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
     }, [arrivalTime, speak]);
 
     const beginTrip = useCallback(async (ride) => {
-        if (FEATURES.serverSideRideState) {
-            const updated = await startRide(ride.id);
-            setActiveRide((current) => ({ ...current, ...updated }));
-            setWaitFee(Number(updated.wait_fee || 0));
-            queueRideStatusPush({ rideId: ride.id, milestone: 'started' });
-            return updated;
-        }
-
-        const elapsedSeconds = arrivalTime ? Math.max(0, Math.floor((Date.now() - arrivalTime) / 1000)) : 0;
-        const fee = computeWaitFee({ vehicleType: ride.ride_type, elapsedSeconds });
-        const finalPrice = Number((Number(ride.price || 0) + fee).toFixed(2));
-        const { data, error } = await supabase
-            .from('rides')
-            .update({
-                status: 'in_progress',
-                wait_seconds: elapsedSeconds,
-                wait_fee: fee,
-                price: finalPrice,
-            })
-            .eq('id', ride.id)
-            .select()
-            .single();
-        if (error) throw error;
-        setWaitFee(fee);
-        setActiveRide((current) => ({ ...current, ...data }));
+        const updated = await startRide(ride.id);
+        setActiveRide((current) => ({ ...current, ...updated }));
+        setWaitFee(Number(updated.wait_fee || 0));
         queueRideStatusPush({ rideId: ride.id, milestone: 'started' });
-        return data;
-    }, [arrivalTime]);
+        return updated;
+    }, []);
 
     const handleCompleteStep = useCallback(async () => {
         const ride = activeRideRef.current;
@@ -355,19 +363,7 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
 
         if (delivery && !ride.arrived_at_dropoff_at) {
             try {
-                let updated;
-                if (FEATURES.serverSideRideState) {
-                    updated = await markDropoffArrival(ride.id);
-                } else {
-                    const { data, error } = await supabase
-                        .from('rides')
-                        .update({ status: 'arrived_at_dropoff' })
-                        .eq('id', ride.id)
-                        .select()
-                        .single();
-                    if (error) throw error;
-                    updated = { ...data, arrived_at_dropoff_at: new Date().toISOString() };
-                }
+                const updated = await markDropoffArrival(ride.id);
                 setActiveRide((current) => ({ ...current, ...updated }));
                 speak('Llegada al destino marcada. Coordiná la entrega.');
                 sendDeliveryMilestone({ rideId: ride.id, status: 'arrived_at_dropoff' });
@@ -388,19 +384,7 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
 
         setCompleting(true);
         try {
-            let updated;
-            if (FEATURES.serverSideRideState) {
-                updated = await completeRide(ride.id);
-            } else {
-                const { data, error } = await supabase
-                    .from('rides')
-                    .update({ status: 'completed' })
-                    .eq('id', ride.id)
-                    .select()
-                    .single();
-                if (error) throw error;
-                updated = data;
-            }
+            const updated = await completeRide(ride.id);
             setActiveRide((current) => ({ ...current, ...updated }));
             queueRideStatusPush({ rideId: ride.id, milestone: 'completed' });
             if (delivery) sendDeliveryMilestone({ rideId: ride.id, status: 'completed' });
@@ -429,34 +413,32 @@ export function useDriverActiveTrip(profile, navigate, setRequests) {
         const ride = activeRideRef.current;
         if (!ride) return;
         try {
-            let updated;
-            if (FEATURES.serverSideRideState) {
-                updated = await confirmRidePayment(ride.id);
-            } else {
-                const changes = { payment_confirmed_by_driver: true };
-                if (ride.payment_confirmed_by_user) changes.payment_confirmed_at = new Date().toISOString();
-                const { data, error } = await supabase.from('rides').update(changes).eq('id', ride.id).select().single();
-                if (error) throw error;
-                updated = data;
-            }
+            const updated = await confirmRidePayment(ride.id);
+            activeRideRef.current = { ...ride, ...updated };
             setActiveRide((current) => ({ ...current, ...updated }));
+            return true;
         } catch (error) {
             toast.error(`No se pudo confirmar el pago: ${error?.message || error}`);
+            return false;
         }
     }, []);
 
     const handleQRClosed = useCallback(async () => {
-        setShowPaymentQR(false);
         const ride = activeRideRef.current;
         if (!ride) return;
 
         if (navStep === 1) {
+            if (isDeliveryRide(ride) && (ride.payer === 'sender' || ride.delivery_info?.payer === 'sender') && !ride.payment_confirmed_by_driver) {
+                toast.error('Confirma que recibiste el pago del remitente antes de iniciar la ruta.');
+                return;
+            }
             setCompleting(true);
             try {
                 const updated = await beginTrip(ride);
                 setActiveRide((current) => ({ ...current, ...updated }));
                 setNavStep(2);
                 setArrivalTime(null);
+                setShowPaymentQR(false);
                 speak('Pago confirmado. Iniciando viaje al destino.');
                 if (isDeliveryRide(ride)) sendDeliveryMilestone({ rideId: ride.id, status: 'in_progress' });
             } catch (error) {

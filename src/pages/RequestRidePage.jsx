@@ -43,7 +43,7 @@ const RequestRidePage = () => {
     const [serviceType, setServiceType] = useState(null); // 'ride' | 'delivery'
     const [showProhibitedModal, setShowProhibitedModal] = useState(false);
     const [showDeliveryForm, setShowDeliveryForm] = useState(false);
-    const [deliveryData, setDeliveryData] = useState(null);
+    const [, setDeliveryData] = useState(null);
     const [withinCoverage, setWithinCoverage] = useState(true);
 
     // Sidebar / Drawer del pasajero. Se abre desde el botón ≡ del header.
@@ -458,7 +458,7 @@ const RequestRidePage = () => {
                                         />
 
                                         {/* Render Stops */}
-                                        {stops.map((stop, index) => (
+                                        {stops.map((stop) => (
                                             <div key={stop.id} className="relative flex items-center">
                                                 <div className="flex-1">
                                                     <LocationInput

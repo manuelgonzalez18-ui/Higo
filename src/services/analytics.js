@@ -48,7 +48,7 @@ export const trackEvent = async (eventName, {
             p_route: route,
             p_entity_type: entityType,
             p_entity_id: entityId == null ? null : String(entityId),
-            p_properties: sanitizeProperties(properties),
+            p_properties: sanitizeProperties({ ...properties, build_sha: import.meta.env.VITE_GIT_SHA, environment: import.meta.env.VITE_APP_ENV }),
             p_session_id: getSessionId(),
             p_app_version: APP_VERSION,
             p_platform: getPlatform(),

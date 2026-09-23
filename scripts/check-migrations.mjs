@@ -15,7 +15,7 @@ const timestamps = new Map();
 let hardenedCount = 0;
 
 for (const filename of files) {
-    const isHardening = filename.startsWith(HARDENING_PREFIX);
+    const isHardening = filename.startsWith(HARDENING_PREFIX) || filename.startsWith('20260917');
     const match = filename.match(filenamePattern);
     if (!match) {
         if (isHardening) {

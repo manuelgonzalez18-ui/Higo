@@ -26,8 +26,8 @@
     }
 
     function escapeHtml(value) {
-        return String(value == null ? '' : value).replace(/[&<>'\"]/g, function (char) {
-            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '\"': '&quot;' }[char];
+        return String(value == null ? '' : value).replace(/[&<>'"]/g, function (char) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[char];
         });
     }
 

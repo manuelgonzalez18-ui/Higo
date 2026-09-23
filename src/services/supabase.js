@@ -2,11 +2,8 @@ import { createClient } from '@supabase/supabase-js'
 import { createSingleFlight } from '../utils/singleFlight'
 import { deferAuthCallback } from '../utils/deferAuthCallback'
 
-const FALLBACK_URL = 'https://yfgomicdcwifgeumqsvv.supabase.co';
-const FALLBACK_KEY = 'sb_publishable_d0f_4LR1PqQBc87ThKaxqQ_wm9CGAI1';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || FALLBACK_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || FALLBACK_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 const renderFatalConfigError = (msg) => {
     if (typeof document === 'undefined') return;
@@ -66,7 +63,7 @@ if (!supabaseUrl || !supabaseKey) {
     console.error('[supabase] Missing env vars. URL:', !!supabaseUrl, 'KEY:', !!supabaseKey);
     renderFatalConfigError('SUPABASE_ENV_MISSING');
     _supabase = createNullSupabase();
-} else if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(supabaseUrl)) {
+} else if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(supabaseUrl) && !(['development', 'test'].includes(import.meta.env.VITE_APP_ENV) && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(supabaseUrl))) {
     console.error('[supabase] Invalid URL format:', supabaseUrl);
     renderFatalConfigError('SUPABASE_URL_INVALID_FORMAT');
     _supabase = createNullSupabase();

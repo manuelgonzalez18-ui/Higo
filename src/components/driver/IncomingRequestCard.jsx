@@ -4,7 +4,7 @@ import { stopLoopingRequestAlert } from '../../services/notificationService';
 
 const IncomingRequestCard = ({ request, onAccept, onDecline }) => {
     const onDeclineRef = useRef(onDecline);
-    const [deadlineMs, setDeadlineMs] = useState(() => resolveRideRequestDeadline(request));
+    const [, setDeadlineMs] = useState(() => resolveRideRequestDeadline(request));
     const [initialSeconds, setInitialSeconds] = useState(() => (
         secondsUntilRideRequestDeadline(resolveRideRequestDeadline(request)) || 25
     ));

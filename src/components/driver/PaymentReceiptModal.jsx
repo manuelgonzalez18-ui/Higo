@@ -17,6 +17,7 @@ const PaymentReceiptModal = ({
     const fileInputRef = useRef(null);
     const [uploading, setUploading] = useState(false);
     const [manageOpen, setManageOpen] = useState(false);
+    const [confirmingPayment, setConfirmingPayment] = useState(false);
     const [qrUrl, setQrUrl] = useState(profile?.payment_qr_url || '');
 
     const isTripPayment = Boolean(show && activeRide);
@@ -133,6 +134,14 @@ const PaymentReceiptModal = ({
     const isSenderPayer = Boolean(
         isDelivery && (activeRide.delivery_info?.payer === 'sender' || activeRide.payer === 'sender')
     );
+    const senderPaymentAtOrigin = !manageOpen && navStep === 1 && isSenderPayer;
+    const awaitingSenderPayment = senderPaymentAtOrigin && !activeRide.payment_confirmed_by_driver;
+    const confirmReceived = async () => {
+        if (confirmingPayment) return;
+        setConfirmingPayment(true);
+        try { await confirmDriverPayment?.(); }
+        finally { setConfirmingPayment(false); }
+    };
 
     let titleText = manageOpen ? 'Tu QR de cobro' : '¡Viaje Completado!';
     let subtitleText = manageOpen
@@ -227,11 +236,11 @@ const PaymentReceiptModal = ({
                     </div>
                 )}
 
-                {!manageOpen && navStep === 2 && (
+                {!manageOpen && (navStep === 2 || senderPaymentAtOrigin) && (
                     <div className="mb-5 bg-slate-900/50 p-3 rounded-2xl border border-white/5 space-y-2.5">
                         <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider text-left pl-1">Estado de Confirmación</p>
 
-                        <div className="flex justify-between items-center text-xs">
+                        {!senderPaymentAtOrigin && <div className="flex justify-between items-center text-xs">
                             <div className="flex items-center gap-2">
                                 <span className={`material-symbols-outlined text-base ${activeRide.payment_confirmed_by_user ? 'text-emerald-400' : 'text-gray-600 animate-pulse'}`}>
                                     {activeRide.payment_confirmed_by_user ? 'check_circle' : 'hourglass_empty'}
@@ -241,7 +250,7 @@ const PaymentReceiptModal = ({
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${activeRide.payment_confirmed_by_user ? 'bg-emerald-500/10 text-emerald-400' : 'bg-gray-800 text-gray-500'}`}>
                                 {activeRide.payment_confirmed_by_user ? 'Listo' : 'Esperando'}
                             </span>
-                        </div>
+                        </div>}
 
                         <div className="flex justify-between items-center text-xs">
                             <div className="flex items-center gap-2">
@@ -258,18 +267,20 @@ const PaymentReceiptModal = ({
                 )}
 
                 <div className="space-y-3">
-                    {!manageOpen && navStep === 2 && !activeRide.payment_confirmed_by_driver && (
+                    {!manageOpen && (navStep === 2 || senderPaymentAtOrigin) && !activeRide.payment_confirmed_by_driver && (
                         <button
-                            onClick={confirmDriverPayment}
+                            onClick={confirmReceived}
+                            disabled={confirmingPayment}
                             className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-base shadow-lg shadow-emerald-600/15 active:scale-95 transition-all flex items-center justify-center gap-2 border border-emerald-500/30"
                         >
                             <span className="material-symbols-outlined text-xl">payments</span>
-                            Marcar como Pago Recibido ✓
+                            {confirmingPayment ? 'Guardando confirmación…' : 'Marcar como Pago Recibido ✓'}
                         </button>
                     )}
 
                     <button
                         onClick={closeModal}
+                        disabled={awaitingSenderPayment || confirmingPayment}
                         className="w-full py-4 bg-white text-black hover:bg-gray-100 rounded-2xl font-bold text-base transition-colors shadow-lg active:scale-95 flex items-center justify-center gap-2"
                     >
                         <span>{manageOpen ? 'Listo' : navStep === 1 ? 'Continuar e Iniciar Ruta' : 'Cerrar y Volver al Mapa'}</span>

@@ -53,12 +53,10 @@ const DriverDashboard = () => {
         waitFee,
         completing,
         showPaymentQR,
-        setShowPaymentQR,
         podRequired,
         setPodRequired,
         showCodConfirm,
         setShowCodConfirm,
-        instruction,
         navInfo,
         setNavInfo,
         voiceEnabled,
@@ -68,8 +66,7 @@ const DriverDashboard = () => {
         handleMarkArrival,
         handleCompleteStep,
         confirmDriverPayment,
-        handleQRClosed,
-        closeRide
+        handleQRClosed
     } = useDriverActiveTrip(profile, navigate, setRequests);
 
     // Notification of membership expiration (Web Notification API)
@@ -233,7 +230,6 @@ const DriverDashboard = () => {
     const {
         currentLoc,
         heading,
-        lastSentTimeRef,
         lastLocationRef
     } = useBackgroundLocation(profile, isOnline, activeRide, processRequests);
 
@@ -835,10 +831,7 @@ const DriverDashboard = () => {
                             </button>
                             <button
                                 onClick={async () => {
-                                    const { error } = await supabase
-                                        .from('rides')
-                                        .update({ cod_collected: true })
-                                        .eq('id', activeRide.id);
+                                    const { error } = await supabase.rpc('driver_confirm_cod_v1', { p_ride_id: activeRide.id });
                                     if (error) {
                                         toast.error(`No se pudo marcar cobrado: ${error.message}`);
                                         return;

@@ -13,6 +13,7 @@ describe('createSingleFlight', () => {
         const second = gate.run('login:user@example.com', operation);
 
         expect(first).toBe(second);
+        await Promise.resolve(); // The operation starts in a microtask, after reserving its key.
         expect(operation).toHaveBeenCalledTimes(1);
         expect(gate.size()).toBe(1);
 

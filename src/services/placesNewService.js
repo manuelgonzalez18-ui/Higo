@@ -64,9 +64,9 @@ const loadGoogleMapsScript = () => {
         }
         // Bootstrap pattern oficial de Google Maps JS API.
         // Ref: https://developers.google.com/maps/documentation/javascript/load-maps-js-api#dynamic-library-import
-        // eslint-disable-next-line no-multi-str
+
         (g => {
-            // eslint-disable-next-line no-var
+
             var h, a, k, p = "The Google Maps JavaScript API",
                 c = "google", l = "importLibrary",
                 q = "__ib__",
@@ -75,8 +75,8 @@ const loadGoogleMapsScript = () => {
             const d = b.maps || (b.maps = {});
             const r = new Set();
             const e = new URLSearchParams();
-            const u = () => h || (h = new Promise(async (f, n) => {
-                await (a = m.createElement("script"));
+            const u = () => h || (h = new Promise((f, n) => {
+                a = m.createElement("script");
                 e.set("libraries", [...r] + "");
                 for (k in g) e.set(k.replace(/[A-Z]/g, t => "_" + t[0].toLowerCase()), g[k]);
                 e.set("callback", c + ".maps." + q);

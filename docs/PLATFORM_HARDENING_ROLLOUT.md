@@ -1,5 +1,10 @@
 # Higo — Rollout del hardening integral
 
+> Documento histórico del PR #100. Para el nuevo lanzamiento consultar
+> [LAUNCH_READINESS.md](./LAUNCH_READINESS.md) y [RELEASE_DEPLOYMENT.md](./RELEASE_DEPLOYMENT.md).
+> El perfil nuevo exige las RPC de precio/estado/membresía y ya no permite
+> desactivarlas mediante las banderas descritas a continuación.
+
 Este documento controla el despliegue de las mejoras de membresías, viajes,
 despacho, observabilidad y analítica del PR #100.
 

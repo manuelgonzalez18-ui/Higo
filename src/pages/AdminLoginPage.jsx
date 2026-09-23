@@ -67,7 +67,7 @@ export default function AdminLoginPage() {
             }
         })();
         return () => { cancelled = true; };
-    }, [navigate]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [navigate]);
 
     const handlePassword = async (event) => {
         event.preventDefault();
