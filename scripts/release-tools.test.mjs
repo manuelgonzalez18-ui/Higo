@@ -63,6 +63,17 @@ test('release verification rejects edited, added and missing files', async (t) =
     assert.match(run(verifyScript).stderr, /inventory mismatch/);
 });
 
+test('generated PHP health executes the immutable build identity', async (t) => {
+    const { directory } = await fixture(t);
+    const result = spawnSync(process.env.PHP_BINARY || 'php', [path.join(directory, 'dist/api/release-health.php')], {
+        cwd: directory, encoding: 'utf8', windowsHide: true,
+        env: { ...process.env, VITE_GIT_SHA: 'b'.repeat(40), VITE_APP_ENV: 'production' },
+    });
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), { sha, environment: 'staging' });
+});
+
 test('manifest rejects bundled private configuration and non-release environments', async (t) => {
     const { directory, run } = await fixture(t);
     assert.notEqual(run(manifestScript, { VITE_APP_ENV: 'test' }).status, 0);
@@ -77,6 +88,13 @@ test('public verification checks HTML and entry assets without real network requ
 globalThis.fetch = async (url, options) => {
   if(options.redirect !== 'error' || url.origin !== 'https://staging.example.test') throw Error('Unexpected request');
   const relative=url.pathname.slice(1);
+  if (relative==='api/release-health.php') {
+    if (process.env.TAMPER_REMOTE==='php-source') return new Response('<?php echo "source";', {status:200});
+    if (process.env.TAMPER_REMOTE==='php-unavailable') return new Response('{}', {status:503,headers:{'Content-Type':'application/json'}});
+    const sha=process.env.TAMPER_REMOTE==='php-stale' ? 'b'.repeat(40) : process.env.RELEASE_SHA;
+    const environment=process.env.TAMPER_REMOTE==='php-environment' ? 'production' : 'staging';
+    return new Response(JSON.stringify({sha,environment}),{status:200,headers:{'Content-Type':'application/json'}});
+  }
   const bytes=process.env.TAMPER_REMOTE===relative ? 'stale content' : await readFile('dist/'+relative);
   return new Response(bytes, {status:200});
 };`);
@@ -93,4 +111,6 @@ globalThis.fetch = async (url, options) => {
     for (const file of ['release.json', 'index.html', 'assets/index-123.js', 'assets/style-123.css']) {
         assert.match(remote(file).stderr, /Public release content mismatch/);
     }
+    for (const failure of ['php-stale', 'php-environment']) assert.match(remote(failure).stderr, /PHP release execution mismatch/);
+    for (const failure of ['php-source', 'php-unavailable']) assert.match(remote(failure).stderr, /PHP release health is unavailable/);
 });

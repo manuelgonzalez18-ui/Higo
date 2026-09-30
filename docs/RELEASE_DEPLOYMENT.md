@@ -1,6 +1,12 @@
 # Publicación verificable de Higo
 
-Estado: este cambio prepara y prueba el mecanismo de entrega. **No se han publicado archivos, configurado secretos remotos de hosting ni ejecutado un rollback en Hostinger.** Supabase staging ya tiene un baseline revisado y tres migraciones nuevas; producción permanece sin estas migraciones. CI comprueba tanto el contrato histórico como la reconstrucción del esquema real. PHP y Firebase de staging requieren completar el acceso y la configuración antes de habilitar la publicación.
+Estado: Supabase staging contiene el baseline revisado y tres migraciones nuevas;
+Firebase staging tiene aplicaciones web y Android. Hostinger ya sirve HTTPS/PHP
+en `staging.higoapp.com`, con una página inicial de preparación. No se ha publicado
+la aplicación ni configurado sus secretos. El ensayo de reversión detectó una
+respuesta PHP desactualizada inmediatamente después de restaurar el enlace; sigue
+pendiente resolverla antes de publicar. Detalles en [STAGING_SERVICES.md](./STAGING_SERVICES.md).
+Las migraciones del PR no se han aplicado en producción.
 
 ## Flujo y garantías
 
@@ -66,7 +72,7 @@ Configurar `HIGO_TRUSTED_PROXY_IPS` en PHP solo con IPs concretas de proxies adm
 1. Reconciliar el esquema real y respaldar datos/configuración. Validar migraciones, permisos por rol, Storage, tareas/webhooks, cotización y notificaciones en staging. Solo entonces establecer `LAUNCH_DATABASE_READY=true` en ese entorno.
 2. Ejecutar `Verified release` en `staging` con ambas acciones desactivadas para revisar el artefacto y los reportes. Revisar `release.json`, versiones y SHA.
 3. Tras provisionar el host, ejecutar con `deploy_web=true`. El script verifica todo el inventario local, autentica SSH, crea una carpeta nueva, verifica el archivo transferido, extrae todos los archivos y cambia `current` mediante un único rename bajo lock.
-4. La comprobación pública verifica bytes de `release.json`, `index.html` y los JS/CSS de entrada contra los hashes del artefacto. Si falla, restaura la versión anterior solo si `current` todavía apunta a esta publicación. Si otro despliegue la sustituyó, falla sin sobrescribirlo. El fallo permanece visible en Actions.
+4. La comprobación pública verifica bytes de `release.json`, `index.html` y los JS/CSS de entrada contra los hashes del artefacto. También exige que `api/release-health.php` ejecute PHP y devuelva el SHA y entorno incrustados durante la creación del artefacto. Esto detecta procesos que siguen ejecutando una versión anterior aunque los archivos estáticos ya cambiaron. Si falla, restaura el enlace anterior solo si `current` todavía apunta a esta publicación. Si otro despliegue la sustituyó, falla sin sobrescribirlo. El fallo permanece visible en Actions; restaurar el enlace no prueba que todos los procesos PHP hayan adoptado la reversión, que debe comprobarse operativamente.
 5. Para generar Android, activar `build_android=true` y validar el APK en al menos tres dispositivos, con segundo plano, permisos, señal débil y proyecto Firebase correcto. El workflow genera artefactos; no los sube a Play Store.
 6. Repetir las validaciones y el procedimiento en `production` desde `main` tras el piloto. No marcar `LAUNCH_DATABASE_READY` por el mero éxito del fixture de CI.
 

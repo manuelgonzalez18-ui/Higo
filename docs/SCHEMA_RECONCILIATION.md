@@ -112,8 +112,11 @@ y que `integrity_enforced` permanece desactivado hasta terminar la validación.
 
 La nueva tarea de CI restaura este artefacto sobre Supabase PostgreSQL 17 y aplica
 solo las tres migraciones nuevas. Las pruebas usan identidades Auth sintéticas sin
-credenciales y revierten su transacción. Sus resultados deben consultarse en el SHA
-correspondiente; añadir la tarea no equivale a haberla aprobado.
+credenciales y revierten su transacción. La reconstrucción, las pruebas de roles y
+los tres escenarios concurrentes aprobaron para `84dca8523b352bf9cbd094d91162df9338af2f44`
+en [Quality Gate #535](https://github.com/manuelgonzalez18-ui/Higo/actions/runs/35932704253).
+La concurrencia también aprobó sobre el fixture histórico. Esto verifica el esquema
+de aplicación restaurado; no certifica las integraciones externas ni el piloto físico.
 
 Las pruebas de acceso a saldos y fraude también pasaron en staging, mediante
 `SET LOCAL ROLE` y JWT sintéticos dentro de una transacción revertida. Se verificó
@@ -127,8 +130,7 @@ El advisor dejó de señalar `wallet_balances`, `fraud_signals` y las 14 funcion
 no se consideran vulnerabilidades confirmadas solo por disponer de EXECUTE.
 Las dos tablas con RLS sin políticas se reservan deliberadamente al backend/owner.
 
-Pendiente: terminar la validación concurrente de la reconstrucción,
-configurar PHP/Firebase y parámetros de negocio aislados, revisar los advisors y
+Pendiente: configurar PHP/Firebase y parámetros de negocio aislados, revisar los advisors y
 ensayar restauración/reversión antes de habilitar `LAUNCH_DATABASE_READY`.
 
 Referencia del procedimiento de exportación y sus excepciones para Auth/Storage:

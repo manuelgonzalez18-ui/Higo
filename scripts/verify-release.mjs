@@ -10,7 +10,7 @@ const manifest = JSON.parse(manifestBytes);
 if (manifest.sha !== process.env.RELEASE_SHA || !/^[a-f0-9]{40}$/i.test(manifest.sha)) throw new Error('Artifact SHA mismatch');
 if (!['staging', 'production'].includes(manifest.environment) || manifest.environment !== process.env.RELEASE_ENVIRONMENT) throw new Error('Artifact environment mismatch');
 const expected = manifest.files;
-if (!expected || !expected['index.html'] || !expected['.htaccess']) throw new Error('Incomplete release manifest');
+if (!expected || !expected['index.html'] || !expected['.htaccess'] || !expected['api/release-health.php']) throw new Error('Incomplete release manifest');
 const found = new Set();
 async function visit(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -45,5 +45,11 @@ if (process.argv.includes('--remote')) {
         if (!expected[asset]) throw new Error('HTML references an untracked release asset');
         await fetchVerified(asset, expected[asset]);
     }
+    const healthUrl = new URL('api/release-health.php', origin);
+    healthUrl.searchParams.set('release', manifest.sha);
+    const healthResponse = await fetch(healthUrl, { redirect: 'error', signal: AbortSignal.timeout(30_000), headers: { 'Cache-Control': 'no-cache' } });
+    if (!healthResponse.ok || !/^application\/json\b/i.test(healthResponse.headers.get('content-type') || '')) throw new Error('PHP release health is unavailable');
+    const health = await healthResponse.json();
+    if (health.sha !== manifest.sha || health.environment !== manifest.environment) throw new Error('PHP release execution mismatch');
 }
 console.log(`Verified ${manifest.environment} artifact ${manifest.sha} (${found.size} files)`);

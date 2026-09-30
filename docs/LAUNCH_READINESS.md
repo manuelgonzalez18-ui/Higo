@@ -69,14 +69,14 @@ con origen y solo se excluyeron dos triggers de notificaciones externas. Las tre
 migraciones nuevas están aplicadas; el corte de permisos permanece desactivado.
 Antes del staging definitivo:
 
-1. Validar la reconstrucción versionada en `supabase/baselines/20260920` mediante
-   el nuevo job de CI. Completar la configuración externa de Auth, webhooks, Cron,
+1. La reconstrucción versionada en `supabase/baselines/20260920`, las pruebas de roles
+   y la concurrencia aprobaron en Quality Gate #535 (`84dca85`). Completar la configuración externa de Auth, webhooks, Cron,
    secretos y notificaciones, sin copiar credenciales ni datos de producción.
 2. Comparar cada migración local con sus objetos reales y hashes. `migration repair`
    solo se usa cuando el efecto completo ya está verificado. La existencia de una
    función no demuestra que su cuerpo y permisos coincidan.
-3. Repetir la restauración en una instancia desechable. Completar pruebas con anon, pasajero,
-   conductor suspendido/activo, administrador y service role.
+3. Conservar las comprobaciones de restauración y roles en cada cambio de esquema.
+   Completar los recorridos HTTP y de interfaz con los servicios aislados de staging.
 4. Se corrigieron los advisors sobre `wallet_balances`, la vista materializada
    expuesta y 14 search paths mutables. Completar la revisión de funciones
    privilegiadas: un permiso EXECUTE por sí solo no demuestra explotación;
@@ -93,7 +93,7 @@ el proyecto creado y la restauración del baseline se detallan en
 
 - Higo Staging (`oiszcfmuxfihcullioou`) ya está creado y activo, con coste autorizado
   de US$10/mes. Ya contiene el esquema y las tres migraciones de lanzamiento. Quedan
-  completar las pruebas sobre ese esquema y aprovisionar PHP/Firebase aislados.
+  conectar los servicios aislados y completar las pruebas de integración del entorno.
 - Configurar claves privadas de servidor, dominios/CORS, credenciales SSH y GitHub
   Environments. Verificar pagos simulados y entrega de notificaciones en staging.
 - Validar y aplicar el corte de permisos después de migrar todos los consumidores,
