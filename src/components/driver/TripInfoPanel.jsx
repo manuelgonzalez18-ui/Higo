@@ -17,14 +17,12 @@ const TripInfoPanel = ({
     navStep,
     arrivalTime,
     waitElapsedSec,
-    waitFee,
     completing,
     navInfo,
     voiceEnabled,
     setVoiceEnabled,
     handleMarkArrival,
     handleCompleteStep,
-    navigate,
     profile
 }) => {
     const [showTripDetails, setShowTripDetails] = useState(false);

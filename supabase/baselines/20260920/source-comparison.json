@@ -1,0 +1,22 @@
+{
+  "formatVersion": 1,
+  "scope": "public objects; public/storage RLS; custom auth/storage triggers; no row data",
+  "referenceVersion": "17.6",
+  "candidateVersion": "17.6",
+  "serverVersionDiffers": false,
+  "matched": 1561,
+  "changes": [
+    {
+      "kind": "trigger",
+      "key": "public.ride_offers.\"higo-send-directed-ride-offer\"",
+      "status": "missing_in_candidate"
+    },
+    {
+      "kind": "trigger",
+      "key": "public.rides.\"ride-request-push\"",
+      "status": "missing_in_candidate"
+    }
+  ],
+  "restorableBaselineVerified": false,
+  "limitation": "Catalog comparison only. It does not verify row seeds, migration side effects, external services, secrets, files or restoration. Never repair migration history automatically from this result."
+}

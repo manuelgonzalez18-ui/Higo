@@ -1,0 +1,33 @@
+{
+  "formatVersion": 1,
+  "schemaOnly": true,
+  "sha256": "9d7c8ba7e0e9904a171412cce7092f2a1dbbfbb1d938c7452cf6c9c6e55ee75e",
+  "counts": {
+    "tables": 56,
+    "functions": 139,
+    "sequences": 23,
+    "views": 3,
+    "constraints": 259,
+    "indexes": 83,
+    "policies": 146
+  },
+  "excludedTriggers": [
+    {
+      "schema": "public",
+      "table": "ride_offers",
+      "name": "higo-send-directed-ride-offer",
+      "reason": "Outbound configuration must be recreated for staging"
+    },
+    {
+      "schema": "public",
+      "table": "rides",
+      "name": "ride-request-push",
+      "reason": "Outbound configuration must be recreated for staging"
+    }
+  ],
+  "limitations": [
+    "Managed Supabase schemas and role defaults remain provider-owned.",
+    "Cron jobs, secrets, external endpoints, application rows and file bytes are not copied.",
+    "Catalog equivalence and behavior tests are required before treating this as a reconciled baseline."
+  ]
+}

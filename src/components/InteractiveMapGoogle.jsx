@@ -56,7 +56,7 @@ const Directions = ({ origin, destination, waypoints = [], onRouteData, routeCol
     const routesLibrary = useMapsLibrary('routes');
     const [directionsService, setDirectionsService] = useState(null);
     const [directionsRenderer, setDirectionsRenderer] = useState(null);
-    const [routes, setRoutes] = useState([]);
+    const [, setRoutes] = useState([]);
 
     useEffect(() => {
         if (!routesLibrary || !map) return;
@@ -284,7 +284,7 @@ const useSmoothHeading = (targetHeading) => {
 };
 
 // Wrapper Component for Animated Vehicle
-const AnimatedVehicleMarker = ({ position, heading, icon, type, zIndex, children }) => {
+const AnimatedVehicleMarker = ({ position, zIndex, children }) => {
     // Smooth the position input
     // Balanced factor (0.12) to stay faithful to GPS without excessive lag
     const smoothPos = useSmoothPosition(position, 0.12);
@@ -310,9 +310,9 @@ const AnimatedVehicleMarker = ({ position, heading, icon, type, zIndex, children
 // Using inline CSS transitions instead.
 
 const MapContent = ({
-    selectedRide, onRideSelect, showPin, markersProp, center, origin, heading,
-    destination, assignedDriver, destinationIconType, onRouteData, className,
-    routeColor, isDriver, vehicleType, enableSimulation, activeRideId, navStep
+     showPin, markersProp, center, origin, heading,
+    destination, assignedDriver, destinationIconType, onRouteData,
+    routeColor, isDriver, vehicleType, activeRideId, navStep
 }) => {
     const map = useMap();
     const [isFollowing, setIsFollowing] = useState(true);

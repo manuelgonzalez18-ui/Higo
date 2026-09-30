@@ -26,7 +26,6 @@ const CATEGORIES = [
 const DeliveryFormSteps = ({ onSubmit, onCancel }) => {
     const [step, setStep] = useState(1);
     const [contacts, setContacts] = useState([]);
-    const [showSaveContact, setShowSaveContact] = useState(false);
     const [data, setData] = useState({
         senderName: '',
         senderPhone: '',

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import {  AnimatePresence } from 'framer-motion';
 import {
   Truck, Navigation, MapPin, Store, MessageCircle, Send, Check, Phone,
   TrendingUp, AlertTriangle, ShieldCheck, CreditCard, Banknote, Smartphone

@@ -2,12 +2,14 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import InteractiveMap from '../components/InteractiveMap';
 import { supabase } from '../services/supabase';
-import { createClientRequestId, createRideRequest, quoteRide } from '../services/rideApi';
-import { FEATURES } from '../config/features';
+import { createClientRequestId, createRideRequest, recoverRideRequest, quoteRide } from '../services/rideApi';
 import { toast } from '../components/Toast';
 import { friendlyError } from '../utils/friendlyError';
 import { logger } from '../utils/logger';
 import { announcePassengerRideMilestone } from '../utils/passengerRideVoice';
+import { withTimeout } from '../utils/withTimeout';
+
+const EMPTY_STOPS = Object.freeze([]);
 
 const VEHICLE_INFO = Object.freeze({
     moto: { title: 'Higo Moto', icon: 'two_wheeler', seats: '1 asiento' },
@@ -24,37 +26,42 @@ const PROMO_ERRORS = Object.freeze({
     budget_exhausted: 'El presupuesto de esta promoción se agotó.',
 });
 
-const timeoutAfter = (milliseconds) => new Promise((_, reject) => {
-    setTimeout(() => reject(new Error('La conexión tardó demasiado. Revisá tu internet e intentá nuevamente.')), milliseconds);
-});
 
 const money = (value) => `$${Number(value || 0).toFixed(2)}`;
 
 export default function ConfirmTripPage() {
     const navigate = useNavigate();
     const location = useLocation();
-    const clientRequestIdRef = useRef(createClientRequestId());
+    const [clientRequestId] = useState(() => {
+        const key = `higo:ride-request:${location.key}`;
+        try {
+            const existing = sessionStorage.getItem(key);
+            if (existing) return existing;
+            const created = createClientRequestId();
+            sessionStorage.setItem(key, created);
+            return created;
+        } catch { return createClientRequestId(); }
+    });
 
     const {
         pickup,
         dropoff,
-        price,
         selectedRide = 'standard',
         pickupCoords,
         dropoffCoords,
         serviceType = 'ride',
         deliveryData = null,
-        stops = [],
-        roadDistance = null,
-        routeDurationMin = null,
+        stops = EMPTY_STOPS,
     } = location.state || {};
 
     const [loading, setLoading] = useState(false);
+    const confirmingRef = useRef(false);
     const [passengerPhone, setPassengerPhone] = useState('');
     const [promoCode, setPromoCode] = useState('');
-    const [appliedPromo, setAppliedPromo] = useState(null);
     const [validatingPromo, setValidatingPromo] = useState(false);
     const [serverQuote, setServerQuote] = useState(null);
+    const [quoteError, setQuoteError] = useState('');
+    const [quoteLoading, setQuoteLoading] = useState(false);
 
     const isDelivery = serviceType === 'delivery';
     const vehicle = VEHICLE_INFO[selectedRide] || VEHICLE_INFO.standard;
@@ -64,27 +71,26 @@ export default function ConfirmTripPage() {
             ? selectedRide === 'moto' ? 'Máx. 4 kg' : selectedRide === 'van' ? 'Máx. 100 kg' : 'Máx. 40 kg'
             : vehicle.seats,
     }), [vehicle, isDelivery, selectedRide]);
-    const finalPrice = appliedPromo?.finalPrice ?? serverQuote?.finalPrice ?? Number(price || 0);
+    const finalPrice = serverQuote?.finalPrice;
 
     useEffect(() => {
-        if (!FEATURES.serverSideRidePricing || !pickupCoords || !dropoffCoords) return;
+        if (!pickupCoords || !dropoffCoords) return;
         let cancelled = false;
+        setQuoteLoading(true);
+        setServerQuote(null);
         void quoteRide({
             pickupCoords,
             dropoffCoords,
             vehicleType: selectedRide,
             serviceType,
-            routeDistanceKm: roadDistance ? Number(roadDistance) / 1000 : null,
-            routeDurationMin: routeDurationMin == null ? null : Number(routeDurationMin),
-            stopsCount: Array.isArray(stops) ? stops.length : 0,
-            clientSubtotalFloor: Number(price || 0),
+            stops,
         }).then((quote) => {
-            if (!cancelled) setServerQuote(quote);
+            if (!cancelled) { setServerQuote(quote); setQuoteError(''); }
         }).catch(() => {
-            // La confirmación vuelve a cotizar de forma autoritativa.
-        });
+            if (!cancelled) setQuoteError('No pudimos calcular la ruta. Comprueba tu conexión e inténtalo de nuevo.');
+        }).finally(() => { if (!cancelled) setQuoteLoading(false); });
         return () => { cancelled = true; };
-    }, [dropoffCoords?.lat, dropoffCoords?.lng, pickupCoords?.lat, pickupCoords?.lng, price, roadDistance, routeDurationMin, selectedRide, serviceType, stops]);
+    }, [dropoffCoords?.lat, dropoffCoords?.lng, pickupCoords?.lat, pickupCoords?.lng, selectedRide, serviceType, stops]);
 
     if (!pickup || !dropoff || !pickupCoords || !dropoffCoords) {
         return (
@@ -97,62 +103,28 @@ export default function ConfirmTripPage() {
         );
     }
 
-    const validatePromoLegacy = async (code) => {
-        const { data: promo, error } = await supabase
-            .from('promo_codes')
-            .select('id, code, discount_type, discount_value, min_ride_amount, expires_at, max_uses, used_count')
-            .eq('code', code)
-            .eq('active', true)
-            .maybeSingle();
-        if (error || !promo) throw new Error('Código inválido o inactivo.');
-        if (promo.expires_at && new Date(promo.expires_at) < new Date()) throw new Error('El código ha expirado.');
-        if (promo.max_uses != null && promo.used_count >= promo.max_uses) throw new Error('El código alcanzó su límite de usos.');
-        if (Number(price || 0) < Number(promo.min_ride_amount || 0)) throw new Error(`El viaje debe ser de al menos ${money(promo.min_ride_amount)}.`);
-        const discount = promo.discount_type === 'percent'
-            ? Number(price || 0) * Number(promo.discount_value || 0) / 100
-            : Math.min(Number(promo.discount_value || 0), Number(price || 0));
-        return {
-            id: promo.id,
-            code: promo.code,
-            discount: Number(discount.toFixed(2)),
-            finalPrice: Number(Math.max(Number(price || 0) - discount, 0).toFixed(2)),
-        };
-    };
-
     const validatePromo = async () => {
         const code = promoCode.trim().toUpperCase();
         if (!code || validatingPromo) return;
         setValidatingPromo(true);
         try {
-            if (FEATURES.serverSideRidePricing) {
+            {
                 const quote = await quoteRide({
                     pickupCoords,
                     dropoffCoords,
                     vehicleType: selectedRide,
                     serviceType,
-                    routeDistanceKm: roadDistance ? Number(roadDistance) / 1000 : null,
-                    routeDurationMin: routeDurationMin == null ? null : Number(routeDurationMin),
-                    stopsCount: Array.isArray(stops) ? stops.length : 0,
+                    stops,
                     promoCode: code,
-                    clientSubtotalFloor: Number(price || 0),
                 });
                 if (!quote?.promoValid) {
                     throw new Error(PROMO_ERRORS[quote?.promoError] || 'El código no se puede aplicar.');
                 }
                 setServerQuote(quote);
-                setAppliedPromo({
-                    id: quote.promoId,
-                    code: quote.promoCode,
-                    discount: Number(quote.discount || 0),
-                    finalPrice: Number(quote.finalPrice || 0),
-                    serverQuote: quote,
-                });
-            } else {
-                setAppliedPromo(await validatePromoLegacy(code));
+                setQuoteError('');
             }
             toast.success('Promoción aplicada.');
         } catch (error) {
-            setAppliedPromo(null);
             toast.error(error?.message || 'No se pudo validar el código.');
         } finally {
             setValidatingPromo(false);
@@ -192,55 +164,9 @@ export default function ConfirmTripPage() {
         }
     };
 
-    const createLegacyRide = async (session) => {
-        const payload = {
-            user_id: session.user.id,
-            pickup,
-            dropoff,
-            price: finalPrice,
-            ride_type: selectedRide,
-            status: 'requested',
-            payment_method: 'direct',
-            passenger_phone: passengerPhone || null,
-            pickup_lat: pickupCoords.lat,
-            pickup_lng: pickupCoords.lng,
-            dropoff_lat: dropoffCoords.lat,
-            dropoff_lng: dropoffCoords.lng,
-            service_type: serviceType,
-            delivery_info: deliveryData,
-            payer: deliveryData?.payer || (isDelivery ? 'sender' : null),
-            cod_amount: isDelivery && deliveryData?.cod_amount ? Number(deliveryData.cod_amount) : null,
-            cod_currency: isDelivery && deliveryData?.cod_amount ? 'USD' : null,
-        };
-        const { data, error } = await supabase.from('rides').insert([payload]).select().single();
-        if (error) throw error;
-
-        if (isDelivery && deliveryData?.terms_version) {
-            await supabase.from('terms_acceptances').insert({
-                user_id: session.user.id,
-                terms_kind: 'delivery',
-                terms_version: deliveryData.terms_version,
-                accepted_at: deliveryData.terms_accepted_at || new Date().toISOString(),
-                ride_id: data.id,
-            });
-        }
-        if (appliedPromo) {
-            const { error: promoError } = await supabase.rpc('apply_promo_code', {
-                p_code: appliedPromo.code,
-                p_ride_id: data.id,
-                p_user_id: session.user.id,
-                p_ride_amount: Number(price || 0),
-            });
-            if (promoError) {
-                await supabase.from('rides').update({ price: Number(price || 0) }).eq('id', data.id);
-                throw new Error('La promoción cambió mientras confirmabas. Volvé a intentarlo.');
-            }
-        }
-        return { rideId: data.id, price: data.price, status: data.status };
-    };
-
     const handleConfirm = async () => {
-        if (loading) return;
+        if (confirmingRef.current) return;
+        confirmingRef.current = true;
         setLoading(true);
         try {
             const { data: { session } } = await supabase.auth.getSession();
@@ -249,31 +175,36 @@ export default function ConfirmTripPage() {
                 return;
             }
 
+            // A previous request may have committed even if its response was lost.
+            // Recover it before consulting Google or checking quote expiration.
+            const recovered = await withTimeout(recoverRideRequest(clientRequestId, session.user.id));
+            if (recovered) {
+                toast.success('Solicitud recuperada correctamente.');
+                navigate(`/ride/${recovered.rideId}`, { replace: true });
+                return;
+            }
+
             toast.info('Enviando solicitud a Higo…');
-            const creation = FEATURES.serverSideRidePricing
-                ? await Promise.race([
+            const confirmedQuote = serverQuote;
+            if (!confirmedQuote || new Date(confirmedQuote.expiresAt).getTime() <= Date.now()) {
+                const refreshed = await quoteRide({ pickupCoords, dropoffCoords, vehicleType: selectedRide, serviceType, stops, promoCode: serverQuote?.promoCode || null });
+                setServerQuote(refreshed);
+                setQuoteError('La cotización se actualizó. Revisa el importe y confirma nuevamente.');
+                return;
+            }
+            const creation = await withTimeout(
                     createRideRequest({
-                        clientRequestId: clientRequestIdRef.current,
+                        clientRequestId: clientRequestId,
+                        quoteId: confirmedQuote.quoteId,
                         pickup,
                         dropoff,
-                        pickupCoords,
-                        dropoffCoords,
-                        vehicleType: selectedRide,
-                        serviceType,
-                        routeDistanceKm: roadDistance ? Number(roadDistance) / 1000 : null,
-                        routeDurationMin: routeDurationMin == null ? null : Number(routeDurationMin),
-                        stops,
-                        promoCode: appliedPromo?.code || null,
                         passengerPhone,
                         deliveryInfo: deliveryData,
                         payer: deliveryData?.payer || (isDelivery ? 'sender' : null),
                         codAmount: deliveryData?.cod_amount || null,
                         termsVersion: deliveryData?.terms_version || null,
-                        clientSubtotalFloor: Number(price || 0),
                     }),
-                    timeoutAfter(20000),
-                ])
-                : await Promise.race([createLegacyRide(session), timeoutAfter(20000)]);
+                );
 
             const rideId = creation?.rideId || creation?.id;
             if (!rideId) throw new Error('El servidor no devolvió el identificador del viaje.');
@@ -285,12 +216,14 @@ export default function ConfirmTripPage() {
             toast.success(creation?.idempotentReplay ? 'Solicitud recuperada correctamente.' : 'Solicitud enviada. Buscando conductores…');
             navigate(`/ride/${rideId}`, { replace: true });
         } catch (error) {
+            if (/quote_expired|quote_changed|quote_(?:already_)?consumed/.test(error?.message || '')) setServerQuote(null);
             logger.error('[ConfirmTrip] create ride failed', error);
             toast.error(friendlyError(error, 'No se pudo solicitar el viaje. Probá de nuevo.', {
                 source: 'ConfirmTripPage.handleConfirm',
-                clientRequestId: clientRequestIdRef.current,
+                clientRequestId: clientRequestId,
             }));
         } finally {
+            confirmingRef.current = false;
             setLoading(false);
         }
     };
@@ -309,6 +242,7 @@ export default function ConfirmTripPage() {
             </div>
 
             <main className="flex-1 -mt-5 pt-10 px-5 pb-8 w-full max-w-md mx-auto space-y-5">
+                {quoteError && <p role="alert" className="text-amber-300 text-sm">{quoteError}</p>}
                 <section className="bg-[#1A1F2E] rounded-3xl p-5 border border-white/5">
                     <div className="flex gap-4">
                         <div className="flex flex-col items-center pt-1"><span className="w-3 h-3 rounded-full bg-blue-500" /><span className="h-12 border-l border-dashed border-gray-600" /><span className="w-3 h-3 rounded-full bg-violet-500" /></div>
@@ -322,7 +256,7 @@ export default function ConfirmTripPage() {
                 <section className="bg-[#1A1F2E] rounded-3xl p-5 border border-white/5 flex items-center gap-4">
                     <div className="w-12 h-12 rounded-2xl bg-blue-500/15 text-blue-300 flex items-center justify-center"><span className="material-symbols-outlined text-2xl">{vehicleDetails.icon}</span></div>
                     <div className="flex-1"><p className="font-black">{vehicleDetails.title}</p><p className="text-xs text-gray-500">{vehicleDetails.seats}{Array.isArray(stops) && stops.length ? ` · ${stops.length} parada(s)` : ''}</p></div>
-                    <p className="text-2xl font-black">{money(finalPrice)}</p>
+                    <p className="text-2xl font-black">{serverQuote ? money(finalPrice) : '—'}</p>
                 </section>
 
                 {serverQuote && (
@@ -334,7 +268,7 @@ export default function ConfirmTripPage() {
                         {Number(serverQuote.extrasAmount || 0) > 0 && <div className="flex justify-between"><span className="text-gray-400">Extras del servicio</span><strong>{money(serverQuote.extrasAmount)}</strong></div>}
                         {Number(serverQuote.surgeMultiplier || 1) > 1 && <div className="flex justify-between text-amber-300"><span>Factor zona/horario</span><strong>×{Number(serverQuote.surgeMultiplier).toFixed(2)}</strong></div>}
                         <div className="pt-2 mt-2 border-t border-white/10 flex justify-between"><span className="text-gray-400">Tarifa mínima</span><strong>{money(serverQuote.minimumFare)}</strong></div>
-                        {serverQuote.rolloutMode === 'shadow' && <p className="pt-2 text-[10px] text-blue-300">Modelo V4 en evaluación interna. El precio cobrado mantiene la fórmula vigente.</p>}
+
                     </section>
                 )}
 
@@ -345,16 +279,16 @@ export default function ConfirmTripPage() {
 
                 <section className="bg-[#1A1F2E] rounded-3xl p-5 border border-white/5 space-y-3">
                     <div className="flex gap-2">
-                        <input value={promoCode} onChange={(event) => { setPromoCode(event.target.value.toUpperCase()); setAppliedPromo(null); }} placeholder="Código promocional" className="flex-1 min-w-0 bg-[#0F1014] border border-white/10 rounded-xl px-4 py-3 text-sm font-mono uppercase" />
+                        <input value={promoCode} onChange={(event) => setPromoCode(event.target.value.toUpperCase())} placeholder="Código promocional" className="flex-1 min-w-0 bg-[#0F1014] border border-white/10 rounded-xl px-4 py-3 text-sm font-mono uppercase" />
                         <button type="button" onClick={validatePromo} disabled={validatingPromo || !promoCode.trim()} className="px-4 rounded-xl bg-violet-600 font-bold text-sm disabled:opacity-50">{validatingPromo ? '…' : 'Aplicar'}</button>
                     </div>
-                    {appliedPromo && <div className="flex justify-between text-sm text-emerald-300"><span>{appliedPromo.code}</span><span>-{money(appliedPromo.discount)}</span></div>}
+                    {serverQuote?.promoValid && <div className="flex justify-between text-sm text-emerald-300"><span>{serverQuote.promoCode}</span><span>-{money(serverQuote.discount)}</span></div>}
                 </section>
 
-                {FEATURES.serverSideRidePricing && <p className="text-[10px] text-center text-gray-600">La tarifa y la promoción se verifican nuevamente en el servidor al confirmar.</p>}
+                <p className="text-[10px] text-center text-gray-600">La tarifa y la promoción se verifican nuevamente en el servidor al confirmar.</p>
 
-                <button onClick={handleConfirm} disabled={loading} className="w-full py-4 rounded-2xl bg-blue-600 hover:bg-blue-500 font-black text-lg shadow-lg shadow-blue-600/20 disabled:opacity-50">
-                    {loading ? 'Confirmando…' : `Confirmar por ${money(finalPrice)}`}
+                <button onClick={handleConfirm} disabled={loading || quoteLoading || validatingPromo} className="w-full py-4 rounded-2xl bg-blue-600 hover:bg-blue-500 font-black text-lg shadow-lg shadow-blue-600/20 disabled:opacity-50">
+                    {loading ? 'Confirmando…' : quoteLoading ? 'Calculando ruta…' : serverQuote ? `Confirmar por ${money(finalPrice)}` : 'Reintentar cotización'}
                 </button>
             </main>
         </div>

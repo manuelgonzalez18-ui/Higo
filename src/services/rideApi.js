@@ -1,3 +1,5 @@
+import { apiUrl } from '../utils/apiUrl';
+import { normalizeRouteWaypoints } from '../utils/routeWaypoints';
 import { supabase } from './supabase';
 import { trackEventLater } from './analytics';
 
@@ -6,125 +8,39 @@ const unwrap = ({ data, error }) => {
     return data;
 };
 
-const isMissingRpc = (error) => {
-    const text = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
-    return error?.code === 'PGRST202'
-        || error?.code === '42883'
-        || /could not find the function|function .* does not exist/i.test(text);
+export const createClientRequestId = () => globalThis.crypto.randomUUID();
+
+export const recoverRideRequest = async (clientRequestId, userId) => {
+    const row = unwrap(await supabase.from('rides')
+        .select('id,price,status,pricing_snapshot')
+        .eq('user_id', userId).eq('client_request_id', clientRequestId).maybeSingle());
+    return row ? { rideId: row.id, price: row.price, status: row.status, quote: row.pricing_snapshot, idempotentReplay: true } : null;
 };
 
-export const createClientRequestId = () => {
+export const quoteRide = async ({ pickupCoords, dropoffCoords, vehicleType, serviceType = 'ride', stops = [], promoCode = null }) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('authentication_required');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
     try {
-        return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-    } catch {
-        return `${Date.now()}-${Math.random()}`;
-    }
+        const response = await fetch(apiUrl('/api/ride-quote.php'), {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({ pickupCoords, dropoffCoords, vehicleType, serviceType, stops: normalizeRouteWaypoints(stops), promoCode }),
+            signal: controller.signal,
+        });
+        const result = await response.json();
+        if (!response.ok || !result.quoteId) throw new Error(result.message || result.error || 'quote_unavailable');
+        return result;
+    } finally { clearTimeout(timer); }
 };
 
-export const quoteRide = async ({
-    pickupCoords,
-    dropoffCoords,
-    vehicleType,
-    serviceType = 'ride',
-    routeDistanceKm = null,
-    routeDurationMin = null,
-    stopsCount = 0,
-    promoCode = null,
-    clientSubtotalFloor = null,
-}) => {
-    const common = {
-        p_pickup_lat: pickupCoords?.lat,
-        p_pickup_lng: pickupCoords?.lng,
-        p_dropoff_lat: dropoffCoords?.lat,
-        p_dropoff_lng: dropoffCoords?.lng,
-        p_vehicle_type: vehicleType,
-        p_service_type: serviceType,
-        p_route_distance_km: routeDistanceKm,
-        p_stops_count: stopsCount,
-        p_promo_code: promoCode || null,
-        p_client_subtotal_floor: clientSubtotalFloor == null || clientSubtotalFloor === '' ? null : Number(clientSubtotalFloor),
-    };
-
-    const v4 = await supabase.rpc('higo_quote_ride_v4', {
-        ...common,
-        p_route_duration_min: routeDurationMin,
-    });
-    if (!v4.error) return v4.data;
-    if (!isMissingRpc(v4.error)) throw v4.error;
-
-    // Compatibilidad durante la promoción de la migración: una web nueva no
-    // debe romperse si el esquema remoto todavía expone únicamente V3.
-    return unwrap(await supabase.rpc('higo_quote_ride_v3', common));
-};
-
-export const createRideRequest = async ({
-    clientRequestId,
-    pickup,
-    dropoff,
-    pickupCoords,
-    dropoffCoords,
-    vehicleType,
-    serviceType = 'ride',
-    routeDistanceKm = null,
-    routeDurationMin = null,
-    stops = [],
-    promoCode = null,
-    passengerPhone = null,
-    deliveryInfo = null,
-    payer = null,
-    codAmount = null,
-    termsVersion = null,
-    clientSubtotalFloor = null,
-}) => {
-    const common = {
-        p_client_request_id: clientRequestId,
-        p_pickup: pickup,
-        p_dropoff: dropoff,
-        p_pickup_lat: pickupCoords?.lat,
-        p_pickup_lng: pickupCoords?.lng,
-        p_dropoff_lat: dropoffCoords?.lat,
-        p_dropoff_lng: dropoffCoords?.lng,
-        p_vehicle_type: vehicleType,
-        p_service_type: serviceType,
-        p_route_distance_km: routeDistanceKm,
-        p_stops: stops || [],
-        p_promo_code: promoCode || null,
-        p_passenger_phone: passengerPhone || null,
-        p_delivery_info: deliveryInfo || null,
-        p_payer: payer || null,
-        p_cod_amount: codAmount == null || codAmount === '' ? null : Number(codAmount),
-        p_terms_version: termsVersion || null,
-        p_client_subtotal_floor: clientSubtotalFloor == null || clientSubtotalFloor === '' ? null : Number(clientSubtotalFloor),
-    };
-
-    const v5 = await supabase.rpc('create_ride_request_v5', {
-        ...common,
-        p_route_duration_min: routeDurationMin,
-    });
-    let result;
-    if (!v5.error) {
-        result = v5.data;
-    } else if (isMissingRpc(v5.error)) {
-        result = unwrap(await supabase.rpc('create_ride_request_v4', common));
-    } else {
-        throw v5.error;
-    }
-
-    trackEventLater('ride.requested', {
-        entityType: 'ride',
-        entityId: result?.rideId,
-        properties: {
-            vehicle_type: vehicleType,
-            service_type: serviceType,
-            stops_count: Array.isArray(stops) ? stops.length : 0,
-            promo_applied: Boolean(promoCode),
-            idempotent_replay: Boolean(result?.idempotentReplay),
-            pricing_version: result?.quote?.pricingVersion || null,
-            pricing_rollout_mode: result?.quote?.rolloutMode || null,
-            pricing_model_applied: Boolean(result?.quote?.modelApplied),
-            route_duration_min: routeDurationMin,
-        },
-    });
+export const createRideRequest = async ({ quoteId, clientRequestId, pickup, dropoff, passengerPhone = null, deliveryInfo = null, payer = null, codAmount = null, termsVersion = null }) => {
+    const result = unwrap(await supabase.rpc('create_ride_from_quote', {
+        p_quote_id: quoteId, p_client_request_id: clientRequestId, p_pickup: pickup, p_dropoff: dropoff,
+        p_passenger_phone: passengerPhone || null, p_delivery_info: deliveryInfo,
+        p_payer: payer, p_cod_amount: codAmount == null || codAmount === '' ? null : Number(codAmount), p_terms_version: termsVersion,
+    }));
+    trackEventLater('ride.requested', { entityType: 'ride', entityId: result?.rideId, properties: { idempotent_replay: Boolean(result?.idempotentReplay) } });
     return result;
 };
 

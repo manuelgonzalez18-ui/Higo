@@ -41,8 +41,9 @@ const DeliveryClaimModal = ({ ride, onClose, onSubmitted }) => {
             const evidenceUrls = [];
             for (let i = 0; i < files.length; i++) {
                 const f = files[i];
-                const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
-                const path = `${ride.id}/claim-${Date.now()}-${i}.${ext}`;
+                const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[f.type];
+                if (!ext || f.size > 10 * 1024 * 1024) throw new Error('Usa JPG, PNG o WebP de hasta 10 MB.');
+                const path = `${ride.id}/claims/${crypto.randomUUID()}.${ext}`;
                 const { error: upErr } = await supabase.storage
                     .from('delivery-pods')
                     .upload(path, f, { contentType: f.type, upsert: false });

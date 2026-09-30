@@ -82,11 +82,9 @@ const AdminDisputesPage = () => {
 
     const forceConfirm = async (ride) => {
         if (!confirm(`¿Forzar confirmación bilateral del viaje #${ride.id} por $${ride.price}? Marca como pagado por ambas partes.`)) return;
-        const { error } = await supabase.from('rides').update({
-            payment_confirmed_by_user: true,
-            payment_confirmed_by_driver: true,
-            payment_confirmed_at: new Date().toISOString()
-        }).eq('id', ride.id);
+        const reason = window.prompt('Motivo de la intervención (mínimo 5 caracteres):');
+        if (!reason || reason.trim().length < 5) return;
+        const { error } = await supabase.rpc('admin_ride_action_v1', { p_ride_id: ride.id, p_action: 'confirm_payment', p_reason: reason.trim() });
 
         if (error) setMessage({ type: 'error', text: error.message });
         else {
@@ -130,12 +128,9 @@ const AdminDisputesPage = () => {
 
     const resetPayment = async (ride) => {
         if (!confirm(`¿Resetear confirmaciones de pago del viaje #${ride.id}? Esto limpia referencias y confirmaciones para que las partes vuelvan a marcar.`)) return;
-        const { error } = await supabase.from('rides').update({
-            payment_reference: null,
-            payment_confirmed_by_user: false,
-            payment_confirmed_by_driver: false,
-            payment_confirmed_at: null
-        }).eq('id', ride.id);
+        const reason = window.prompt('Motivo de la intervención (mínimo 5 caracteres):');
+        if (!reason || reason.trim().length < 5) return;
+        const { error } = await supabase.rpc('admin_ride_action_v1', { p_ride_id: ride.id, p_action: 'reset_payment', p_reason: reason.trim() });
 
         if (error) setMessage({ type: 'error', text: error.message });
         else {

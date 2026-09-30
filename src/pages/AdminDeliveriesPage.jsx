@@ -180,14 +180,18 @@ const AdminDeliveriesPage = () => {
 
     const forceCancel = async (ride) => {
         if (!window.confirm(`¿Cancelar el envío #${ride.id}? El chofer y el remitente verán el cambio.`)) return;
-        const { error } = await supabase.from('rides').update({ status: 'cancelled' }).eq('id', ride.id);
+        const reason = window.prompt('Motivo de la intervención (mínimo 5 caracteres):');
+        if (!reason || reason.trim().length < 5) return;
+        const { error } = await supabase.rpc('admin_ride_action_v1', { p_ride_id: ride.id, p_action: 'cancel', p_reason: reason.trim() });
         if (error) toast.error(error.message);
         else { toast.success('Cancelado.'); fetchData(); }
     };
 
     const forceComplete = async (ride) => {
         if (!window.confirm(`¿Forzar entrega completada para envío #${ride.id}? Solo si tenés evidencia clara.`)) return;
-        const { error } = await supabase.from('rides').update({ status: 'completed' }).eq('id', ride.id);
+        const reason = window.prompt('Motivo de la intervención (mínimo 5 caracteres):');
+        if (!reason || reason.trim().length < 5) return;
+        const { error } = await supabase.rpc('admin_ride_action_v1', { p_ride_id: ride.id, p_action: 'complete', p_reason: reason.trim() });
         if (error) toast.error(error.message);
         else { toast.success('Marcado como entregado.'); fetchData(); }
     };

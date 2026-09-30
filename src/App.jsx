@@ -15,7 +15,6 @@ import './index.css';         // Ensure Tailwind/global CSS is imported
 // SupportChatWidget, AdminGuard) seguimos con import estático porque
 // se renderizan globalmente, no por ruta.
 const RequestRidePage         = lazy(() => import('./pages/RequestRidePage'));
-const ScheduleRidePage        = lazy(() => import('./pages/ScheduleRidePage'));
 const ConfirmTripPage         = lazy(() => import('./pages/ConfirmTripPage'));
 const DriverDashboard         = lazy(() => import('./pages/DriverDashboard'));
 const DriverStatsPage         = lazy(() => import('./pages/DriverStatsPage'));
@@ -49,7 +48,6 @@ const PublicTrackingPage      = lazy(() => import('./pages/PublicTrackingPage'))
 
 // Anexo C / M1 — sandbox de Mapbox solo en dev. En producción el chunk
 // no se carga porque la ruta no se monta (gate import.meta.env.DEV abajo).
-const MapboxSandbox           = lazy(() => import('./components/_dev/MapboxSandbox'));
 
 // ─── Higo Shop: lazy module imports ──────────────────────────────────
 // SHOP_ENABLED (bandera de build): el APK de Play Store se compila con
@@ -538,7 +536,7 @@ const App = () => {
         />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/schedule" element={<ScheduleRidePage />} />
+        <Route path="/schedule" element={<Navigate to="/" replace />} />
         <Route path="/confirm" element={<ConfirmTripPage />} />
         <Route path="/driver" element={<DriverDashboard />} />
         <Route path="/driver/stats" element={<DriverStatsPage />} />
@@ -585,9 +583,6 @@ const App = () => {
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/track/:token" element={<PublicTrackingPage />} />
         <Route path="/delivery/:rideId/receipt" element={<DeliveryReceiptPage />} />
-        {import.meta.env.DEV && (
-          <Route path="/sandbox-mapbox" element={<MapboxSandbox />} />
-        )}
       </Routes>
       </Suspense>
       <ChatWidget />

@@ -11,6 +11,10 @@
 
 import { defineConfig, mergeConfig } from 'vitest/config';
 import viteConfig from './vite.config.js';
+import process from 'node:process';
+import { TEST_ENVIRONMENT } from './src/config/testEnvironment.js';
+
+Object.assign(process.env, TEST_ENVIRONMENT);
 
 // vite.config.js exporta una FUNCIÓN (recibe { command, mode } para leer las
 // env vars con loadEnv). mergeConfig no sabe fusionar un callback y aborta con
@@ -27,7 +31,7 @@ export default mergeConfig(
         test: {
             globals: true,
             environment: 'jsdom',
-            include: ['tests/**/*.test.{js,jsx}'],
+            include: ['tests/**/*.test.{js,jsx}', 'src/**/*.test.{js,jsx}'],
             exclude: ['node_modules', 'dist'],
         },
     })

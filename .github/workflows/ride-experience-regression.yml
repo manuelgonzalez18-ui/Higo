@@ -46,11 +46,5 @@ jobs:
       - name: Test motorcycle marker and first-message synchronization
         run: node --test tests/rideExperienceRegression.test.mjs
 
-      - name: Production build smoke test
-        env:
-          VITE_SHOP_ENABLED: 'false'
-          VITE_SERVER_SIDE_RIDE_PRICING: 'false'
-          VITE_SERVER_SIDE_RIDE_STATE: 'false'
-          VITE_UNIFIED_MEMBERSHIP_CHECKOUT: 'false'
-          VITE_DIRECTED_RIDE_OFFERS: 'false'
-        run: npm run build
+      - name: Isolated build using the launch feature profile
+        run: npm run build:test

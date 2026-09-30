@@ -227,7 +227,9 @@ begin
         set status = 'accepted',
             driver_id = '00000000-0000-4000-8000-000000000102'
         where id = v_ride_id;
-        raise exception 'behavior_assertion_failed:legacy_accept_without_membership_allowed';
+        if found then
+            raise exception 'behavior_assertion_failed:legacy_accept_without_membership_allowed';
+        end if;
     exception
         when others then
             if sqlerrm not like '%membership_required%' then

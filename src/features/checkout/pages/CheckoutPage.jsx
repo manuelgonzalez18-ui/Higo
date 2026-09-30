@@ -59,7 +59,7 @@ export function CheckoutPage() {
     directionsOrigin,
     directionsDest,
   );
-  const { distance, distanceText, fee, feeText, estimatedTime } = useDeliveryFee(
+  const {  distanceText, fee, feeText, estimatedTime } = useDeliveryFee(
     store?.latitude,
     store?.longitude,
     { liveDistanceMeters: liveDistM, liveDurationSeconds: liveDurS },

@@ -97,7 +97,7 @@ async function migrateBucket(bucket) {
 }
 
 for (const bucket of BUCKETS) {
-    // eslint-disable-next-line no-await-in-loop
+
     await migrateBucket(bucket);
 }
 

@@ -29,7 +29,7 @@ export function ProfilePage() {
     savedLocations,
     addSavedLocation,
     removeSavedLocation,
-    useSavedLocation,
+    useSavedLocation: selectSavedLocation,
   } = useLocationStore();
 
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -151,10 +151,10 @@ export function ProfilePage() {
               const Icon = aliasIcon(loc.iconKey);
               return (
                 <div key={loc.id} className="saved-location-item">
-                  <div className="location-icon-bg" onClick={() => useSavedLocation(loc.id)}>
+                  <div className="location-icon-bg" onClick={() => selectSavedLocation(loc.id)}>
                     <Icon size={18} />
                   </div>
-                  <div className="location-details" onClick={() => useSavedLocation(loc.id)}>
+                  <div className="location-details" onClick={() => selectSavedLocation(loc.id)}>
                     <span className="location-alias">{loc.alias}</span>
                     <span className="location-address truncate">{loc.address}</span>
                   </div>

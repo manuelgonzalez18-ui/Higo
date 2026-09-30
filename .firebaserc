@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "higo-app-26a19"
+    "default": "higo-app-26a19",
+    "staging": "higo-staging-202609"
   }
 }

@@ -1,3 +1,4 @@
+import { apiUrl } from '../utils/apiUrl';
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../services/supabase';
@@ -26,33 +27,50 @@ const PublicTrackingPage = () => {
     const { token } = useParams();
     const [data, setData] = useState(null);
     const [error, setError] = useState(null);
-    const [podSignedUrl, setPodSignedUrl] = useState(null);
+    const [podUrl, setPodUrl] = useState(null);
 
     useEffect(() => {
         let cancelled = false;
+        let fetching = false;
+        const controller = new AbortController();
+        setData(null);
+        setPodUrl(null);
+        setError(null);
 
         const fetchTracking = async () => {
+            if (fetching) return;
+            fetching = true;
+            try {
             const { data: rows, error } = await supabase.rpc('get_public_tracking', { p_token: token });
             if (cancelled) return;
             if (error || !rows || rows.length === 0) {
                 setError('Link de tracking inválido o expirado.');
+                setData(null);
+                setPodUrl(null);
                 return;
             }
             setData(rows[0]);
             setError(null);
 
-            // If delivered, get signed URL for POD photo
+            // The endpoint revalidates the tracking token on every image request.
             if (rows[0].delivery_pod_url) {
-                const { data: signed } = await supabase.storage
-                    .from('delivery-pods')
-                    .createSignedUrl(rows[0].delivery_pod_url, 3600);
-                if (!cancelled && signed?.signedUrl) setPodSignedUrl(signed.signedUrl);
-            }
+                try {
+                    const response = await fetch(`${apiUrl('/api/tracking-evidence.php')}?token=${encodeURIComponent(token)}`, { signal: controller.signal });
+                    const signed = response.ok ? await response.json() : null;
+                    if (!cancelled) setPodUrl(signed?.url || null);
+                } catch { if (!cancelled) setPodUrl(null); }
+            } else setPodUrl(null);
+            } catch {
+                if (!cancelled) {
+                    setError('No pudimos actualizar el seguimiento. Comprueba tu conexión e inténtalo de nuevo.');
+                    setPodUrl(null);
+                }
+            } finally { fetching = false; }
         };
 
         fetchTracking();
         const interval = setInterval(fetchTracking, 15000);
-        return () => { cancelled = true; clearInterval(interval); };
+        return () => { cancelled = true; controller.abort(); clearInterval(interval); };
     }, [token]);
 
     if (error) {
@@ -137,10 +155,10 @@ const PublicTrackingPage = () => {
                     </ul>
                 </div>
 
-                {podSignedUrl && (
+                {podUrl && (
                     <div className="bg-[#1A1F2E] rounded-2xl p-5 border border-white/5">
                         <p className="text-emerald-400 text-xs font-bold uppercase mb-3">Prueba de entrega</p>
-                        <img src={podSignedUrl} alt="POD" className="rounded-xl w-full" />
+                        <img src={podUrl} alt="POD" className="rounded-xl w-full" />
                     </div>
                 )}
 

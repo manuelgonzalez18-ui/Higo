@@ -5,7 +5,7 @@ import LocationInput from '../components/LocationInput';
 const ScheduleRidePage = () => {
     const navigate = useNavigate();
     const [selectedDay, setSelectedDay] = useState(5);
-    const [month, setMonth] = useState('Diciembre 2024');
+    const [month] = useState('Diciembre 2024');
 
     return (
         <div className="bg-[#0F1014] font-sans text-white min-h-screen flex flex-col relative overflow-hidden">
