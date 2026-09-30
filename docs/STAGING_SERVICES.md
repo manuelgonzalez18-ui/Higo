@@ -62,8 +62,10 @@ antes de autorizar la publicación. Referencias:
 
 ## Integración pendiente
 
-- Google Routes/Maps: claves separadas y restringidas; verificar facturación y su
-  autorización antes de generar costes.
+- El usuario eligió preparar primero servicios simulados. No vincular facturación
+  ni habilitar consumo real de Google para estas pruebas.
+- Google Routes/Maps real, cuando se autorice: claves separadas y restringidas;
+  verificar facturación y presupuesto antes de generar costes.
 - Firebase: FCM del servidor, VAPID, webhooks y dispositivos sintéticos.
 - PHP: configuración privada de Supabase staging, CORS y pagos simulados. Todavía
   no se cargó `higo-banesco.php` ni ningún endpoint de cobro.
@@ -75,3 +77,32 @@ El panel del sitio principal Hostinger muestra implementación automática desde
 `main`. Ese mecanismo debe conciliarse con el workflow de release antes de promover
 el PR, porque podría publicar sin pasar por el nuevo circuito. No se modificó la
 configuración de despliegue del sitio principal durante este aprovisionamiento.
+
+## Banco privado de proveedores simulados
+
+`npm run test:php` ejecuta los endpoints reales de cotización, evidencias, validación
+bancaria y notificación de hitos contra respuestas sintéticas. Solo sustituye el
+transporte HTTP en una copia temporal: la aplicación publicada no tiene un interruptor
+de simulación ni acepta cabeceras de pruebas. El router exige PHP CLI server y
+conexiones de loopback. La clave RSA se genera para cada ejecución, no pertenece a
+ninguna cuenta y se elimina junto con la copia temporal. Las rutas inesperadas fallan
+en lugar de contactar al proveedor real.
+
+La separación de `banesco-http.php` conserva las funciones cURL usadas en producción.
+Ambos consumidores de la caché BCV usan `sys_get_temp_dir()`, permitiendo aislar su
+directorio por entorno y evitando que las pruebas consuman la caché de otro sitio.
+
+Los escenarios bancarios cubren monto insuficiente frente al precio del servidor,
+falla/timeout/respuesta inválida del banco, referencia repetida, conflicto al registrar,
+fallo de activación y reintento tras éxito. Los de FCM cubren identidad del conductor,
+estado real del viaje, ausencia de destinatario, fallo temporal, token inválido,
+reintento y deduplicación después de éxito. Estos stubs no sustituyen las pruebas
+SQL de concurrencia ni demuestran envío real de mensajes.
+
+El paquete privado se preparó en
+`/home/u841591024/higo-staging/checks/simulated-20260930`, fuera del document root.
+En Windows las pruebas completas aprobaron. En Hostinger, PHP CLI 8.3 inicia el
+servidor temporal pero Node 22 recibe `ECONNREFUSED` contra su puerto en 127.0.0.1.
+El proceso permanece activo hasta que el runner lo cierra. No se abrió el servidor
+a interfaces públicas ni se modificaron restricciones del alojamiento. Esa ejecución
+remota sigue fallida; CI y la ejecución local conservan las comprobaciones HTTP.

@@ -25,7 +25,7 @@ const BCV_URL        = 'https://ve.dolarapi.com/v1/dolares/oficial';
 const BCV_CACHE_TTL  = 3600; // 1 hora
 
 // Detección dinámica de carpeta temporal portable en Linux/Windows/Hostinger
-$bcv_temp_dir   = (is_dir('/tmp') && is_writable('/tmp')) ? '/tmp' : sys_get_temp_dir();
+$bcv_temp_dir   = sys_get_temp_dir();
 $bcv_cache_file = $bcv_temp_dir . '/higo-bcv-rate.json';
 $bcv_ratelimit_file = $bcv_temp_dir . '/higo_ratelimit.log';
 

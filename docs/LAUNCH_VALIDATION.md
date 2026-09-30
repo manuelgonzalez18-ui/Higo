@@ -7,6 +7,13 @@ de implementación en `agent/launch-readiness`. El commit validado es
 y [Ride Experience Regression #31](https://github.com/manuelgonzalez18-ui/Higo/actions/runs/35932704177)
 aprobaron. Se revisaron también los pasos de reconstrucción y concurrencia.
 
+Actualización del día 30: Quality Gate #537, del commit `6211fc6`, aprobó Node,
+Vitest, PHP, release y ambos jobs SQL, pero falló por nuevos avisos transitivos de
+gRPC en la auditoría. Se fijó la versión corregida 1.14.5 y la auditoría local de
+producción volvió a cero. Detalles en [DEPENDENCY_REVIEW_20260930.md](./DEPENDENCY_REVIEW_20260930.md).
+No atribuir el resultado completo del SHA anterior a una versión posterior sin
+revisar sus propios checks.
+
 | Comprobación | Resultado |
 |---|---|
 | Node (`npm run test:run`) | 90 aprobadas |
@@ -24,6 +31,12 @@ aprobaron. Se revisaron también los pasos de reconstrucción y concurrencia.
 | Manifiesto y verificación de artefactos | 4 pruebas aprobadas |
 | Simulación local de publicación y rollback | Éxito, fallo con reversión y publicación posterior preservada |
 | YAML, sintaxis de scripts y `git diff --check` | Correctos |
+
+El banco PHP se amplió con Banesco y FCM simulados y volvió a aprobar localmente:
+importe insuficiente, fallo/timeout del banco, duplicados, fallo de activación,
+autorización del destinatario y reintentos de notificaciones. Los 90 tests Node
+también aprobaron. El intento privado de ejecutarlo en Hostinger falla al conectar
+Node al servidor PHP local (`ECONNREFUSED`); no cuenta como aprobación remota.
 
 La concurrencia SQL verifica un ganador entre dos conductores, un solo viaje ante
 dos reintentos del mismo identificador y un solo viaje activo ante identificadores

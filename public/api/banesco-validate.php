@@ -145,7 +145,7 @@ function bv_compute_expected(array $cfg, string $token, string $userId): array {
     // Tasa BCV: leer cache local del endpoint /api/bcv-rate.php.
     $bcvRate   = null;
     $bcvSource = 'plan_amount_bs';
-    $cacheFile = '/tmp/higo-bcv-rate.json';
+    $cacheFile = sys_get_temp_dir() . '/higo-bcv-rate.json';
     if (is_file($cacheFile)) {
         $cached = json_decode((string) @file_get_contents($cacheFile), true);
         if (is_array($cached) && is_numeric($cached['rate'] ?? null)) {

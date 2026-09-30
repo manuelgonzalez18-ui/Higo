@@ -5,6 +5,7 @@ import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { generateKeyPairSync } from 'node:crypto';
 
 export async function testPhpHttp(php) {
     const probe = createServer();
@@ -15,12 +16,17 @@ export async function testPhpHttp(php) {
     const logfile = path.join(directory, 'requests.jsonl');
     const publicPath = path.join(directory, 'public');
     await mkdir(path.join(publicPath, 'api'), { recursive: true });
-    for (const file of ['ride-quote.php', '_ride_quote.php', 'tracking-evidence.php', '_ratelimit.php', '_cors.php']) {
+    for (const file of ['ride-quote.php', '_ride_quote.php', 'tracking-evidence.php', '_ratelimit.php', '_cors.php', 'banesco-validate.php', 'send-ride-status-push.php']) {
         await copyFile(path.join('public/api', file), path.join(publicPath, 'api', file));
     }
-    await writeFile(path.join(publicPath, 'banesco-core.php'), '<?php // Transport stubs are defined only in the isolated test router.\n');
+    await copyFile('public/banesco-core.php', path.join(publicPath, 'banesco-core.php'));
+    await writeFile(path.join(publicPath, 'banesco-http.php'), '<?php // No real network transport is bundled in this test workspace.\n');
+    const configPath = path.join(directory, 'config.php');
+    await copyFile('tests/php/provider-config.php', configPath);
+    const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048, privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
+    await writeFile(path.join(directory, 'synthetic-sa.json'), JSON.stringify({ client_email: 'fixture@synthetic.invalid', private_key: privateKey }), { mode: 0o600 });
     const child = spawn(php, ['-d', `sys_temp_dir=${directory}`, '-S', `127.0.0.1:${port}`, 'tests/php/http-router.php'], {
-        windowsHide: true, env: { ...process.env, HIGO_TEST_HTTP_LOG: logfile, HIGO_TEST_PUBLIC_PATH: publicPath }, stdio: ['ignore', 'ignore', 'pipe'],
+        windowsHide: true, env: { ...process.env, HIGO_TEST_HTTP_LOG: logfile, HIGO_TEST_PUBLIC_PATH: publicPath, HIGO_BANESCO_CONFIG: configPath }, stdio: ['ignore', 'ignore', 'pipe'],
     });
     let diagnostics = '';
     let processError;
@@ -50,12 +56,18 @@ export async function testPhpHttp(php) {
     const evidence = `/api/tracking-evidence.php?token=${token}`;
     try {
         let ready = false;
+        let readinessError = '';
         for (let attempt = 0; attempt < 80; attempt++) {
             if (processError) throw processError;
-            try { if ((await fetch(base + '/ready', { signal: AbortSignal.timeout(1000) })).ok) { ready = true; break; } } catch { /* Wait for the bound local server. */ }
+            if (child.exitCode !== null || child.signalCode !== null) throw new Error(`PHP server exited before readiness (exit=${child.exitCode}, signal=${child.signalCode}): ${diagnostics}`);
+            try {
+                const probeResponse = await fetch(base + '/ready', { signal: AbortSignal.timeout(1000) });
+                if (probeResponse.ok) { ready = true; break; }
+                readinessError = `HTTP ${probeResponse.status}`;
+            } catch (error) { readinessError = `${error.message}: ${error.cause?.message || ''}`; }
             await delay(50);
         }
-        assert.ok(ready, `PHP HTTP server failed to start: ${diagnostics}`);
+        assert.ok(ready, `PHP HTTP server failed to start: ${readinessError}\n${diagnostics}`);
         let result = await request(endpoint, { body: input, auth: false });
         assert.equal(result.response.status, 401, result.text + diagnostics);
         assert.deepEqual(result.entries, [], 'Unauthenticated requests must not contact providers');
@@ -136,7 +148,70 @@ export async function testPhpHttp(php) {
         result = await request('/api/tracking-evidence.php?token[]=bad', { method: 'GET' });
         assert.equal(result.response.status, 404);
         assert.equal(result.entries.length, 0);
+        const paymentEndpoint = '/api/banesco-validate.php';
+        const payment = { reference: '600001', amount: 1, phone: '04120000000', date: '2026-09-30', bank: '0134', driver_id: 'forged-driver' };
+        const activation = entry => entry.url.endsWith('/register_membership_payment');
+        result = await request(paymentEndpoint, { body: payment, auth: false });
+        assert.equal(result.response.status, 401, result.text);
+        assert.equal(result.entries.length, 0);
+        result = await request(paymentEndpoint, { body: payment, scenario: 'invalid-session' });
+        assert.equal(result.response.status, 401, result.text);
+        assert.equal(result.entries.length, 1);
+        result = await request(paymentEndpoint, { body: payment, scenario: 'payment-insufficient' });
+        assert.equal(result.response.status, 200, result.text);
+        assert.equal(JSON.parse(result.text).expectedBs, 1000);
+        assert.equal(JSON.parse(result.text).withinTolerance, false);
+        assert.ok(!result.entries.some(activation), 'Declared amount cannot authorize a cheap membership');
+        for (const scenario of ['bank-failure', 'bank-timeout', 'bank-malformed', 'payment-not-found', 'activation-failure', 'payment-race', 'payment-duplicate']) {
+            result = await request(paymentEndpoint, { body: payment, scenario });
+            const expectedStatus = scenario === 'payment-not-found' ? 200 : scenario.startsWith('payment-') ? 409 : 502;
+            assert.equal(result.response.status, expectedStatus, scenario + ': ' + result.text);
+            assert.equal(JSON.parse(result.text).ok, false);
+            if (!['activation-failure', 'payment-race'].includes(scenario)) assert.ok(!result.entries.some(activation));
+            if (scenario === 'payment-duplicate') assert.ok(!result.entries.some(entry => entry.url.startsWith('https://bank.synthetic.invalid/')));
+        }
+        result = await request(paymentEndpoint, { body: payment });
+        assert.equal(result.response.status, 200, result.text);
+        assert.equal(JSON.parse(result.text).membershipId, 'synthetic-membership');
+        const applied = result.entries.find(activation).data;
+        assert.equal(applied.p_amount_real, 1000);
+        assert.notEqual(applied.p_driver_id, 'forged-driver');
+        // Simulate a timeout after success: replay the same reference.
+        result = await request(paymentEndpoint, { body: payment });
+        assert.equal(result.response.status, 409, result.text);
+        assert.ok(!result.entries.some(activation), 'Retry must not request another activation');
+
+        const pushEndpoint = '/api/send-ride-status-push.php';
+        const pushHeaders = { Authorization: 'Bearer synthetic.jwt.signature' };
+        const fcm = entry => entry.url.includes('fcm.googleapis.com');
+        const push = { ride_id: 'synthetic-ride-42', milestone: 'completed' };
+        result = await request(pushEndpoint, { body: push, auth: false });
+        assert.equal(result.response.status, 401, result.text);
+        assert.equal(result.entries.length, 0);
+        for (const [scenario, status] of [['invalid-session', 401], ['push-wrong-driver', 403], ['push-wrong-state', 409], ['push-missing-ride', 404], ['push-no-token', 200]]) {
+            result = await request(pushEndpoint, { body: push, headers: pushHeaders, scenario });
+            assert.equal(result.response.status, status, result.text);
+            assert.ok(!result.entries.some(fcm), 'Unauthorized/unavailable recipient must not contact FCM');
+        }
+        for (const scenario of ['push-provider-failure', 'push-unregistered']) {
+            result = await request(pushEndpoint, { body: push, headers: pushHeaders, scenario });
+            assert.equal(result.response.status, 502, result.text);
+            assert.equal(result.entries.filter(fcm).length, 1);
+            assert.equal(result.entries.some(entry => entry.method === 'PATCH'), scenario === 'push-unregistered', 'Only invalid tokens should be cleared');
+        }
+        result = await request(pushEndpoint, { body: push, headers: pushHeaders });
+        assert.equal(result.response.status, 200, result.text);
+        assert.equal(JSON.parse(result.text).sent, 1);
+        assert.equal(result.entries.filter(fcm).length, 1, 'A failed send must allow a successful retry');
+        const notification = result.entries.find(fcm).data.message;
+        assert.equal(notification.token, 'synthetic-device');
+        assert.equal(notification.data.ride_id, push.ride_id);
+        result = await request(pushEndpoint, { body: push, headers: pushHeaders });
+        assert.equal(result.response.status, 200, result.text);
+        assert.equal(JSON.parse(result.text).deduplicated, true);
+        assert.ok(!result.entries.some(fcm), 'Successful retry must not resend a notification');
         console.log('PHP HTTP contracts passed: auth, CORS, provider failure, authoritative metrics, ordered stops, token expiry/revocation, private images');
+        console.log('Simulated bank/FCM passed: insufficient payment, provider failure/timeout, duplicate reference, activation failure, recipient authorization and notification retries');
     } finally {
         const stopped = new Promise(resolve => { if (child.exitCode !== null) resolve(); else child.once('exit', resolve); });
         child.kill();
