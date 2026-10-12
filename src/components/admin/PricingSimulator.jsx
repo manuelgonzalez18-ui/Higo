@@ -6,7 +6,7 @@ const money = (value) => `$${Number(value || 0).toFixed(2)}`;
 const vehicleLabel = (value) => ({
     moto: 'Moto',
     standard: 'Carro',
-    van: 'Camioneta',
+    van: 'SUV',
 }[value] || value);
 
 export default function PricingSimulator({ ratesByType = {} }) {
