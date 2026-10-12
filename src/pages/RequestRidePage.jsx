@@ -518,7 +518,7 @@ const RequestRidePage = () => {
                                                 className={`flex-1 flex flex-col items-center justify-center p-3 rounded-xl border transition-all ${selectedRide === type ? 'bg-blue-600 border-blue-500 shadow-lg shadow-blue-500/20' : 'bg-[#0F1014] border-white/5 hover:bg-[#1E293B]'}`}
                                             >
                                                 <span className="material-symbols-outlined text-xl mb-1">{type === 'moto' ? 'two_wheeler' : type === 'van' ? 'airport_shuttle' : 'local_taxi'}</span>
-                                                <span className="text-[10px] font-bold uppercase">{type === 'van' ? 'SUV' : type === 'standard' ? 'Carro' : type}</span>
+                                                <span className="text-[10px] font-bold uppercase">{type === 'van' ? 'Camioneta' : type === 'standard' ? 'Carro' : type}</span>
                                             </button>
                                         ))}
                                     </div>
