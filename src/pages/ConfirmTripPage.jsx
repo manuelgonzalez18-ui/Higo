@@ -12,7 +12,7 @@ import { announcePassengerRideMilestone } from '../utils/passengerRideVoice';
 const VEHICLE_INFO = Object.freeze({
     moto: { title: 'Higo Moto', icon: 'two_wheeler', seats: '1 asiento' },
     standard: { title: 'Higo Carro', icon: 'local_taxi', seats: '4 asientos' },
-    van: { title: 'Higo Camioneta', icon: 'airport_shuttle', seats: '6+ asientos' },
+    van: { title: 'Higo SUV', icon: 'airport_shuttle', seats: '6+ asientos' },
 });
 
 const PROMO_ERRORS = Object.freeze({
