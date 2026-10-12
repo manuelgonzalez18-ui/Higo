@@ -42,7 +42,9 @@ export const FALLBACK_RATES = Object.freeze({
 export const canonicalVehicleType = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
     if (['moto', 'motorcycle', 'motocicleta'].includes(normalized)) return 'moto';
-    if (['van', 'camioneta', 'pickup'].includes(normalized)) return 'van';
+    // `van` se conserva como clave técnica por compatibilidad con DB. Comercialmente
+    // representa SUV de pasajeros; pickup/carga no pertenece a esta categoría.
+    if (['van', 'suv', 'camioneta'].includes(normalized)) return 'van';
     return 'standard';
 };
 

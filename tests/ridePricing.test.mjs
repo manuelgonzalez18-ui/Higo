@@ -15,6 +15,8 @@ const destination = { lat: 10.474, lng: -66.094 };
 test('canonicalVehicleType normalizes known aliases', () => {
     assert.equal(canonicalVehicleType('Moto'), 'moto');
     assert.equal(canonicalVehicleType('camioneta'), 'van');
+    assert.equal(canonicalVehicleType('SUV'), 'van');
+    assert.equal(canonicalVehicleType('pickup'), 'standard');
     assert.equal(canonicalVehicleType('carro'), 'standard');
     assert.equal(canonicalVehicleType('Corolla'), 'standard');
     assert.equal(canonicalVehicleType(null), 'standard');

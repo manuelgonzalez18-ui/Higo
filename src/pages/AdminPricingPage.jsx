@@ -8,7 +8,7 @@ import PricingRolloutPanel from '../components/admin/PricingRolloutPanel';
 const VEHICLE_META = {
     moto:     { label: 'Moto',      icon: 'two_wheeler',       color: 'from-sky-500 to-indigo-500' },
     standard: { label: 'Carro',     icon: 'directions_car',    color: 'from-violet-500 to-fuchsia-500' },
-    van:      { label: 'Camioneta', icon: 'local_shipping',    color: 'from-amber-500 to-orange-500' }
+    van:      { label: 'Camioneta', icon: 'directions_car',    color: 'from-amber-500 to-orange-500' }
 };
 
 const FIELDS = [

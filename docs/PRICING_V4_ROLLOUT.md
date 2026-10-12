@@ -51,6 +51,33 @@ Así, toda la arquitectura V4 queda funcionando desde las pruebas de prelaunch,
 pero el precio continúa equivalente al modelo vigente hasta editar los valores
 desde `/admin/pricing`.
 
+## Criterio comercial para el lanzamiento en Higuerote
+
+Higuerote es el mercado inicial y no debe calibrarse copiando automáticamente
+las tarifas de plataformas de otras ciudades. La referencia primaria será la
+lista local vigente de transportistas independientes y la experiencia real del
+conductor.
+
+Hasta completar esa calibración:
+
+- `per_minute` permanece en `0`; no se activa un cargo por tiempo sin comprobar
+  que no duplique costos que ya estén implícitos en la tarifa local.
+- La categoría técnica `van` representa **camioneta de pasajeros**, no pickup ni
+  transporte de carga.
+- El objetivo no es ser permanentemente "el más barato". Higo debe ofrecer una
+  tarifa competitiva al pasajero y una economía atractiva al conductor.
+- Los descuentos de adquisición deben tratarse como promoción financiada por
+  Higo cuando sea posible, sin reducir artificialmente el valor del trabajo del
+  conductor.
+- El multiplicador inicial continúa limitado a `1.30x` y solo debe activarse
+  con evidencia de falta de oferta por zona/horario.
+- Cualquier cambio comercial debe simularse primero con rutas reales de
+  Higuerote y documentarse antes de modificar producción.
+
+La calibración final debe comparar rutas cortas, medias y largas contra la
+tarifa local, medir ingreso efectivo por hora/kilómetro del conductor y validar
+que la tasa de aceptación no se deteriore.
+
 ## Modos disponibles
 
 | Modo | Comportamiento |
