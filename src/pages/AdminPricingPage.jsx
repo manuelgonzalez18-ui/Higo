@@ -8,7 +8,7 @@ import PricingRolloutPanel from '../components/admin/PricingRolloutPanel';
 const VEHICLE_META = {
     moto:     { label: 'Moto',      icon: 'two_wheeler',       color: 'from-sky-500 to-indigo-500' },
     standard: { label: 'Carro',     icon: 'directions_car',    color: 'from-violet-500 to-fuchsia-500' },
-    van:      { label: 'SUV',       icon: 'directions_car',    color: 'from-amber-500 to-orange-500' }
+    van:      { label: 'Camioneta', icon: 'directions_car',    color: 'from-amber-500 to-orange-500' }
 };
 
 const FIELDS = [
@@ -317,7 +317,7 @@ const AdminPricingPage = () => {
                             <option value="">Todos los vehículos</option>
                             <option value="moto">Solo Moto</option>
                             <option value="standard">Solo Carro</option>
-                            <option value="van">Solo SUV</option>
+                            <option value="van">Solo Camioneta</option>
                         </select>
                         <input
                             type="number" step="0.1" min="0.5" max="5.0"
