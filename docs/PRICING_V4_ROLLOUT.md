@@ -62,7 +62,7 @@ Hasta completar esa calibración:
 
 - `per_minute` permanece en `0`; no se activa un cargo por tiempo sin comprobar
   que no duplique costos que ya estén implícitos en la tarifa local.
-- La categoría técnica `van` representa **SUV de pasajeros**, no pickup ni
+- La categoría técnica `van` representa **camioneta de pasajeros**, no pickup ni
   transporte de carga.
 - El objetivo no es ser permanentemente "el más barato". Higo debe ofrecer una
   tarifa competitiva al pasajero y una economía atractiva al conductor.
@@ -89,7 +89,7 @@ que la tasa de aceptación no se deteriore.
 
 ## Operación antes del lanzamiento
 
-1. Ejecutar viajes reales de prueba con moto, carro y SUV.
+1. Ejecutar viajes reales de prueba con moto, carro y camioneta.
 2. Revisar el desglose de base, distancia, tiempo, paradas y extras.
 3. Definir desde `/admin/pricing` la tarifa mínima y el precio por minuto de cada vehículo usando costos reales.
 4. Confirmar que promociones, espera, Higo Envíos y multiplicadores respetan sus límites.
