@@ -18,9 +18,9 @@ Higo debe intentar ganar por conveniencia, disponibilidad, seguridad, trazabilid
 
 - Moto
 - Carro
-- SUV de pasajeros
+- Camioneta de pasajeros
 
-La clave técnica `van` se mantiene por compatibilidad con la base de datos, pero comercialmente significa **SUV**. Pickup/carga queda fuera de esa categoría.
+La clave técnica `van` se mantiene por compatibilidad con la base de datos, pero comercialmente significa **Camioneta de pasajeros**. Pickup/carga queda fuera de esa categoría.
 
 ## Datos a levantar
 
@@ -36,7 +36,7 @@ Para cada ruta de la lista oficial/local registrar:
 | Duración pico | Minutos estimados en alta demanda |
 | Higo Moto | Cotización simulada |
 | Higo Carro | Cotización simulada |
-| Higo SUV | Cotización simulada |
+| Higo Camioneta | Cotización simulada |
 | Diferencia % | Higo vs tarifa local |
 | Observación conductor | ¿Aceptaría este viaje? |
 | Observación pasajero | ¿Le parece razonable? |
