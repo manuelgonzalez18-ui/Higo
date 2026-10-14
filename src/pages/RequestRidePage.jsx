@@ -98,7 +98,7 @@ const RequestRidePage = () => {
     // Fallback a estos valores si la query falla (primer render o error de red).
     const FALLBACK_RATES = {
         moto:     { base: 1.00, minimumFare: 1.00, perKm: 0.25, perMinute: 0, includedKm: 1, deliveryFee: 0.50, waitPerMin: 0.05, freeWaitMinutes: 3, stopFee: 0.50, maximumMultiplier: 1.30 },
-        standard: { base: 1.50, minimumFare: 1.50, perKm: 0.40, perMinute: 0, includedKm: 1, deliveryFee: 1.50, waitPerMin: 0.08, freeWaitMinutes: 3, stopFee: 1.00, maximumMultiplier: 1.30 },
+        standard: { base: 1.70, minimumFare: 1.70, perKm: 0.60, perMinute: 0, includedKm: 1, deliveryFee: 2.00, waitPerMin: 0.10, freeWaitMinutes: 3, stopFee: 1.00, maximumMultiplier: 1.30 },
         van:      { base: 1.70, minimumFare: 1.70, perKm: 0.60, perMinute: 0, includedKm: 1, deliveryFee: 2.00, waitPerMin: 0.10, freeWaitMinutes: 3, stopFee: 1.00, maximumMultiplier: 1.30 }
     };
     const [VEHICLE_RATES, setVehicleRates] = useState(FALLBACK_RATES);
