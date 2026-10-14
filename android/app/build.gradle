@@ -7,9 +7,9 @@ android {
         applicationId "com.higoapp.ve"
         minSdkVersion 23
         targetSdkVersion 35
-        // Higo 1.5.28: Pago Móvil keeps the trip fare in USD; Bs equivalent is agreed at payment time.
-        versionCode 60
-        versionName "1.5.28"
+        // Higo 1.5.29: includes Higuerote corridor pricing and current server-authoritative fare matching.
+        versionCode 61
+        versionName "1.5.29"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
