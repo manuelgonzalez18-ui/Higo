@@ -70,6 +70,8 @@ export default function ConfirmTripPage() {
         if (!FEATURES.serverSideRidePricing || !pickupCoords || !dropoffCoords) return;
         let cancelled = false;
         void quoteRide({
+            pickup,
+            dropoff,
             pickupCoords,
             dropoffCoords,
             vehicleType: selectedRide,
@@ -84,7 +86,7 @@ export default function ConfirmTripPage() {
             // La confirmación vuelve a cotizar de forma autoritativa.
         });
         return () => { cancelled = true; };
-    }, [dropoffCoords?.lat, dropoffCoords?.lng, pickupCoords?.lat, pickupCoords?.lng, price, roadDistance, routeDurationMin, selectedRide, serviceType, stops]);
+    }, [dropoff, dropoffCoords?.lat, dropoffCoords?.lng, pickup, pickupCoords?.lat, pickupCoords?.lng, price, roadDistance, routeDurationMin, selectedRide, serviceType, stops]);
 
     if (!pickup || !dropoff || !pickupCoords || !dropoffCoords) {
         return (
@@ -126,6 +128,8 @@ export default function ConfirmTripPage() {
         try {
             if (FEATURES.serverSideRidePricing) {
                 const quote = await quoteRide({
+                    pickup,
+                    dropoff,
                     pickupCoords,
                     dropoffCoords,
                     vehicleType: selectedRide,
@@ -327,13 +331,22 @@ export default function ConfirmTripPage() {
 
                 {serverQuote && (
                     <section className="bg-[#1A1F2E] rounded-3xl p-5 border border-white/5 space-y-2 text-sm">
-                        <div className="flex justify-between"><span className="text-gray-400">Tarifa base</span><strong>{money(serverQuote.base)}</strong></div>
-                        <div className="flex justify-between"><span className="text-gray-400">Distancia · {Number(serverQuote.distanceKm || 0).toFixed(1)} km</span><strong>{money(serverQuote.distanceAmount)}</strong></div>
-                        <div className="flex justify-between"><span className="text-gray-400">Tiempo estimado · {Math.round(Number(serverQuote.durationMin || 0))} min</span><strong>{money(serverQuote.timeAmount)}</strong></div>
+                        {serverQuote.corridorApplied ? (
+                            <>
+                                <div className="flex justify-between"><span className="text-gray-400">Tarifa de ruta</span><strong>{money(serverQuote.corridorDayFare)}</strong></div>
+                                <div className="flex justify-between"><span className="text-gray-400">Distancia · {Number(serverQuote.distanceKm || 0).toFixed(1)} km</span><strong>incluida</strong></div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="flex justify-between"><span className="text-gray-400">Tarifa base</span><strong>{money(serverQuote.base)}</strong></div>
+                                <div className="flex justify-between"><span className="text-gray-400">Distancia · {Number(serverQuote.distanceKm || 0).toFixed(1)} km</span><strong>{money(serverQuote.distanceAmount)}</strong></div>
+                                <div className="flex justify-between"><span className="text-gray-400">Tiempo estimado · {Math.round(Number(serverQuote.durationMin || 0))} min</span><strong>{money(serverQuote.timeAmount)}</strong></div>
+                            </>
+                        )}
                         {Number(serverQuote.stopsAmount || 0) > 0 && <div className="flex justify-between"><span className="text-gray-400">Paradas</span><strong>{money(serverQuote.stopsAmount)}</strong></div>}
                         {Number(serverQuote.extrasAmount || 0) > 0 && <div className="flex justify-between"><span className="text-gray-400">Extras del servicio</span><strong>{money(serverQuote.extrasAmount)}</strong></div>}
-                        {Number(serverQuote.surgeMultiplier || 1) > 1 && <div className="flex justify-between text-amber-300"><span>Factor zona/horario</span><strong>×{Number(serverQuote.surgeMultiplier).toFixed(2)}</strong></div>}
-                        <div className="pt-2 mt-2 border-t border-white/10 flex justify-between"><span className="text-gray-400">Tarifa mínima</span><strong>{money(serverQuote.minimumFare)}</strong></div>
+                        {Number(serverQuote.surgeMultiplier || 1) > 1 && <div className="flex justify-between text-amber-300"><span>Recargo nocturno</span><strong>×{Number(serverQuote.surgeMultiplier).toFixed(2)}</strong></div>}
+                        {!serverQuote.corridorApplied && <div className="pt-2 mt-2 border-t border-white/10 flex justify-between"><span className="text-gray-400">Tarifa mínima</span><strong>{money(serverQuote.minimumFare)}</strong></div>}
                         {serverQuote.rolloutMode === 'shadow' && <p className="pt-2 text-[10px] text-blue-300">Modelo V4 en evaluación interna. El precio cobrado mantiene la fórmula vigente.</p>}
                     </section>
                 )}

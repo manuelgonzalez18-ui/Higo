@@ -34,6 +34,7 @@ const RequestRidePage = () => {
     const [price, setPrice] = useState(0);
     const [oldPrice, setOldPrice] = useState(0);
     const [surgeMultiplier, setSurgeMultiplier] = useState(1.0);
+    const [corridorPricing, setCorridorPricing] = useState(null);
     const [roadDistance, setRoadDistance] = useState(0); // Store actual road distance in meters
     const [routeDurationMin, setRouteDurationMin] = useState(0);
     const [showStopConfirm, setShowStopConfirm] = useState(false);
@@ -167,6 +168,39 @@ const RequestRidePage = () => {
         return () => { cancelled = true; };
     }, [selectedRide, pickupCoords?.lat, pickupCoords?.lng]);
 
+    // Corridor pricing for Higuerote. This is intentionally read-only and
+    // available before login so the passenger sees the same fare that the
+    // server will enforce after authentication.
+    useEffect(() => {
+        let cancelled = false;
+        const routeDistanceKm = roadDistance > 0 ? roadDistance / 1000 : null;
+        const rideService = serviceType || 'ride';
+
+        if (!pickupCoords?.lat || !pickupCoords?.lng || !dropoff || rideService !== 'ride' || selectedRide === 'moto') {
+            setCorridorPricing(null);
+            return () => { cancelled = true; };
+        }
+
+        (async () => {
+            const { data, error } = await supabase.rpc('higo_match_pricing_corridor', {
+                p_pickup_lat: pickupCoords.lat,
+                p_pickup_lng: pickupCoords.lng,
+                p_dropoff_text: dropoff,
+                p_route_distance_km: routeDistanceKm,
+                p_vehicle_type: selectedRide,
+            });
+            if (cancelled) return;
+            if (error) {
+                console.warn('corridor pricing fetch failed (fallback to formula):', error);
+                setCorridorPricing(null);
+                return;
+            }
+            setCorridorPricing(data || null);
+        })();
+
+        return () => { cancelled = true; };
+    }, [dropoff, pickupCoords?.lat, pickupCoords?.lng, roadDistance, selectedRide, serviceType]);
+
     // Calculate Price with Stops
     // This useEffect replaces the previous calculatePrice and recalculatePrice functions
     useEffect(() => {
@@ -209,28 +243,45 @@ const RequestRidePage = () => {
             surgeMultiplier: surgeMultiplier || 1,
             rates: VEHICLE_RATES,
         });
-        setPrice(quote.subtotal);
+
+        const corridorDayFare = Number(corridorPricing?.targetDayFare || 0);
+        const selectedRates = VEHICLE_RATES[selectedRide] || {};
+        const useCorridor = corridorDayFare > 0
+            && selectedRide !== 'moto'
+            && (serviceType || 'ride') === 'ride';
+
+        if (useCorridor) {
+            const stopsAmount = validStopsCount * Number(selectedRates.stopFee || 0);
+            const corridorTotal = (corridorDayFare + stopsAmount) * Number(surgeMultiplier || 1);
+            setPrice(Number(corridorTotal.toFixed(2)));
+        } else {
+            setPrice(quote.subtotal);
+        }
 
         // Calculate old price (without stops) for comparison in modal
         if (validStopsCount > 0) {
-            const baseDistNoStops = roadDistance > 0 ? (roadDistance / 1000) : getDistanceFromLatLonInKm(pickupCoords.lat, pickupCoords.lng, dropoffCoords.lat, dropoffCoords.lng);
-            const quoteWithoutStops = computeFallbackQuote({
-                origin: pickupCoords,
-                destination: dropoffCoords,
-                routeDistanceKm: baseDistNoStops,
-                routeDurationMin,
-                vehicleType: selectedRide,
-                serviceType: serviceType || 'ride',
-                stopsCount: 0,
-                surgeMultiplier: surgeMultiplier || 1,
-                rates: VEHICLE_RATES,
-            });
-            setOldPrice(quoteWithoutStops.subtotal);
+            if (useCorridor) {
+                setOldPrice(Number((corridorDayFare * Number(surgeMultiplier || 1)).toFixed(2)));
+            } else {
+                const baseDistNoStops = roadDistance > 0 ? (roadDistance / 1000) : getDistanceFromLatLonInKm(pickupCoords.lat, pickupCoords.lng, dropoffCoords.lat, dropoffCoords.lng);
+                const quoteWithoutStops = computeFallbackQuote({
+                    origin: pickupCoords,
+                    destination: dropoffCoords,
+                    routeDistanceKm: baseDistNoStops,
+                    routeDurationMin,
+                    vehicleType: selectedRide,
+                    serviceType: serviceType || 'ride',
+                    stopsCount: 0,
+                    surgeMultiplier: surgeMultiplier || 1,
+                    rates: VEHICLE_RATES,
+                });
+                setOldPrice(quoteWithoutStops.subtotal);
+            }
         } else {
             setOldPrice(0); // No stops, so no "old price" to compare
         }
 
-    }, [pickupCoords, dropoffCoords, selectedRide, stops, serviceType, roadDistance, routeDurationMin, VEHICLE_RATES, surgeMultiplier]);
+    }, [corridorPricing, pickupCoords, dropoffCoords, selectedRide, stops, serviceType, roadDistance, routeDurationMin, VEHICLE_RATES, surgeMultiplier]);
 
 
     // Check if we should show the "Confirm Stop" modal
