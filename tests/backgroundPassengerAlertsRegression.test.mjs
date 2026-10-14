@@ -45,8 +45,8 @@ test('ride message push remains compatible with PHP hosts without str_starts_wit
     assert.match(chat, /if \(!pushResponse\.ok\)/);
 });
 
-test('Android release version is 1.5.31 build 63', async () => {
+test('Android release version is 1.5.32 build 64', async () => {
     const gradle = await read('android/app/build.gradle');
-    assert.match(gradle, /versionCode 63/);
-    assert.match(gradle, /versionName \"1\.5\.31\"/);
+    assert.match(gradle, /versionCode 64/);
+    assert.match(gradle, /versionName \"1\.5\.32\"/);
 });
