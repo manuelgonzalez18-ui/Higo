@@ -7,9 +7,9 @@ android {
         applicationId "com.higoapp.ve"
         minSdkVersion 24
         targetSdkVersion 35
-        // Higo 1.5.30: Play-protection compatible minimum SDK plus current Higuerote pricing.
-        versionCode 62
-        versionName "1.5.30"
+        // Higo 1.5.31: bidirectional Higuerote corridor pricing and Play-protection compatible minimum SDK.
+        versionCode 63
+        versionName "1.5.31"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
