@@ -22,6 +22,8 @@ export const createClientRequestId = () => {
 };
 
 export const quoteRide = async ({
+    pickup = null,
+    dropoff = null,
     pickupCoords,
     dropoffCoords,
     vehicleType,
@@ -44,6 +46,15 @@ export const quoteRide = async ({
         p_promo_code: promoCode || null,
         p_client_subtotal_floor: clientSubtotalFloor == null || clientSubtotalFloor === '' ? null : Number(clientSubtotalFloor),
     };
+
+    const v5 = await supabase.rpc('higo_quote_ride_v5', {
+        ...common,
+        p_pickup_text: pickup || null,
+        p_dropoff_text: dropoff || null,
+        p_route_duration_min: routeDurationMin,
+    });
+    if (!v5.error) return v5.data;
+    if (!isMissingRpc(v5.error)) throw v5.error;
 
     const v4 = await supabase.rpc('higo_quote_ride_v4', {
         ...common,
