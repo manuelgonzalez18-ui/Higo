@@ -48,8 +48,8 @@ test('admin support renders Google Maps URLs as clickable links', () => {
     assert.match(page, /text-blue-400 underline/);
 });
 
-test('release is Higo 1.5.30 build 62', () => {
+test('release is Higo 1.5.31 build 63', () => {
     const gradle = read('android/app/build.gradle');
-    assert.match(gradle, /versionCode 62/);
-    assert.match(gradle, /versionName "1\.5\.30"/);
+    assert.match(gradle, /versionCode 63/);
+    assert.match(gradle, /versionName "1\.5\.31"/);
 });
