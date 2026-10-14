@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { trackEventLater } from './analytics';
+import { resolvePricingLocationLabel } from '../utils/pricingLocation';
 
 const unwrap = ({ data, error }) => {
     if (error) throw error;
@@ -24,6 +25,7 @@ export const createClientRequestId = () => {
 export const quoteRide = async ({
     pickupCoords,
     dropoffCoords,
+    pickupLabel = null,
     dropoffLabel = null,
     vehicleType,
     serviceType = 'ride',
@@ -33,6 +35,8 @@ export const quoteRide = async ({
     promoCode = null,
     clientSubtotalFloor = null,
 }) => {
+    const resolvedPickupLabel = await resolvePricingLocationLabel(pickupLabel, pickupCoords);
+
     const common = {
         p_pickup_lat: pickupCoords?.lat,
         p_pickup_lng: pickupCoords?.lng,
@@ -45,6 +49,15 @@ export const quoteRide = async ({
         p_promo_code: promoCode || null,
         p_client_subtotal_floor: clientSubtotalFloor == null || clientSubtotalFloor === '' ? null : Number(clientSubtotalFloor),
     };
+
+    const v6 = await supabase.rpc('higo_quote_ride_v6', {
+        ...common,
+        p_pickup: resolvedPickupLabel || pickupLabel || '',
+        p_dropoff: dropoffLabel || '',
+        p_route_duration_min: routeDurationMin,
+    });
+    if (!v6.error) return v6.data;
+    if (!isMissingRpc(v6.error)) throw v6.error;
 
     const v5 = await supabase.rpc('higo_quote_ride_v5', {
         ...common,
@@ -85,9 +98,10 @@ export const createRideRequest = async ({
     termsVersion = null,
     clientSubtotalFloor = null,
 }) => {
+    const resolvedPickup = await resolvePricingLocationLabel(pickup, pickupCoords);
     const common = {
         p_client_request_id: clientRequestId,
-        p_pickup: pickup,
+        p_pickup: resolvedPickup || pickup,
         p_dropoff: dropoff,
         p_pickup_lat: pickupCoords?.lat,
         p_pickup_lng: pickupCoords?.lng,
@@ -106,27 +120,37 @@ export const createRideRequest = async ({
         p_client_subtotal_floor: clientSubtotalFloor == null || clientSubtotalFloor === '' ? null : Number(clientSubtotalFloor),
     };
 
-    const v6 = await supabase.rpc('create_ride_request_v6', {
+    const v7 = await supabase.rpc('create_ride_request_v7', {
         ...common,
         p_route_duration_min: routeDurationMin,
     });
     let result;
-    if (!v6.error) {
-        result = v6.data;
-    } else if (isMissingRpc(v6.error)) {
-        const v5 = await supabase.rpc('create_ride_request_v5', {
+    if (!v7.error) {
+        result = v7.data;
+    } else if (isMissingRpc(v7.error)) {
+        const v6 = await supabase.rpc('create_ride_request_v6', {
             ...common,
             p_route_duration_min: routeDurationMin,
         });
-        if (!v5.error) {
-            result = v5.data;
-        } else if (isMissingRpc(v5.error)) {
-            result = unwrap(await supabase.rpc('create_ride_request_v4', common));
+        if (!v6.error) {
+            result = v6.data;
+        } else if (isMissingRpc(v6.error)) {
+            const v5 = await supabase.rpc('create_ride_request_v5', {
+            ...common,
+            p_route_duration_min: routeDurationMin,
+        });
+            if (!v5.error) {
+                result = v5.data;
+            } else if (isMissingRpc(v5.error)) {
+                result = unwrap(await supabase.rpc('create_ride_request_v4', common));
+            } else {
+                throw v5.error;
+            }
         } else {
-            throw v5.error;
+            throw v6.error;
         }
     } else {
-        throw v6.error;
+        throw v7.error;
     }
 
     trackEventLater('ride.requested', {

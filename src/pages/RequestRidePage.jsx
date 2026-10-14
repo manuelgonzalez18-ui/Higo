@@ -218,6 +218,7 @@ const RequestRidePage = () => {
         void quoteRide({
             pickupCoords,
             dropoffCoords,
+            pickupLabel: pickup,
             dropoffLabel: dropoff,
             vehicleType: selectedRide,
             serviceType: serviceType || 'ride',
@@ -255,7 +256,7 @@ const RequestRidePage = () => {
         }
 
         return () => { cancelled = true; };
-    }, [pickupCoords, dropoffCoords, dropoff, selectedRide, stops, serviceType, roadDistance, routeDurationMin, VEHICLE_RATES, surgeMultiplier]);
+    }, [pickup, pickupCoords, dropoffCoords, dropoff, selectedRide, stops, serviceType, roadDistance, routeDurationMin, VEHICLE_RATES, surgeMultiplier]);
 
 
     // Check if we should show the "Confirm Stop" modal

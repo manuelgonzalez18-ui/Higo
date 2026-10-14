@@ -72,6 +72,7 @@ export default function ConfirmTripPage() {
         void quoteRide({
             pickupCoords,
             dropoffCoords,
+            pickupLabel: pickup,
             dropoffLabel: dropoff,
             vehicleType: selectedRide,
             serviceType,
@@ -85,7 +86,7 @@ export default function ConfirmTripPage() {
             // La confirmación vuelve a cotizar de forma autoritativa.
         });
         return () => { cancelled = true; };
-    }, [dropoff, dropoffCoords?.lat, dropoffCoords?.lng, pickupCoords?.lat, pickupCoords?.lng, price, roadDistance, routeDurationMin, selectedRide, serviceType, stops]);
+    }, [pickup, dropoff, dropoffCoords?.lat, dropoffCoords?.lng, pickupCoords?.lat, pickupCoords?.lng, price, roadDistance, routeDurationMin, selectedRide, serviceType, stops]);
 
     if (!pickup || !dropoff || !pickupCoords || !dropoffCoords) {
         return (
