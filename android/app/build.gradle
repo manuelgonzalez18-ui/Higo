@@ -2,14 +2,14 @@ apply plugin: 'com.android.application'
 
 android {
     namespace "com.higoapp.ve"
-    compileSdk 35
+    compileSdk 36
     defaultConfig {
         applicationId "com.higoapp.ve"
         minSdkVersion 24
-        targetSdkVersion 35
-        // Higo 1.5.31: bidirectional Higuerote corridor pricing and Play-protection compatible minimum SDK.
-        versionCode 63
-        versionName "1.5.31"
+        targetSdkVersion 36
+        // Higo 1.5.32: Android API 36 target required by Google Play; keeps bidirectional Higuerote pricing.
+        versionCode 64
+        versionName "1.5.32"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
