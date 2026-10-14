@@ -14,13 +14,15 @@ export const FALLBACK_RATES = Object.freeze({
         maximumMultiplier: 1.30,
     }),
     standard: Object.freeze({
-        base: 1.50,
-        minimumFare: 1.50,
-        perKm: 0.40,
+        // Higuerote cobra la misma tarifa local para carro y camioneta.
+        // Usamos la estructura que mejor se aproximó al listado local.
+        base: 1.70,
+        minimumFare: 1.70,
+        perKm: 0.60,
         perMinute: 0,
         includedKm: 1,
-        deliveryFee: 1.50,
-        waitPerMin: 0.08,
+        deliveryFee: 2.00,
+        waitPerMin: 0.10,
         freeWaitMinutes: 3,
         stopFee: 1.00,
         maximumMultiplier: 1.30,
@@ -43,7 +45,7 @@ export const canonicalVehicleType = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
     if (['moto', 'motorcycle', 'motocicleta'].includes(normalized)) return 'moto';
     // `van` se conserva como clave técnica por compatibilidad con DB. Comercialmente
-    // representa SUV de pasajeros; pickup/carga no pertenece a esta categoría.
+    // representa camioneta de pasajeros; pickup/carga no pertenece a esta categoría.
     if (['van', 'suv', 'camioneta'].includes(normalized)) return 'van';
     return 'standard';
 };
