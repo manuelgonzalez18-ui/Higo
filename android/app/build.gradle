@@ -7,9 +7,9 @@ android {
         applicationId "com.higoapp.ve"
         minSdkVersion 24
         targetSdkVersion 36
-        // Higo 1.5.32: Android API 36 target required by Google Play; keeps bidirectional Higuerote pricing.
-        versionCode 64
-        versionName "1.5.32"
+        // Higo 1.5.33: Play Store rebuild with versionCode 65; keeps API 36 and bidirectional Higuerote pricing.
+        versionCode 65
+        versionName "1.5.33"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
