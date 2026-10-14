@@ -2,6 +2,22 @@
 -- Mantiene el multiplicador 1.30x y el alcance existente a todos los vehículos.
 -- La ventana cruza medianoche: [20,24) U [0,5).
 
+-- El fixture histórico de CI puede traer una versión mínima de pricing_rules.
+-- Reconciliamos columnas antes de actualizar la regla para que el replay sea
+-- determinista y compatible con producción.
+alter table public.pricing_rules
+    add column if not exists name text,
+    add column if not exists vehicle_type text,
+    add column if not exists multiplier numeric(4,2) not null default 1.00,
+    add column if not exists day_of_week smallint[],
+    add column if not exists hour_start smallint,
+    add column if not exists hour_end smallint,
+    add column if not exists zone_id bigint,
+    add column if not exists starts_at timestamptz,
+    add column if not exists ends_at timestamptz,
+    add column if not exists note text,
+    add column if not exists updated_at timestamptz not null default timezone('utc', now());
+
 do $$
 begin
   update public.pricing_rules

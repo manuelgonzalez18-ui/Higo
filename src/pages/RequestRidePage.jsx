@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import LocationInput from '../components/LocationInput';
 import InteractiveMap from '../components/InteractiveMap';
 import { supabase } from '../services/supabase';
+import { quoteRide } from '../services/rideApi';
 import { useGeolocation } from '../hooks/useGeolocation';
 
 import ServiceSelection from '../components/ServiceSelection';
@@ -170,6 +171,7 @@ const RequestRidePage = () => {
     // Calculate Price with Stops
     // This useEffect replaces the previous calculatePrice and recalculatePrice functions
     useEffect(() => {
+        let cancelled = false;
         if (!pickupCoords || !dropoffCoords) {
             // If no valid route, set price to base for selected ride type or 0
             setPrice(VEHICLE_RATES[selectedRide]?.base || 0);
@@ -211,6 +213,28 @@ const RequestRidePage = () => {
         });
         setPrice(quote.subtotal);
 
+        // Cotización autoritativa de servidor. Para corredores conocidos de
+        // Higuerote puede reemplazar la fórmula por la tarifa local objetivo.
+        void quoteRide({
+            pickupCoords,
+            dropoffCoords,
+            dropoffLabel: dropoff,
+            vehicleType: selectedRide,
+            serviceType: serviceType || 'ride',
+            routeDistanceKm: distKm,
+            routeDurationMin,
+            stopsCount: validStopsCount,
+            clientSubtotalFloor: null,
+        }).then((serverQuote) => {
+            if (cancelled) return;
+            const authoritative = Number(serverQuote?.finalPrice ?? serverQuote?.subtotal);
+            if (Number.isFinite(authoritative) && authoritative > 0) {
+                setPrice(authoritative);
+            }
+        }).catch(() => {
+            // Mantener el fallback local si la RPC no está disponible.
+        });
+
         // Calculate old price (without stops) for comparison in modal
         if (validStopsCount > 0) {
             const baseDistNoStops = roadDistance > 0 ? (roadDistance / 1000) : getDistanceFromLatLonInKm(pickupCoords.lat, pickupCoords.lng, dropoffCoords.lat, dropoffCoords.lng);
@@ -230,7 +254,8 @@ const RequestRidePage = () => {
             setOldPrice(0); // No stops, so no "old price" to compare
         }
 
-    }, [pickupCoords, dropoffCoords, selectedRide, stops, serviceType, roadDistance, routeDurationMin, VEHICLE_RATES, surgeMultiplier]);
+        return () => { cancelled = true; };
+    }, [pickupCoords, dropoffCoords, dropoff, selectedRide, stops, serviceType, roadDistance, routeDurationMin, VEHICLE_RATES, surgeMultiplier]);
 
 
     // Check if we should show the "Confirm Stop" modal
