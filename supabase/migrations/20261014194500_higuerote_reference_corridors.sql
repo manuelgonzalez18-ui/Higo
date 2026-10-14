@@ -159,6 +159,8 @@ declare
     v_promo record;
     v_promo_id bigint := null;
     v_resolved_promo_code text := null;
+    v_promo_discount_type text := null;
+    v_promo_discount_value numeric := null;
     v_promo_valid boolean := false;
     v_promo_error text := null;
     v_user_uses bigint := 0;
@@ -214,6 +216,8 @@ begin
         else
             v_promo_id := v_promo.id;
             v_resolved_promo_code := v_promo.code;
+            v_promo_discount_type := v_promo.discount_type;
+            v_promo_discount_value := v_promo.discount_value;
             if not coalesce(v_promo.active, false) or v_promo.archived_at is not null then
                 v_promo_error := 'inactive';
             elsif v_promo.expires_at is not null and v_promo.expires_at < now() then
@@ -270,8 +274,8 @@ begin
         'promoCode', case when v_promo_valid then v_resolved_promo_code else null end,
         'promoValid', v_promo_valid,
         'promoError', v_promo_error,
-        'promoDiscountType', case when v_promo_valid then v_promo.discount_type else null end,
-        'promoDiscountValue', case when v_promo_valid then v_promo.discount_value else null end,
+        'promoDiscountType', case when v_promo_valid then v_promo_discount_type else null end,
+        'promoDiscountValue', case when v_promo_valid then v_promo_discount_value else null end,
         'clientSubtotalFloor', v_floor,
         'clientSubtotalFloorApplied', case when v_match is null
             then v_floor > coalesce((v_quote->>'chargedSubtotal')::numeric, 0)
