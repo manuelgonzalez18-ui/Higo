@@ -72,6 +72,7 @@ export default function ConfirmTripPage() {
         void quoteRide({
             pickupCoords,
             dropoffCoords,
+            dropoffLabel: dropoff,
             vehicleType: selectedRide,
             serviceType,
             routeDistanceKm: roadDistance ? Number(roadDistance) / 1000 : null,
@@ -84,7 +85,7 @@ export default function ConfirmTripPage() {
             // La confirmación vuelve a cotizar de forma autoritativa.
         });
         return () => { cancelled = true; };
-    }, [dropoffCoords?.lat, dropoffCoords?.lng, pickupCoords?.lat, pickupCoords?.lng, price, roadDistance, routeDurationMin, selectedRide, serviceType, stops]);
+    }, [dropoff, dropoffCoords?.lat, dropoffCoords?.lng, pickupCoords?.lat, pickupCoords?.lng, price, roadDistance, routeDurationMin, selectedRide, serviceType, stops]);
 
     if (!pickup || !dropoff || !pickupCoords || !dropoffCoords) {
         return (
@@ -128,6 +129,7 @@ export default function ConfirmTripPage() {
                 const quote = await quoteRide({
                     pickupCoords,
                     dropoffCoords,
+                    dropoffLabel: dropoff,
                     vehicleType: selectedRide,
                     serviceType,
                     routeDistanceKm: roadDistance ? Number(roadDistance) / 1000 : null,
