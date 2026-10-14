@@ -24,6 +24,7 @@ export const createClientRequestId = () => {
 export const quoteRide = async ({
     pickupCoords,
     dropoffCoords,
+    dropoffLabel = null,
     vehicleType,
     serviceType = 'ride',
     routeDistanceKm = null,
@@ -45,6 +46,14 @@ export const quoteRide = async ({
         p_client_subtotal_floor: clientSubtotalFloor == null || clientSubtotalFloor === '' ? null : Number(clientSubtotalFloor),
     };
 
+    const v5 = await supabase.rpc('higo_quote_ride_v5', {
+        ...common,
+        p_dropoff: dropoffLabel || '',
+        p_route_duration_min: routeDurationMin,
+    });
+    if (!v5.error) return v5.data;
+    if (!isMissingRpc(v5.error)) throw v5.error;
+
     const v4 = await supabase.rpc('higo_quote_ride_v4', {
         ...common,
         p_route_duration_min: routeDurationMin,
@@ -52,7 +61,7 @@ export const quoteRide = async ({
     if (!v4.error) return v4.data;
     if (!isMissingRpc(v4.error)) throw v4.error;
 
-    // Compatibilidad durante la promoción de la migración: una web nueva no
+    // Compatibilidad durante la promoción de las migraciones: una web nueva no
     // debe romperse si el esquema remoto todavía expone únicamente V3.
     return unwrap(await supabase.rpc('higo_quote_ride_v3', common));
 };
@@ -97,17 +106,27 @@ export const createRideRequest = async ({
         p_client_subtotal_floor: clientSubtotalFloor == null || clientSubtotalFloor === '' ? null : Number(clientSubtotalFloor),
     };
 
-    const v5 = await supabase.rpc('create_ride_request_v5', {
+    const v6 = await supabase.rpc('create_ride_request_v6', {
         ...common,
         p_route_duration_min: routeDurationMin,
     });
     let result;
-    if (!v5.error) {
-        result = v5.data;
-    } else if (isMissingRpc(v5.error)) {
-        result = unwrap(await supabase.rpc('create_ride_request_v4', common));
+    if (!v6.error) {
+        result = v6.data;
+    } else if (isMissingRpc(v6.error)) {
+        const v5 = await supabase.rpc('create_ride_request_v5', {
+            ...common,
+            p_route_duration_min: routeDurationMin,
+        });
+        if (!v5.error) {
+            result = v5.data;
+        } else if (isMissingRpc(v5.error)) {
+            result = unwrap(await supabase.rpc('create_ride_request_v4', common));
+        } else {
+            throw v5.error;
+        }
     } else {
-        throw v5.error;
+        throw v6.error;
     }
 
     trackEventLater('ride.requested', {
