@@ -67,7 +67,7 @@ No aprobar una tarifa solo porque "se ve barata". Revisar:
 1. Mantener `per_minute = 0` hasta terminar el estudio local.
 2. Ajustar primero tarifa mínima/base y precio por km con la evidencia de Higuerote.
 3. Activar precio por minuto solo si los viajes lentos quedan materialmente subpagados y la lista local no compensa ya ese tiempo.
-4. Mantener surge máximo inicial en 1.30x.
+4. Mantener surge máximo inicial en 1.30x. En Higuerote, aplicar el recargo nocturno de 1.30x todos los días entre las 20:00 y las 05:00, replicando la práctica local de tarifas nocturnas.
 5. Usar promociones temporales para adquisición en vez de rebajar permanentemente la tarifa estructural.
 6. Recalibrar a los 7, 30 y 60 días con datos reales.
 
