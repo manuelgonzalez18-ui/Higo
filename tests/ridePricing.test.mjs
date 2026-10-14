@@ -51,6 +51,24 @@ test('delivery and stops raise the deterministic quote', () => {
     assert.equal(delivery.stopsCount, 2);
 });
 
+test('Carro and Camioneta share the Higuerote launch fare structure', () => {
+    const car = computeFallbackQuote({
+        origin,
+        destination,
+        routeDistanceKm: 20,
+        vehicleType: 'standard',
+    });
+    const camioneta = computeFallbackQuote({
+        origin,
+        destination,
+        routeDistanceKm: 20,
+        vehicleType: 'camioneta',
+    });
+    assert.equal(car.subtotal, camioneta.subtotal);
+    assert.equal(car.baseAmount, camioneta.baseAmount);
+    assert.equal(car.distanceAmount, camioneta.distanceAmount);
+});
+
 test('minimum fare is a floor and is not added twice', () => {
     const quote = computeFallbackQuote({
         origin,
