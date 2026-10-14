@@ -55,8 +55,8 @@ test('status endpoint is retry-safe and targets the Android package', async () =
     assert.match(endpoint, /LOCK_EX/);
 });
 
-test('Android release is Higo 1.5.29 build 61', async () => {
+test('Android release is Higo 1.5.30 build 62', async () => {
     const gradle = await read('android/app/build.gradle');
-    assert.match(gradle, /versionCode 61/);
-    assert.match(gradle, /versionName "1\.5\.29"/);
+    assert.match(gradle, /versionCode 62/);
+    assert.match(gradle, /versionName "1\.5\.30"/);
 });
