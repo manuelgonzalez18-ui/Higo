@@ -1,22 +1,6 @@
 name: Build Higo 1.5.28 AAB
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - android/app/build.gradle
-      - src/components/driver/PaymentReceiptModal.jsx
-      - tests/paymentUsdOnlyRegression.test.mjs
-      - tests/backgroundPassengerAlertsRegression.test.mjs
-      - tests/passengerResumePushRegression.test.mjs
-      - tests/sosLocationRegression.test.mjs
-      - tests/chatDiscoveryRegression.test.mjs
-      - tests/notificationLatencyRegression.test.mjs
-      - tests/driverGhostOfferRegression.test.mjs
-      - tests/passengerRideVoice.test.mjs
-      - tests/routeWaypoints.test.mjs
-      - .github/workflows/build-higo-1.5.28-aab.yml
   workflow_dispatch:
 
 permissions:

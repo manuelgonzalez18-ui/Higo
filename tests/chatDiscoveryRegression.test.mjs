@@ -24,8 +24,8 @@ test('the incoming-message subscription still starts from rideId, not chat visib
     assert.ok(effectEnd > realtime);
 });
 
-test('release is Higo 1.5.28 build 60', async () => {
+test('release is Higo 1.5.29 build 61', async () => {
     const gradle = await read('android/app/build.gradle');
-    assert.match(gradle, /versionCode 60/);
-    assert.match(gradle, /versionName "1\.5\.28"/);
+    assert.match(gradle, /versionCode 61/);
+    assert.match(gradle, /versionName "1\.5\.29"/);
 });
