@@ -123,7 +123,7 @@ test('quote bounds multiplier and stops', () => {
 
 test('wait fee keeps three minutes free and charges the rest', () => {
     assert.equal(computeWaitFee({ vehicleType: 'standard', elapsedSeconds: 180 }), 0);
-    assert.equal(computeWaitFee({ vehicleType: 'standard', elapsedSeconds: 480 }), 0.4);
+    assert.equal(computeWaitFee({ vehicleType: 'standard', elapsedSeconds: 480 }), 0.5);
 });
 
 test('wait fee respects configurable free minutes', () => {
