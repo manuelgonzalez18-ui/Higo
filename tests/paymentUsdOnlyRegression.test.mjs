@@ -16,8 +16,8 @@ test('Pago Móvil keeps the trip fare in USD and defers the Bs equivalent', asyn
     assert.doesNotMatch(modal, /Calculando tasa BCV/);
 });
 
-test('release is Higo 1.5.32 build 64', async () => {
+test('release is Higo 1.5.33 build 65', async () => {
     const gradle = await read('android/app/build.gradle');
-    assert.match(gradle, /versionCode 64/);
-    assert.match(gradle, /versionName "1\.5\.32"/);
+    assert.match(gradle, /versionCode 65/);
+    assert.match(gradle, /versionName "1\.5\.33"/);
 });
