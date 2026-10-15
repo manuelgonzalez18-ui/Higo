@@ -21,6 +21,26 @@ const normalize = (value) => String(value || '')
     .trim()
     .toLowerCase();
 
+const PRICING_LOCATION_CANONICAL = new Map([
+    ['urb la arboleda (el 50)', 'El 50'],
+    ['urb la arboleda el 50', 'El 50'],
+    ['colinas de tacarigua', 'Tacarigua'],
+    ['tacarigua - estadio', 'Tacarigua'],
+    ['el cien (100)', 'El 100'],
+    ['mamporal - plaza - maurica', 'Mamporal'],
+    ['playa los totumos', 'Los Totumos'],
+    ['playa puerto frances', 'Puerto Frances'],
+    ['hotel agua marina', 'Hotel Aguamarina'],
+    ['c.c cabo mall', 'CC Cabo Mall'],
+    ['caucagua centro', 'Caucagua'],
+    ['rio chico centro', 'Rio Chico'],
+]);
+
+export const canonicalPricingLocationLabel = (label) => {
+    const value = normalize(label);
+    return PRICING_LOCATION_CANONICAL.get(value) || label;
+};
+
 export const isGenericCurrentLocationLabel = (label) => {
     const value = normalize(label);
     return !value
@@ -49,7 +69,7 @@ export const resolvePricingLocationLabel = async (label, coords, maxDistanceKm =
     try {
         const { MOCK_HIGUEROTE_LOCATIONS } = await import('../services/geminiService');
         const nearest = nearestPricingLocation(coords, MOCK_HIGUEROTE_LOCATIONS, maxDistanceKm);
-        return nearest?.title || label || '';
+        return canonicalPricingLocationLabel(nearest?.title) || label || '';
     } catch {
         return label || '';
     }
