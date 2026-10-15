@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+    canonicalPricingLocationLabel,
     isGenericCurrentLocationLabel,
     nearestPricingLocation,
     pricingDistanceKm,
@@ -31,4 +32,12 @@ test('pricing distance is symmetric', () => {
     const a = { lat: 10.4002, lng: -66.0846 };
     const b = { lat: 10.4848, lng: -66.0980 };
     assert.ok(Math.abs(pricingDistanceKm(a, b) - pricingDistanceKm(b, a)) < 1e-9);
+});
+
+
+test('El 50 and nearby Google Maps labels canonicalize to priced zones', () => {
+    assert.equal(canonicalPricingLocationLabel('Urb la Arboleda (El 50)'), 'El 50');
+    assert.equal(canonicalPricingLocationLabel('El Cien (100)'), 'El 100');
+    assert.equal(canonicalPricingLocationLabel('Colinas de Tacarigua'), 'Tacarigua');
+    assert.equal(canonicalPricingLocationLabel('Tacarigua - Estadio'), 'Tacarigua');
 });
