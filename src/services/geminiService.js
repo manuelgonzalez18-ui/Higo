@@ -45,7 +45,7 @@ export const MOCK_HIGUEROTE_LOCATIONS = [
     { title: "La Ceiba", address: "Higuerote, Miranda", lat: 10.475657842358942, lng: -66.1105550329455 },
     { title: "Residencias Hipo Campo", address: "Higuerote, Miranda", lat: 10.477586530990964, lng: -66.10336571853655 },
     { title: "Residencias Quita Sol", address: "Higuerote, Miranda", lat: 10.476895508840414, lng: -66.10439568671667 },
-    { title: "Tacarigua", address: "Higuerote, Miranda", lat: 10.465925499578404, lng: -66.10503556941445 },
+    { title: "Tacarigua Centro", address: "Higuerote, Miranda", lat: 10.396843, lng: -66.151529 },
     { title: "Universidad Argelia Alaya Higuerote", address: "Higuerote, Miranda", lat: 10.477354432124184, lng: -66.10308676881971 },
     { title: "Urb Costa Grande", address: "Higuerote, Miranda", lat: 10.454771436076511, lng: -66.1104038351519 },
     { title: "Urb Emilio Gonzalez Marin", address: "Higuerote, Miranda", lat: 10.475657842358942, lng: -66.1105550329455 },
