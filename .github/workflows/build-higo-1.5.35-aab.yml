@@ -50,7 +50,7 @@ jobs:
           grep -q "El equivalente en bolívares se determina al momento del pago." src/components/driver/PaymentReceiptModal.jsx
           ! grep -q 'getOfficialBcvRate' src/components/driver/PaymentReceiptModal.jsx
           ! grep -q 'Tasa oficial BCV' src/components/driver/PaymentReceiptModal.jsx
-          echo "Building Higo 1.5.35 (66) from $(git rev-parse --short HEAD)"
+          echo "Building Higo 1.5.35 (67) from $(git rev-parse --short HEAD)"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
