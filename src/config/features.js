@@ -12,6 +12,8 @@ export const FEATURES = Object.freeze({
     // when a deployment omits the build-time variable. Higo Pay still catches
     // RPC failures and falls back to the legacy single-plan catalog safely.
     unifiedMembershipCheckout: readBoolean(import.meta.env.VITE_UNIFIED_MEMBERSHIP_CHECKOUT, true),
+    // Enable only after the fiscal invoice migration is deployed and the issuer is configured.
+    fiscalInvoices: readBoolean(import.meta.env.VITE_FISCAL_INVOICES_ENABLED, false),
     directedRideOffers: readBoolean(import.meta.env.VITE_DIRECTED_RIDE_OFFERS, false),
     adminMfa: readBoolean(import.meta.env.VITE_ADMIN_MFA_UI, true),
 });
