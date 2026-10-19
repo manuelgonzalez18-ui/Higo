@@ -3,7 +3,7 @@
 ## Implementado
 
 - Precios mensuales canónicos: moto USD 15, carro/standard USD 25, camioneta/van USD 25.
-- Planes semanales **sin modificaciones**: USD 3/5/7 respectivamente. Revisar su rentabilidad por separado.
+- Precios semanales de 7 días: moto USD 4, carro/standard USD 7, camioneta/van USD 7. Migración independiente: `20261018223200_membership_weekly_prices.sql`. Cuatro semanas de moto: USD 16 frente a USD 15 por 30 días; cuatro semanas de carro/camioneta: USD 28 frente a USD 25 por 30 días.
 - La UI obtiene los precios del catálogo de Supabase y convierte a bolívares con tasa oficial BCV al momento del pago.
 - En la tabla legacy `membership_plans`, `amount_bs` y `bs_updated_at` se ponen a NULL: no usar el antiguo equivalente fijo en bolívares cuando BCV esté caído.
 - Migración `20261018223000_membership_pricing_fiscal_invoice_queue.sql`: almacena datos fiscales del conductor, crea una fila de factura por pago validado y protege el acceso.
@@ -21,7 +21,7 @@ No activar el indicador de UI antes de instalar la migración en producción. La
 Antes de habilitarla:
 1. Confirmar cuál sociedad **presta/cobra** el servicio: HIGO TECHNOLOGIES, C.A. (Venezuela) o una entidad distinta; verificar RIF, razón social, domicilio fiscal, permisos y la cuenta receptora de Higo Pay.
 2. Elegir imprenta digital/autorización aplicable y obtener credenciales **sandbox y producción**. Candidato técnico: [DigitalInvoice de Unidigital](https://docs.unidigital.global/) (sus requisitos actuales pueden cambiar). Nunca almacenar secretos en variables `VITE_*` ni en GitHub.
-3. Validar con contador: tarifa anunciada de USD 15/25 ¿es precio total final con impuestos incluidos?, tasa IVA según condición fiscal, IGTF si aplica, regla de conversión y fecha/tasa BCV. **No deducir** ni sumar un IVA fijo en código sin esta validación.
+3. Validar con contador: tarifas anunciadas de USD 4/7 semanales y USD 15/25 mensuales ¿son precios finales con impuestos incluidos?, tasa IVA según condición fiscal, IGTF si aplica, regla de conversión y fecha/tasa BCV. **No deducir** ni sumar un IVA fijo en código sin esta validación.
 4. Construir un worker confiable en servidor (PHP backend o Supabase Edge Function) que consuma facturas `pending`, lea datos fiscales del conductor y evidencia del pago validado, genere el documento en la imprenta y guarde identificadores/numero de control/número fiscal. Registrar copia del PDF en almacenamiento privado.
 5. Para reintentos, usar `payment_report_id` como clave de idempotencia. Reconsultar al proveedor ante timeout para evitar doble emisión; un resultado incierto debe pasar a `manual_review`, nunca emitirse a ciegas.
 6. Enviar el PDF o un enlace privado de un solo uso al correo del titular con el servicio SMTP/transaccional autenticado; guardar `emailed_at`. Si falla el email se reintenta el **envío**, no la emisión.
@@ -50,4 +50,4 @@ Las transferencias creadas como `pending` no generan una factura. El flujo fisca
 4. Activar `VITE_FISCAL_INVOICES_ENABLED=true` una vez comprobada la persistencia de facturas; no implica por sí solo que la emisión externa esté funcionando.
 5. Monitorizar `awaiting_billing_data`, `pending`, `failed` y `manual_review`, y avisar operaciones si queda una factura sin emitir.
 
-**Estado a 18-10-2026:** Precios actualizados en Higo Project; esquema fiscal probado en Higo Staging; emisión externa y correo fiscal aún no integrados.
+**Estado a 18-10-2026:** Precios mensuales y semanales actualizados y verificados en Higo Project; migraciones fiscales y de precios semanales aplicadas en Higo Staging (sin registros de planes en staging en la comprobación inicial); emisión externa y correo fiscal aún no integrados.
