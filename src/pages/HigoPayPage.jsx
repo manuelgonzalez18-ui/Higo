@@ -9,6 +9,8 @@ import { listDriverCheckoutPlans } from '../services/membershipApi';
 import { apiUrl } from '../utils/apiUrl';
 import { normalizeBanescoReference, normalizeTransferReference } from '../utils/paymentReference';
 import { useDriverMembership } from '../hooks/useDriverMembership';
+import DriverFiscalBillingPanel from '../components/driver/DriverFiscalBillingPanel';
+import { FEATURES } from '../config/features';
 
 const RECEIVER = Object.freeze({
     bank: 'BANESCO',
@@ -630,6 +632,14 @@ export default function HigoPayPage() {
                     <ResultBanner result={result} />
                     <button disabled={submitting || !selectedPlan} className="w-full py-3.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 font-black disabled:opacity-50">{submitting ? 'Procesando…' : isPagoMovil ? 'Validar y activar membresía' : 'Enviar para revisión'}</button>
                 </form>
+
+                {FEATURES.fiscalInvoices && user?.id && (
+                    <DriverFiscalBillingPanel
+                        driverId={user.id}
+                        driverName={profile?.full_name || ''}
+                        driverEmail={user.email || ''}
+                    />
+                )}
 
                 <section className="bg-[#1A1F2E] rounded-3xl p-5">
                     <h2 className="font-black mb-4">Historial de pagos</h2>
