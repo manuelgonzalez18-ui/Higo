@@ -638,6 +638,7 @@ export default function HigoPayPage() {
                         driverId={user.id}
                         driverName={profile?.full_name || ''}
                         driverEmail={user.email || ''}
+                        refreshKey={reports.map((report) => report.id + ':' + report.status).join('|')}
                     />
                 )}
 
