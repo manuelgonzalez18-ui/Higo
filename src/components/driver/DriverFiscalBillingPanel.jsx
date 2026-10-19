@@ -13,7 +13,7 @@ const STATUS_LABELS = {
 const FIELD_CLASS = 'w-full rounded-xl bg-[#0F1014] border border-white/10 px-4 py-3 text-sm text-white';
 const emptyBilling = { legal_name: '', fiscal_id: '', fiscal_address: '', email: '' };
 
-export default function DriverFiscalBillingPanel({ driverId, driverName = '', driverEmail = '' }) {
+export default function DriverFiscalBillingPanel({ driverId, driverName = '', driverEmail = '', refreshKey = '' }) {
     const [billing, setBilling] = useState(emptyBilling);
     const [invoices, setInvoices] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -45,7 +45,7 @@ export default function DriverFiscalBillingPanel({ driverId, driverName = '', dr
         setLoading(false);
     }, [driverId, driverName, driverEmail]);
 
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => { load(); }, [load, refreshKey]);
 
     const saveBilling = async (event) => {
         event.preventDefault();
