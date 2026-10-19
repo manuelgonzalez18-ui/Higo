@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL('../' + path, import.meta.url), 'utf8');
 
-test('monthly catalog prices use $15 for moto and $25 for car/van, without repricing weekly', async () => {
+test('monthly catalog prices use $15 for moto and $25 for car/van without rewriting paid memberships', async () => {
     const sql = await read('supabase/migrations/20261018223000_membership_pricing_fiscal_invoice_queue.sql');
     assert.match(sql, /when 'moto-monthly' then 15/);
     assert.match(sql, /when 'car-monthly' then 25/);
@@ -13,6 +13,18 @@ test('monthly catalog prices use $15 for moto and $25 for car/van, without repri
     assert.match(sql, /amount_bs = null/);
     assert.doesNotMatch(sql, /update public\.driver_memberships\s/i);
     assert.doesNotMatch(sql, /when 'moto-weekly' then/);
+});
+
+test('weekly catalog prices use $4 for moto and $7 for car and van', async () => {
+    const sql = await read('supabase/migrations/20261018223200_membership_weekly_prices.sql');
+    assert.match(sql, /when 'moto-weekly' then 4/);
+    assert.match(sql, /when 'car-weekly' then 7/);
+    assert.match(sql, /when 'van-weekly' then 7/);
+    assert.match(sql, /'moto-weekly','moto','weekly','USD'/);
+    assert.match(sql, /'car-weekly','standard','weekly','USD'/);
+    assert.match(sql, /'van-weekly','van','weekly','USD'/);
+    assert.doesNotMatch(sql, /update public\.driver_memberships\s/i);
+    assert.doesNotMatch(sql, /when 'moto-monthly' then/);
 });
 
 test('fiscal invoice is queued only from a validated membership payment', async () => {
