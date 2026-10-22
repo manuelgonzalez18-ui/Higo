@@ -1,0 +1,44 @@
+name: Apply ghost driver request fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/apply-ghost-driver-request-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply exact source fix
+        run: python scripts/apply_ghost_driver_request_fix.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - name: Validate production build and tests
+        env:
+          VITE_SHOP_ENABLED: 'false'
+          VITE_SERVER_SIDE_RIDE_PRICING: 'false'
+          VITE_SERVER_SIDE_RIDE_STATE: 'false'
+          VITE_UNIFIED_MEMBERSHIP_CHECKOUT: 'true'
+          VITE_DIRECTED_RIDE_OFFERS: 'true'
+        run: npm run check
+      - name: Commit validated fix and remove one-shot files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.jsx src/pages/DriverDashboard.jsx
+          git rm .github/workflows/apply-ghost-driver-request-fix.yml scripts/apply_ghost_driver_request_fix.py
+          git commit -m "fix(driver): prevent stale ride request after login"
+          git push origin HEAD:main
